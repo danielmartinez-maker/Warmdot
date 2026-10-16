@@ -10,7 +10,8 @@ use std::{
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_audio::{AudioBus, AudioEngine};
-use forge_core::Guid;
+use forge_core::{ActionId, Guid};
+use forge_input::InputMap;
 use forge_project::{PROJECT_FILE_NAME, Project, SceneCatalog};
 use forge_renderer::{GpuRenderer, RenderOutcome, SpriteInstance, TexturedSprite};
 use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
@@ -24,11 +25,15 @@ use serde::Serialize;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::WindowEvent,
+    event::{MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
+
+const PLAYER_MOVE_X: ActionId = ActionId(1);
+const PLAYER_MOVE_Y: ActionId = ActionId(2);
+const PLAYER_FIRE: ActionId = ActionId(3);
 
 struct RunState {
     window: Arc<Window>,
@@ -40,6 +45,7 @@ struct PlayerApp {
     project_root: PathBuf,
     scene: SceneDocument,
     runtime: GameRuntime,
+    input: InputMap,
     ui: UiRuntime,
     cursor_position: [f32; 2],
     assets: AssetCatalog,
@@ -61,11 +67,31 @@ impl PlayerApp {
         audio: Option<AudioEngine>,
     ) -> Self {
         let now = Instant::now();
+        let mut input = InputMap::new();
+        input
+            .bind_key(PhysicalKey::Code(KeyCode::KeyA), PLAYER_MOVE_X, -1.0)
+            .expect("default player input binding is valid");
+        input
+            .bind_key(PhysicalKey::Code(KeyCode::KeyD), PLAYER_MOVE_X, 1.0)
+            .expect("default player input binding is valid");
+        input
+            .bind_key(PhysicalKey::Code(KeyCode::KeyW), PLAYER_MOVE_Y, -1.0)
+            .expect("default player input binding is valid");
+        input
+            .bind_key(PhysicalKey::Code(KeyCode::KeyS), PLAYER_MOVE_Y, 1.0)
+            .expect("default player input binding is valid");
+        input
+            .bind_key(PhysicalKey::Code(KeyCode::KeyF), PLAYER_FIRE, 1.0)
+            .expect("default player input binding is valid");
+        input
+            .bind_mouse(MouseButton::Right, PLAYER_FIRE, 1.0)
+            .expect("default player input binding is valid");
         Self {
             project_name,
             project_root,
             scene,
             runtime,
+            input,
             ui,
             cursor_position: [0.0, 0.0],
             assets,
@@ -115,6 +141,9 @@ impl ApplicationHandler for PlayerApp {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        let input_time = self.runtime.simulation_time();
+        self.input
+            .handle_window_event(&event, input_time, &mut self.runtime);
         let now = Instant::now();
         let refresh_assets = now >= self.next_asset_refresh;
         if refresh_assets {

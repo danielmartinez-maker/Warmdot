@@ -10,6 +10,7 @@ description = "Native player for Forge 2D projects"
 forge_audio = { path = "../../crates/forge_audio" }
 forge_assets = { path = "../../crates/forge_assets" }
 forge_core = { path = "../../crates/forge_core" }
+forge_input = { path = "../../crates/forge_input" }
 forge_scene = { path = "../../crates/forge_scene" }
 forge_tilemap = { path = "../../crates/forge_tilemap" }
 forge_ui = { path = "../../crates/forge_ui" }
