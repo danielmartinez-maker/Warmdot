@@ -190,6 +190,7 @@ fn make_sprites(
                 size: [cell_width * 0.76, cell_height * 0.76],
                 scale: [1.0, 1.0],
                 rotation_radians: (index % 16) as f32 * 0.0125,
+                anchor: [0.5, 0.5],
                 tint,
                 uv_rect: [0.0, 0.0, 1.0, 1.0],
             }

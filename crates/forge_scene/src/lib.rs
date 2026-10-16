@@ -112,6 +112,8 @@ pub struct AuthoredSprite {
     pub animation_clip: Option<Guid>,
     #[serde(default = "unit_scale")]
     pub size: [f32; 2],
+    #[serde(default = "center_anchor")]
+    pub anchor: [f32; 2],
     #[serde(default = "white_tint")]
     pub tint: [f32; 4],
     /// Normalized image coordinates stored as [u, v, width, height].
@@ -323,6 +325,7 @@ impl SceneDocument {
                     .size
                     .iter()
                     .all(|value| value.is_finite() && *value > 0.0)
+                    || !sprite.anchor.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value))
                     || !sprite.tint.iter().all(|value| value.is_finite())
                     || !sprite.uv_rect.iter().all(|value| value.is_finite())
                     || sprite.uv_rect[0] < 0.0
@@ -578,6 +581,7 @@ impl SceneDocument {
                     object.sprite.map(|sprite| Sprite {
                         asset: sprite.asset,
                         size: sprite.size,
+                        anchor: sprite.anchor,
                         tint: sprite.tint,
                         uv_rect: sprite.uv_rect,
                         layer: sprite.layer,
@@ -827,7 +831,11 @@ const fn unit_scale() -> [f32; 2] {
     [1.0, 1.0]
 }
 
-const fn white_tint() -> [f32; 4] {
+const fn center_anchor() -> [f32; 2] {
+    [0.5, 0.5]
+}
+
+fn white_tint() -> [f32; 4] {
     [1.0; 4]
 }
 

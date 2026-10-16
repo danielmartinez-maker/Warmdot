@@ -198,6 +198,7 @@ fn scene_sprite(
             asset: None,
             animation_clip: None,
             size,
+            anchor: [0.5, 0.5],
             tint,
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             layer,

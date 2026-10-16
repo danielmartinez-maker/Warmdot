@@ -33,6 +33,7 @@ impl Default for Transform2D {
 pub struct Sprite {
     pub asset: Option<Guid>,
     pub size: [f32; 2],
+    pub anchor: [f32; 2],
     pub tint: [f32; 4],
     /// Normalized image coordinates stored as [u, v, width, height].
     pub uv_rect: [f32; 4],
@@ -45,6 +46,7 @@ impl Default for Sprite {
         Self {
             asset: None,
             size: [1.0, 1.0],
+            anchor: [0.5, 0.5],
             tint: [1.0; 4],
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             layer: 0,
@@ -171,6 +173,10 @@ fn relative_transform(
     }
 }
 
+fn valid_anchor(anchor: [f32; 2]) -> bool {
+    anchor.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value))
+}
+
 fn valid_uv_rect([u, v, width, height]: [f32; 4]) -> bool {
     [u, v, width, height].iter().all(|value| value.is_finite())
         && u >= 0.0
@@ -283,6 +289,7 @@ pub struct ExtractedSprite {
     pub rotation_radians: f32,
     pub scale: [f32; 2],
     pub size: [f32; 2],
+    pub anchor: [f32; 2],
     pub tint: [f32; 4],
     pub uv_rect: [f32; 4],
     pub layer: i32,
@@ -410,7 +417,9 @@ impl RuntimeWorld {
         if self.by_guid.contains_key(&object_guid) {
             return Err(WorldError::DuplicateGuid(object_guid));
         }
-        if sprite.is_some_and(|sprite| !valid_uv_rect(sprite.uv_rect)) {
+        if sprite.is_some_and(|sprite| {
+            !valid_uv_rect(sprite.uv_rect) || !valid_anchor(sprite.anchor)
+        }) {
             return Err(WorldError::InvalidSprite(
                 "sprite UV rectangle must be finite, positive, and inside the image",
             ));
@@ -597,7 +606,7 @@ impl RuntimeWorld {
     }
 
     pub fn set_sprite(&mut self, entity: RuntimeEntity, sprite: Sprite) -> Result<(), WorldError> {
-        if !valid_uv_rect(sprite.uv_rect) {
+        if !valid_uv_rect(sprite.uv_rect) || !valid_anchor(sprite.anchor) {
             return Err(WorldError::InvalidSprite(
                 "sprite UV rectangle must be finite, positive, and inside the image",
             ));
@@ -788,6 +797,7 @@ impl RuntimeWorld {
                 rotation_radians: transform.rotation_radians,
                 scale: transform.scale,
                 size: sprite.size,
+                anchor: sprite.anchor,
                 tint: sprite.tint,
                 uv_rect: sprite.uv_rect,
                 layer: sprite.layer,

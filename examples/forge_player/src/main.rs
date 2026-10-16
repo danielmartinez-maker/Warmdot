@@ -245,6 +245,7 @@ fn append_tilemap_to_scene(
             asset: Some(document.tileset_guid),
             animation_clip: None,
             size: rotated_size,
+            anchor: [0.5, 0.5],
             tint: [1.0; 4],
             uv_rect,
             layer: i32::MIN,
