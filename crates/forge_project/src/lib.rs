@@ -161,6 +161,58 @@ impl Project {
         })
     }
 
+    pub fn save_default_scene(&mut self, scene: &SceneDocument) -> Result<(), ProjectError> {
+        scene.validate().map_err(ProjectError::Scene)?;
+        if scene.resource_guid != self.document.default_scene_guid {
+            return Err(ProjectError::Invalid(
+                "saved scene GUID does not match the project default scene".into(),
+            ));
+        }
+        let relative_scene = Path::new(&self.document.default_scene);
+        if relative_scene.is_absolute()
+            || relative_scene.components().any(|part| {
+                matches!(
+                    part,
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                )
+            })
+        {
+            return Err(ProjectError::Invalid(
+                "default scene path must stay within the project folder".into(),
+            ));
+        }
+        let scene_path = self.root.join(relative_scene);
+        let parent = scene_path
+            .parent()
+            .ok_or_else(|| ProjectError::Invalid("default scene has no parent directory".into()))?;
+        let canonical_parent = parent.canonicalize()?;
+        if !canonical_parent.starts_with(&self.root) {
+            return Err(ProjectError::Invalid(
+                "default scene directory resolves outside the project folder".into(),
+            ));
+        }
+        match fs::symlink_metadata(&scene_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ProjectError::Invalid(
+                    "default scene file must not be a symbolic link".into(),
+                ));
+            }
+            Ok(_) => {
+                let canonical_scene = scene_path.canonicalize()?;
+                if !canonical_scene.starts_with(&self.root) {
+                    return Err(ProjectError::Invalid(
+                        "default scene resolves outside the project folder".into(),
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ProjectError::Io(error)),
+        }
+        fs::write(&scene_path, scene.to_canonical_json()?)?;
+        self.default_scene = scene.clone();
+        Ok(())
+    }
+
     pub fn save(&self) -> Result<(), ProjectError> {
         fs::write(
             &self.manifest_path,
