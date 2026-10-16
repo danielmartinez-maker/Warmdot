@@ -33,10 +33,17 @@ jobs:
         run: cargo run --release -p forge-player -- --validate examples/action_arena/project.forgeproj
       - name: Export standalone Action Arena package
         run: cargo run --release -p forge-player -- --export examples/action_arena/project.forgeproj artifacts/action-arena-windows
+      - name: Validate colony project
+        run: cargo run --release -p forge-player -- --validate examples/colony_project/project.forgeproj
+      - name: Export standalone colony package
+        run: cargo run --release -p forge-player -- --export examples/colony_project/project.forgeproj artifacts/colony-windows
       - name: Install cargo-about
         run: cargo install cargo-about --version 0.9.1 --locked --features cli
       - name: Generate third-party license notices
         run: cargo about generate --manifest-path examples/forge_player/Cargo.toml --target x86_64-pc-windows-msvc --locked --fail --output-file artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html about.hbs
+      - name: Add third-party license notice to colony package
+        shell: pwsh
+        run: Copy-Item -LiteralPath 'artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html' -Destination 'artifacts/colony-windows/THIRD_PARTY_LICENSES.html'
       - name: Check exported package contents
         shell: pwsh
         run: |
@@ -71,9 +78,40 @@ jobs:
           if ($licenseHtml.Length -lt 100 -or $licenseHtml -notmatch 'Third Party Licenses') {
             throw 'Third-party license report is empty or missing its title.'
           }
+      - name: Check exported colony package contents
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/colony-windows/Forge2DPlayer.exe',
+            'artifacts/colony-windows/run-game.bat',
+            'artifacts/colony-windows/LICENSE',
+            'artifacts/colony-windows/THIRD_PARTY_LICENSES.html',
+            'artifacts/colony-windows/Game/project.forgeproj',
+            'artifacts/colony-windows/Game/Scenes/Main.forgescene',
+            'artifacts/colony-windows/Game/Assets/ColonyCharacters.forgeatlas.json',
+            'artifacts/colony-windows/Game/Assets/ColonyCharacters.png',
+            'artifacts/colony-windows/Game/Assets/ColonyController.luau',
+            'artifacts/colony-windows/Game/Assets/ColonyHUD.forgeui.json',
+            'artifacts/colony-windows/Game/Assets/ColonyTiles.png',
+            'artifacts/colony-windows/Game/Assets/Default.forgetilemap.json',
+            'artifacts/colony-windows/Game/Assets/Worker.luau',
+            'artifacts/colony-windows/Game/Assets/WorkerWalk.forgeanim.json',
+            'artifacts/colony-windows/Game/.forge/asset-index.json'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing expected colony export file: $path"
+            }
+          }
       - name: Upload Windows player package
         uses: actions/upload-artifact@v4
         with:
           name: forge2d-action-arena-windows
           path: artifacts/action-arena-windows
+          if-no-files-found: error
+      - name: Upload standalone colony player package
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge2d-colony-windows
+          path: artifacts/colony-windows
           if-no-files-found: error

@@ -1,11 +1,17 @@
-# Colony simulation sample
+# Colony simulation
 
-Run the sample with:
+The 64-worker native stress sample remains available:
 
     cargo run -p colony-simulation
 
-The sample starts with 64 workers, a central colony, four food caches, and a small grid with blocked cells. Workers take queued resource jobs, navigate around blocked cells with a deterministic breadth-first search, carry food to the colony, then queue the next job. The board uses a 30-by-16 grid with two world units per tile.
+It profiles its fixed-step update, queues food-delivery jobs, routes workers deterministically around blocked grid cells, protects the home and resource cells, supports pause and 1x/2x/3x time, and lets the user add blockers or build workers.
 
-Left-click a tile to switch it between walkable and blocked. The home and food-cache tiles stay protected. Workers recalculate routes after each terrain edit. Press Space or B to add a worker up to the 256-worker cap. Press P to pause and 1, 2, or 3 to set simulation speed to 1x, 2x, or 3x.
+## Editor-authored colony project
 
-The window title reports population, queued jobs, deliveries, frame rate, average runtime update cost, and object count. This remains a small sample: jobs and terrain are in memory, workers use a sample resource loop, and there is no save system, construction menu, or generalized pathfinding service.
+Open `examples/colony_project/project.forgeproj` in Forge Editor or run the saved project through the standalone player:
+
+    cargo run --release -p forge-player -- examples/colony_project/project.forgeproj
+
+The saved project includes a negative-coordinate chunked tilemap, fixed blocked cells, a camera, eight animated worker objects, four resource caches, a hearth, and an authored HUD. Workers use a bounded deterministic breadth-first grid search with stable neighbor ordering to route between resources and home. F or right-click requests a job for each worker. The controller assigns resource nodes in deterministic round-robin order, tracks queued and active jobs, and updates the delivery HUD through `Forge.UI.set_text`. A bounded per-worker queue keeps outstanding assignments finite. Editor preview pause, single-step, runtime diagnostics, and profiling remain available. Tile edits are saved by the editor's existing tilemap authoring workflow.
+
+The Windows packaging workflow validates and exports both projects and checks the exported colony tilemap, sprite clips, HUD, scripts, and standalone launcher.

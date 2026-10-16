@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sprite_sheet": "c0110a71-e05e-414c-a813-000000000018",
+  "looping": true,
+  "frames": [
+    {
+      "sprite_frame": "worker-1",
+      "duration_seconds": 0.12
+    },
+    {
+      "sprite_frame": "worker-2",
+      "duration_seconds": 0.12
+    },
+    {
+      "sprite_frame": "worker-3",
+      "duration_seconds": 0.12
+    },
+    {
+      "sprite_frame": "worker-4",
+      "duration_seconds": 0.12
+    }
+  ]
+}
