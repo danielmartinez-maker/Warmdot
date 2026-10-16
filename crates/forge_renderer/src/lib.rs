@@ -260,7 +260,7 @@ impl GpuRenderer {
             label: Some("forge2d-nearest-sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
         let white_texture = device.create_texture(&wgpu::TextureDescriptor {
