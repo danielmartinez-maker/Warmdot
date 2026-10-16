@@ -2,7 +2,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     env,
     error::Error,
-    path::PathBuf,
+    fs,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -15,6 +16,19 @@ use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
 };
+use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
+
+struct EditorTileMap {
+    document: TileMapDocument,
+    map: ChunkedTileMap,
+    history: TileMapHistory,
+    selected_tile: u32,
+    paint_solid: bool,
+    erase_mode: bool,
+    metadata_dirty: bool,
+    resource_unsaved: bool,
+    pending_stroke: BTreeMap<TileCoord, Option<TileCell>>,
+}
 
 struct EditorApp {
     project: Project,
@@ -24,6 +38,9 @@ struct EditorApp {
     status: String,
     catalog: Option<AssetCatalog>,
     textures: BTreeMap<Guid, egui::TextureHandle>,
+    texture_sizes: BTreeMap<Guid, [u32; 2]>,
+    tilemap: Option<EditorTileMap>,
+    tilemap_mode: bool,
     last_asset_scan: Option<Instant>,
 }
 
@@ -31,10 +48,17 @@ impl EditorApp {
     fn new(project: Project) -> Self {
         let scene = project.default_scene().clone();
         let selected = scene.objects.first().map(|object| object.object_guid);
-        let (catalog, status) = match AssetCatalog::open(project.root()) {
+        let (catalog, mut status) = match AssetCatalog::open(project.root()) {
             Ok(catalog) => (Some(catalog), String::new()),
             Err(error) => (None, format!("Asset catalog unavailable: {error}")),
         };
+        let (tilemap, tilemap_error) = match load_saved_tilemap(project.root()) {
+            Ok(tilemap) => (tilemap, None),
+            Err(error) => (None, Some(error)),
+        };
+        if status.is_empty() {
+            status = tilemap_error.unwrap_or_default();
+        }
         Self {
             project,
             scene,
@@ -43,6 +67,9 @@ impl EditorApp {
             status,
             catalog,
             textures: BTreeMap::new(),
+            texture_sizes: BTreeMap::new(),
+            tilemap,
+            tilemap_mode: false,
             last_asset_scan: None,
         }
     }
@@ -95,6 +122,90 @@ impl EditorApp {
         }
     }
 
+    fn create_tilemap(&mut self) {
+        let Some(tileset_guid) = self.catalog.as_ref().and_then(|catalog| {
+            catalog
+                .entries()
+                .find(|record| record.kind == AssetKind::Png)
+                .map(|record| record.guid)
+        }) else {
+            self.status = "Add a PNG under Assets before creating a tilemap.".into();
+            return;
+        };
+        let document = match TileMapDocument::empty(Guid::new(), tileset_guid, [1.0, 1.0]) {
+            Ok(document) => document,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        let map = match document.instantiate() {
+            Ok(map) => map,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        let mut history = TileMapHistory::new(256);
+        history.mark_saved();
+        self.tilemap = Some(EditorTileMap {
+            document,
+            map,
+            history,
+            selected_tile: 0,
+            paint_solid: false,
+            erase_mode: false,
+            metadata_dirty: true,
+            resource_unsaved: true,
+            pending_stroke: BTreeMap::new(),
+        });
+        self.tilemap_mode = true;
+        self.status = "New tilemap. Paint cells, then save the tilemap.".into();
+    }
+
+    fn save_tilemap(&mut self) {
+        let Some(tilemap) = self.tilemap.as_ref() else {
+            self.status = "Create a tilemap before saving.".into();
+            return;
+        };
+        let mut document = match tilemap.map.to_document(
+            tilemap.document.resource_guid,
+            tilemap.document.tileset_guid,
+            tilemap.document.tile_size,
+        ) {
+            Ok(document) => document,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        document.texture_tile_size = tilemap.document.texture_tile_size;
+        let source = match document.to_canonical_json() {
+            Ok(source) => source,
+            Err(error) => {
+                self.status = error.to_string();
+                return;
+            }
+        };
+        let path = match tilemap_resource_path(self.project.root()) {
+            Ok(path) => path,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
+        if let Err(error) = fs::write(path, source) {
+            self.status = format!("Tilemap save failed: {error}");
+            return;
+        }
+        let tilemap = self.tilemap.as_mut().expect("tilemap was checked above");
+        tilemap.document = document;
+        tilemap.history.mark_saved();
+        tilemap.metadata_dirty = false;
+        tilemap.resource_unsaved = false;
+        self.status = "Tilemap saved.".into();
+    }
+
     fn refresh_assets(&mut self, ctx: &egui::Context) {
         if self
             .last_asset_scan
@@ -116,14 +227,18 @@ impl EditorApp {
         };
         for change in changes {
             self.textures.remove(&change.guid);
+            self.texture_sizes.remove(&change.guid);
         }
 
-        let required = self
+        let mut required = self
             .scene
             .objects
             .iter()
             .filter_map(|object| object.sprite.and_then(|sprite| sprite.asset))
             .collect::<BTreeSet<_>>();
+        if let Some(tilemap) = &self.tilemap {
+            required.insert(tilemap.document.tileset_guid);
+        }
         let mut updates = Vec::new();
         let mut errors = Vec::new();
         if let Some(catalog) = self.catalog.as_ref() {
@@ -139,18 +254,24 @@ impl EditorApp {
                 }
                 let name = record.relative_path.clone();
                 match catalog.load_png(guid) {
-                    Ok(texture) => updates.push((guid, name, texture)),
+                    Ok(texture) => updates.push((
+                        guid,
+                        name,
+                        [texture.width, texture.height],
+                        texture,
+                    )),
                     Err(error) => errors.push(error.to_string()),
                 }
             }
         }
-        for (guid, name, decoded) in updates {
+        for (guid, name, size, decoded) in updates {
             let image = egui::ColorImage::from_rgba_unmultiplied(
                 [decoded.width as usize, decoded.height as usize],
                 &decoded.rgba8,
             );
             let handle = ctx.load_texture(name, image, egui::TextureOptions::NEAREST);
             self.textures.insert(guid, handle);
+            self.texture_sizes.insert(guid, size);
         }
         if let Some(error) = errors.into_iter().next() {
             self.status = format!("Texture load failed: {error}");
