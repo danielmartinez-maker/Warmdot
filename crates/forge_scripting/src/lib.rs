@@ -130,6 +130,7 @@ type SharedEvents = Rc<RefCell<Vec<ScriptEvent>>>;
 
 struct ScriptInstance {
     _lua: Lua,
+    source_function: Function,
     state: Table,
     on_start: Option<Function>,
     on_fixed_update: Option<Function>,
@@ -185,10 +186,11 @@ impl ScriptInstance {
         install_forge_api(&lua, context.clone(), pending_events.clone())?;
         lua.sandbox(true)?;
 
-        let state: Table = lua
+        let source_function: Function = lua
             .load(&definition.source)
             .set_name(&definition.source_path)
-            .eval()?;
+            .into_function()?;
+        let state: Table = source_function.call(())?;
         install_object_api(&lua, &state, context.clone())?;
         let on_start: Option<Function> = state.get("on_start")?;
         let on_fixed_update: Option<Function> = state.get("on_fixed_update")?;
@@ -196,6 +198,7 @@ impl ScriptInstance {
 
         Ok(Self {
             _lua: lua,
+            source_function,
             state,
             on_start,
             on_fixed_update,
@@ -306,15 +309,13 @@ impl ScriptInstance {
     }
 
     fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<bool, LuaError> {
-        let callbacks = [
-            self.on_start.clone(),
-            self.on_event.clone(),
-            self.on_fixed_update.clone(),
-        ];
-        let mut applied = false;
-        for callback in callbacks.into_iter().flatten() {
-            applied |= luau_debug::set_breakpoint(&self._lua, &callback, line, enabled)?.is_some();
-        }
+        let applied = luau_debug::set_breakpoint(
+            &self._lua,
+            &self.source_function,
+            line,
+            enabled,
+        )?
+        .is_some();
         if enabled && applied {
             self.breakpoint_lines.insert(line);
         } else if !enabled {
