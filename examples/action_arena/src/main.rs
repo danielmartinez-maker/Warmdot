@@ -27,9 +27,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let player_guid = "529bb9ad-47b8-4992-874e-055c7fbf0003".parse()?;
-    let player = runtime
-        .entity_for_guid(player_guid)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "sample Player object was not loaded"))?;
+    let player = runtime.entity_for_guid(player_guid).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "sample Player object was not loaded",
+        )
+    })?;
     let position = runtime
         .world()
         .transform(player)

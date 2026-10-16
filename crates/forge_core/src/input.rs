@@ -43,8 +43,7 @@ impl InputTimeline {
     }
 
     pub fn drain_through(&mut self, at: Duration) -> Vec<ActionEvent> {
-        self.queued
-            .sort_by_key(|event| (event.at, event.sequence));
+        self.queued.sort_by_key(|event| (event.at, event.sequence));
         let split = self.queued.partition_point(|event| event.at <= at);
         let ready = self.queued.drain(..split).collect::<Vec<_>>();
         for event in &ready {

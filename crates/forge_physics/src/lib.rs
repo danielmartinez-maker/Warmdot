@@ -10,8 +10,8 @@ use std::{
 
 use forge_core::Guid;
 use forge_world::{
-    Collider2D, ColliderShape2D, PhysicsObjectSnapshot, RigidBody2D, RigidBodyKind2D,
-    RuntimeWorld, Transform2D,
+    Collider2D, ColliderShape2D, PhysicsObjectSnapshot, RigidBody2D, RigidBodyKind2D, RuntimeWorld,
+    Transform2D,
 };
 use rapier2d::prelude::{
     ActiveEvents, ChannelEventCollector, ColliderBuilder, ColliderHandle, CollisionEvent,
@@ -110,11 +110,7 @@ impl PhysicsSimulation {
     }
 
     /// Synchronizes authored physics objects, advances one fixed step, and writes body poses back.
-    pub fn step(
-        &mut self,
-        world: &mut RuntimeWorld,
-        delta_seconds: f32,
-    ) -> Vec<CollisionEvent2D> {
+    pub fn step(&mut self, world: &mut RuntimeWorld, delta_seconds: f32) -> Vec<CollisionEvent2D> {
         if !delta_seconds.is_finite() || delta_seconds <= 0.0 {
             return Vec::new();
         }
@@ -183,20 +179,15 @@ impl PhysicsSimulation {
         }
 
         let inverse_length = length_squared.sqrt().recip();
-        let unit_direction = [
-            direction[0] * inverse_length,
-            direction[1] * inverse_length,
-        ];
+        let unit_direction = [direction[0] * inverse_length, direction[1] * inverse_length];
         let ray = Ray::new(
             Vector::new(origin[0], origin[1]),
             Vector::new(unit_direction[0], unit_direction[1]),
         );
-        let Some((collider, intersection)) = self.rapier.cast_ray_and_get_normal(
-            &ray,
-            max_distance,
-            true,
-            QueryFilter::default(),
-        ) else {
+        let Some((collider, intersection)) =
+            self.rapier
+                .cast_ray_and_get_normal(&ray, max_distance, true, QueryFilter::default())
+        else {
             return Ok(None);
         };
         let Some(object_guid) = self.guid_by_collider.get(&collider).copied() else {
@@ -221,11 +212,14 @@ impl PhysicsSimulation {
 
     fn synchronize_object(&mut self, snapshot: PhysicsObjectSnapshot) {
         let settings = snapshot.body.unwrap_or_default();
-        let must_rebuild = self.objects.get(&snapshot.object_guid).is_some_and(|record| {
-            !same_body_settings(record.settings, settings)
-                || record.collider_settings != snapshot.collider
-                || record.last_transform.scale != snapshot.transform.scale
-        });
+        let must_rebuild = self
+            .objects
+            .get(&snapshot.object_guid)
+            .is_some_and(|record| {
+                !same_body_settings(record.settings, settings)
+                    || record.collider_settings != snapshot.collider
+                    || record.last_transform.scale != snapshot.transform.scale
+            });
         if must_rebuild {
             self.remove_object(snapshot.object_guid);
         }
@@ -235,7 +229,10 @@ impl PhysicsSimulation {
             return;
         }
 
-        let record = self.objects.get_mut(&snapshot.object_guid).expect("record checked");
+        let record = self
+            .objects
+            .get_mut(&snapshot.object_guid)
+            .expect("record checked");
         let pose_changed = record.last_transform.translation != snapshot.transform.translation
             || record.last_transform.rotation_radians != snapshot.transform.rotation_radians;
         let velocity_changed = record.settings.linear_velocity != settings.linear_velocity
@@ -369,9 +366,7 @@ fn build_collider(settings: Collider2D, scale: [f32; 2]) -> ColliderBuilder {
     let scale_x = scale[0].abs().max(0.0001);
     let scale_y = scale[1].abs().max(0.0001);
     let mut builder = match settings.shape {
-        ColliderShape2D::Circle { radius } => {
-            ColliderBuilder::ball(radius * scale_x.max(scale_y))
-        }
+        ColliderShape2D::Circle { radius } => ColliderBuilder::ball(radius * scale_x.max(scale_y)),
         ColliderShape2D::Box { half_extents } => {
             ColliderBuilder::cuboid(half_extents[0] * scale_x, half_extents[1] * scale_y)
         }

@@ -183,7 +183,11 @@ impl SceneDiagnostic {
 impl SceneDocument {
     pub fn from_json(source: &str) -> Result<Self, Vec<SceneDiagnostic>> {
         let document: Self = serde_json::from_str(source).map_err(|error| {
-            vec![SceneDiagnostic::error("invalid_scene_json", error.to_string(), None)]
+            vec![SceneDiagnostic::error(
+                "invalid_scene_json",
+                error.to_string(),
+                None,
+            )]
         })?;
         document.validate()?;
         Ok(document)
@@ -202,7 +206,11 @@ impl SceneDocument {
             ));
         }
         if self.name.trim().is_empty() {
-            diagnostics.push(SceneDiagnostic::error("empty_scene_name", "scene name must not be empty", None));
+            diagnostics.push(SceneDiagnostic::error(
+                "empty_scene_name",
+                "scene name must not be empty",
+                None,
+            ));
         }
 
         let mut dependencies = BTreeSet::new();
@@ -227,16 +235,31 @@ impl SceneDocument {
                 ));
             }
             if object.name.trim().is_empty() {
-                diagnostics.push(SceneDiagnostic::error("empty_object_name", "object name must not be empty", Some(guid)));
+                diagnostics.push(SceneDiagnostic::error(
+                    "empty_object_name",
+                    "object name must not be empty",
+                    Some(guid),
+                ));
             }
-            if !object.transform.translation.iter().all(|value| value.is_finite())
+            if !object
+                .transform
+                .translation
+                .iter()
+                .all(|value| value.is_finite())
                 || !object.transform.scale.iter().all(|value| value.is_finite())
                 || !object.transform.rotation_radians.is_finite()
             {
-                diagnostics.push(SceneDiagnostic::error("invalid_transform", "transform values must be finite", Some(guid)));
+                diagnostics.push(SceneDiagnostic::error(
+                    "invalid_transform",
+                    "transform values must be finite",
+                    Some(guid),
+                ));
             }
             if let Some(sprite) = object.sprite {
-                if !sprite.size.iter().all(|value| value.is_finite() && *value > 0.0)
+                if !sprite
+                    .size
+                    .iter()
+                    .all(|value| value.is_finite() && *value > 0.0)
                     || !sprite.tint.iter().all(|value| value.is_finite())
                 {
                     diagnostics.push(SceneDiagnostic::error(
@@ -256,7 +279,10 @@ impl SceneDocument {
                 }
             }
             if let Some(camera) = object.camera {
-                if !camera.zoom.iter().all(|value| value.is_finite() && *value > 0.0)
+                if !camera
+                    .zoom
+                    .iter()
+                    .all(|value| value.is_finite() && *value > 0.0)
                     || !camera.pixels_per_world_unit.is_finite()
                     || camera.pixels_per_world_unit <= 0.0
                 {
@@ -364,15 +390,13 @@ impl SceneDocument {
                     })?;
             }
             if let Some(body) = object.rigid_body {
-                world
-                    .set_rigid_body(entity, body.into())
-                    .map_err(|error| {
-                        vec![SceneDiagnostic::error(
-                            "runtime_scene_compile_failed",
-                            error.to_string(),
-                            Some(object.object_guid),
-                        )]
-                    })?;
+                world.set_rigid_body(entity, body.into()).map_err(|error| {
+                    vec![SceneDiagnostic::error(
+                        "runtime_scene_compile_failed",
+                        error.to_string(),
+                        Some(object.object_guid),
+                    )]
+                })?;
             }
             if let Some(collider) = object.collider {
                 world
@@ -403,7 +427,9 @@ impl From<AuthoredRigidBody> for RigidBody2D {
             kind: match body.kind {
                 AuthoredRigidBodyKind::Fixed => RigidBodyKind2D::Fixed,
                 AuthoredRigidBodyKind::Dynamic => RigidBodyKind2D::Dynamic,
-                AuthoredRigidBodyKind::KinematicPositionBased => RigidBodyKind2D::KinematicPositionBased,
+                AuthoredRigidBodyKind::KinematicPositionBased => {
+                    RigidBodyKind2D::KinematicPositionBased
+                }
             },
             linear_velocity: body.linear_velocity,
             angular_velocity: body.angular_velocity,
@@ -420,7 +446,9 @@ impl From<AuthoredCollider> for Collider2D {
         Self {
             shape: match collider.shape {
                 AuthoredColliderShape::Circle { radius } => ColliderShape2D::Circle { radius },
-                AuthoredColliderShape::Box { half_extents } => ColliderShape2D::Box { half_extents },
+                AuthoredColliderShape::Box { half_extents } => {
+                    ColliderShape2D::Box { half_extents }
+                }
             },
             offset: collider.offset,
             rotation_radians: collider.rotation_radians,

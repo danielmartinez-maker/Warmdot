@@ -142,9 +142,9 @@ impl GameRuntime {
             for system in &mut self.fixed_systems {
                 system(&mut self.world, &context);
             }
-            self.pending_physics_events =
-                self.physics
-                    .step(&mut self.world, self.clock.step().as_secs_f32());
+            self.pending_physics_events = self
+                .physics
+                .step(&mut self.world, self.clock.step().as_secs_f32());
             frame_physics_events.extend(self.pending_physics_events.iter().copied());
         }
 

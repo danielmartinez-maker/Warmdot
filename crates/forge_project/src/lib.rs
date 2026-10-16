@@ -2,8 +2,7 @@
 
 use std::{
     error::Error,
-    fmt,
-    fs,
+    fmt, fs,
     path::{Component, Path, PathBuf},
 };
 
@@ -38,7 +37,9 @@ impl fmt::Display for ProjectError {
             Self::Io(error) => write!(f, "project I/O failed: {error}"),
             Self::Json(error) => write!(f, "project JSON is invalid: {error}"),
             Self::Invalid(message) => f.write_str(message),
-            Self::Scene(diagnostics) => write!(f, "default scene has {} diagnostic(s)", diagnostics.len()),
+            Self::Scene(diagnostics) => {
+                write!(f, "default scene has {} diagnostic(s)", diagnostics.len())
+            }
         }
     }
 }
@@ -109,7 +110,9 @@ impl Project {
         let canonical_manifest = manifest_path.canonicalize()?;
         let root = canonical_manifest
             .parent()
-            .ok_or_else(|| ProjectError::Invalid("project manifest has no parent directory".into()))?
+            .ok_or_else(|| {
+                ProjectError::Invalid("project manifest has no parent directory".into())
+            })?
             .to_path_buf();
         let document: ProjectDocument = serde_json::from_slice(&fs::read(&canonical_manifest)?)?;
         if document.schema_version != CURRENT_PROJECT_SCHEMA {
@@ -119,13 +122,18 @@ impl Project {
             )));
         }
         if document.name.trim().is_empty() {
-            return Err(ProjectError::Invalid("project name must not be empty".into()));
+            return Err(ProjectError::Invalid(
+                "project name must not be empty".into(),
+            ));
         }
         let relative_scene = Path::new(&document.default_scene);
         if relative_scene.is_absolute()
-            || relative_scene
-                .components()
-                .any(|part| matches!(part, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+            || relative_scene.components().any(|part| {
+                matches!(
+                    part,
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                )
+            })
         {
             return Err(ProjectError::Invalid(
                 "default scene path must stay within the project folder".into(),
@@ -138,8 +146,8 @@ impl Project {
                 "default scene resolves outside the project folder".into(),
             ));
         }
-        let default_scene =
-            SceneDocument::from_json(&fs::read_to_string(canonical_scene)?).map_err(ProjectError::Scene)?;
+        let default_scene = SceneDocument::from_json(&fs::read_to_string(canonical_scene)?)
+            .map_err(ProjectError::Scene)?;
         if default_scene.resource_guid != document.default_scene_guid {
             return Err(ProjectError::Invalid(
                 "default scene GUID does not match the project manifest".into(),
@@ -154,7 +162,10 @@ impl Project {
     }
 
     pub fn save(&self) -> Result<(), ProjectError> {
-        fs::write(&self.manifest_path, serde_json::to_vec_pretty(&self.document)?)?;
+        fs::write(
+            &self.manifest_path,
+            serde_json::to_vec_pretty(&self.document)?,
+        )?;
         Ok(())
     }
 

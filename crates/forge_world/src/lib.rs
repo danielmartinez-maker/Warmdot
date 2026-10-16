@@ -8,12 +8,7 @@ use std::{
     fmt,
 };
 
-use bevy_ecs::{
-    component::Component,
-    entity::Entity,
-    query::QueryState,
-    world::World as EcsWorld,
-};
+use bevy_ecs::{component::Component, entity::Entity, query::QueryState, world::World as EcsWorld};
 use forge_core::Guid;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
@@ -190,7 +185,9 @@ pub enum WorldError {
 impl fmt::Display for WorldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DuplicateGuid(guid) => write!(f, "object GUID {guid} already exists in this world"),
+            Self::DuplicateGuid(guid) => {
+                write!(f, "object GUID {guid} already exists in this world")
+            }
             Self::StaleEntity => f.write_str("runtime entity is no longer alive"),
             Self::InvalidPhysicsConfiguration(message) => f.write_str(message),
         }
@@ -206,8 +203,16 @@ pub struct RuntimeWorld {
     ecs: EcsWorld,
     by_guid: BTreeMap<Guid, Entity>,
     guid_by_entity: HashMap<Entity, Guid>,
-    sprite_query: QueryState<(&'static AuthoredIdentity, &'static Transform2D, &'static Sprite)>,
-    camera_query: QueryState<(&'static AuthoredIdentity, &'static Transform2D, &'static Camera2D)>,
+    sprite_query: QueryState<(
+        &'static AuthoredIdentity,
+        &'static Transform2D,
+        &'static Sprite,
+    )>,
+    camera_query: QueryState<(
+        &'static AuthoredIdentity,
+        &'static Transform2D,
+        &'static Camera2D,
+    )>,
     physics_query: QueryState<(
         &'static AuthoredIdentity,
         &'static Transform2D,
