@@ -872,3 +872,12 @@ impl GpuRenderer {
         self.surface.configure(&self.device, &self.configuration);
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::Camera;
+
+    #[test]
+    fn default_camera_uses_readable_2d_world_scale() {
+        assert_eq!(Camera::default().pixels_per_world_unit, 32.0);
+    }
+}
