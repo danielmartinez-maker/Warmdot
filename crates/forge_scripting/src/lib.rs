@@ -839,7 +839,7 @@ impl ScriptHost {
         true
     }
 
-    pub fn take_scene_transition_requests(&mut self) {
+    pub fn take_scene_transition_requests(&mut self) -> Vec<Guid> {
         std::mem::take(&mut *self.pending_scene_requests.borrow_mut())
     }
 
