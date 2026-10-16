@@ -1,12 +1,20 @@
 use std::{
     env,
     error::Error,
-    path::PathBuf,
+    fs,
+    io,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
+use forge_core::Guid;
+use forge_scene::{
+    AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
+    AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
+};
+use forge_tilemap::{TileCell, TileMapDocument};
 use forge_project::Project;
 use forge_renderer::{GpuRenderer, RenderOutcome};
 use forge_runtime::{GameRuntime, RuntimeConfig};
@@ -132,6 +140,153 @@ impl ApplicationHandler for PlayerApp {
     }
 }
 
+fn load_project_tilemap(project_root: &Path) -> Result<Option<TileMapDocument>, Box<dyn Error>> {
+    let project_root = project_root.canonicalize()?;
+    let assets_root = project_root.join("Assets").canonicalize()?;
+    if !assets_root.starts_with(&project_root) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "project Assets folder resolves outside the project",
+        )
+        .into());
+    }
+    let path = assets_root.join("Default.forgetilemap.json");
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "tilemap file must not be a symbolic link",
+            )
+            .into());
+        }
+        Ok(_) => {
+            let canonical_path = path.canonicalize()?;
+            if !canonical_path.starts_with(&assets_root) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "tilemap file resolves outside the Assets folder",
+                )
+                .into());
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    let metadata = fs::metadata(&path)?;
+    const MAX_TILEMAP_BYTES: u64 = 64 * 1024 * 1024;
+    if metadata.len() > MAX_TILEMAP_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "tilemap resource exceeds the player import limit",
+        )
+        .into());
+    }
+    let source = fs::read_to_string(path)?;
+    Ok(Some(TileMapDocument::from_json(&source)?))
+}
+
+fn append_tilemap_to_scene(
+    scene: &mut SceneDocument,
+    document: &TileMapDocument,
+    assets: &AssetCatalog,
+) -> Result<(), Box<dyn Error>> {
+    let map = document.instantiate()?;
+    let texture = assets.load_png(document.tileset_guid)?;
+    let texture_tile_size = document.texture_tile_size;
+    let columns = texture.width / texture_tile_size[0];
+    let rows = texture.height / texture_tile_size[1];
+    let tile_count = columns.checked_mul(rows).filter(|count| *count > 0).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "tilemap tileset has no complete tiles at its configured pixel size",
+        )
+    })?;
+    if !scene.dependencies.contains(&document.tileset_guid) {
+        scene.dependencies.push(document.tileset_guid);
+    }
+
+    for (coordinate, cell) in map.iter() {
+        let uv_rect = tile_uv_rect(cell, columns, tile_count, texture.width, texture.height, texture_tile_size)?;
+        let object_guid = Guid::new();
+        let transform = AuthoredTransform {
+            translation: [
+                (coordinate.x as f32 + 0.5) * document.tile_size[0],
+                (coordinate.y as f32 + 0.5) * document.tile_size[1],
+            ],
+            rotation_radians: 0.0,
+            scale: [1.0, 1.0],
+        };
+        let sprite = AuthoredSprite {
+            asset: Some(document.tileset_guid),
+            animation_clip: None,
+            size: document.tile_size,
+            tint: [1.0; 4],
+            uv_rect,
+            layer: i32::MIN,
+            order: 0,
+        };
+        let (rigid_body, collider) = if cell.solid {
+            (
+                Some(AuthoredRigidBody {
+                    kind: AuthoredRigidBodyKind::Fixed,
+                    ..AuthoredRigidBody::default()
+                }),
+                Some(AuthoredCollider {
+                    shape: AuthoredColliderShape::Box {
+                        half_extents: [
+                            document.tile_size[0] * 0.5,
+                            document.tile_size[1] * 0.5,
+                        ],
+                    },
+                    offset: [0.0, 0.0],
+                    rotation_radians: 0.0,
+                    density: 1.0,
+                    friction: 0.5,
+                    restitution: 0.0,
+                    sensor: false,
+                }),
+            )
+        } else {
+            (None, None)
+        };
+        scene.objects.push(SceneObject {
+            object_guid,
+            name: format!("Tile ({}, {})", coordinate.x, coordinate.y),
+            transform,
+            sprite: Some(sprite),
+            camera: None,
+            rigid_body,
+            collider,
+        });
+    }
+    Ok(())
+}
+
+fn tile_uv_rect(
+    cell: TileCell,
+    columns: u32,
+    tile_count: u32,
+    texture_width: u32,
+    texture_height: u32,
+    texture_tile_size: [u32; 2],
+) -> Result<[f32; 4], Box<dyn Error>> {
+    if cell.tile_index >= tile_count {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile index {} is outside the configured tileset grid", cell.tile_index),
+        )
+        .into());
+    }
+    let column = cell.tile_index % columns;
+    let row = cell.tile_index / columns;
+    Ok([
+        (column * texture_tile_size[0]) as f32 / texture_width as f32,
+        (row * texture_tile_size[1]) as f32 / texture_height as f32,
+        texture_tile_size[0] as f32 / texture_width as f32,
+        texture_tile_size[1] as f32 / texture_height as f32,
+    ])
+}
+
 fn load_project_textures(
     assets: &AssetCatalog,
     renderer: &mut GpuRenderer,
@@ -188,9 +343,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let project = Project::open(PathBuf::from(project_path))?;
     let project_name = project.document().name.clone();
     let project_root = project.root().to_path_buf();
-    let assets = AssetCatalog::open(project_root)?;
+    let assets = AssetCatalog::open(project_root.clone())?;
+    let mut scene = project.default_scene().clone();
+    if let Some(tilemap) = load_project_tilemap(&project_root)? {
+        append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
+    }
     let runtime = GameRuntime::from_scene_with_assets(
-        project.default_scene(),
+        &scene,
         RuntimeConfig::default(),
         &assets,
     )?;
