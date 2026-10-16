@@ -2,6 +2,13 @@
   "schema_version": 1,
   "entries": [
     {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030007",
+      "relative_path": "Assets/ArenaTiles.png",
+      "kind": "png",
+      "source_bytes": 2132,
+      "fingerprint": 15598352331024555946
+    },
+    {
       "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030004",
       "relative_path": "Assets/Audio/arena-music.wav",
       "kind": "audio",
@@ -33,8 +40,8 @@
       "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
       "relative_path": "Assets/PlayerController.luau",
       "kind": "script",
-      "source_bytes": 366,
-      "fingerprint": 5766718904037569759
+      "source_bytes": 2029,
+      "fingerprint": 7078644102732825459
     },
     {
       "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030002",

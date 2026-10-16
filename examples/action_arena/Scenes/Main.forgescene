@@ -7,7 +7,8 @@
     "a1d999a0-d8d1-4a1e-a700-4c49ed030002",
     "a1d999a0-d8d1-4a1e-a700-4c49ed030003",
     "a1d999a0-d8d1-4a1e-a700-4c49ed030004",
-    "a1d999a0-d8d1-4a1e-a700-4c49ed030005"
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030005",
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030007"
   ],
   "objects": [
     {
@@ -186,6 +187,358 @@
       "rigid_body": null,
       "collider": null,
       "script": null
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0011",
+      "name": "Enemy 1",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -12,
+          -5
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          1.2,
+          1.2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.96,
+          0.3,
+          0.42,
+          1
+        ],
+        "layer": 1,
+        "order": 1,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": {
+        "kind": "dynamic",
+        "linear_velocity": [
+          0,
+          0
+        ],
+        "angular_velocity": 0,
+        "gravity_scale": 0,
+        "linear_damping": 0,
+        "angular_damping": 0,
+        "lock_rotation": true
+      },
+      "collider": {
+        "shape": {
+          "shape": "box",
+          "half_extents": [
+            0.55,
+            0.55
+          ]
+        },
+        "offset": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "density": 1,
+        "friction": 0.3,
+        "restitution": 0,
+        "sensor": false
+      },
+      "script": {
+        "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+        "properties": {
+          "enemy": true,
+          "speed": 2.2,
+          "direction": 1,
+          "min_x": -24,
+          "max_x": 24,
+          "min_y": -13,
+          "max_y": 13,
+          "base_y": -5,
+          "phase": 0
+        }
+      }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0012",
+      "name": "Enemy 2",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -4,
+          -8
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          1.2,
+          1.2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.94,
+          0.52,
+          0.24,
+          1
+        ],
+        "layer": 1,
+        "order": 2,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": {
+        "kind": "dynamic",
+        "linear_velocity": [
+          0,
+          0
+        ],
+        "angular_velocity": 0,
+        "gravity_scale": 0,
+        "linear_damping": 0,
+        "angular_damping": 0,
+        "lock_rotation": true
+      },
+      "collider": {
+        "shape": {
+          "shape": "box",
+          "half_extents": [
+            0.55,
+            0.55
+          ]
+        },
+        "offset": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "density": 1,
+        "friction": 0.3,
+        "restitution": 0,
+        "sensor": false
+      },
+      "script": {
+        "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+        "properties": {
+          "enemy": true,
+          "speed": 2.2,
+          "direction": -1,
+          "min_x": -24,
+          "max_x": 24,
+          "min_y": -13,
+          "max_y": 13,
+          "base_y": -8,
+          "phase": 0.7
+        }
+      }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0013",
+      "name": "Enemy 3",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          4,
+          -5
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          1.2,
+          1.2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.76,
+          0.36,
+          0.92,
+          1
+        ],
+        "layer": 1,
+        "order": 3,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": {
+        "kind": "dynamic",
+        "linear_velocity": [
+          0,
+          0
+        ],
+        "angular_velocity": 0,
+        "gravity_scale": 0,
+        "linear_damping": 0,
+        "angular_damping": 0,
+        "lock_rotation": true
+      },
+      "collider": {
+        "shape": {
+          "shape": "box",
+          "half_extents": [
+            0.55,
+            0.55
+          ]
+        },
+        "offset": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "density": 1,
+        "friction": 0.3,
+        "restitution": 0,
+        "sensor": false
+      },
+      "script": {
+        "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+        "properties": {
+          "enemy": true,
+          "speed": 2.2,
+          "direction": 1,
+          "min_x": -24,
+          "max_x": 24,
+          "min_y": -13,
+          "max_y": 13,
+          "base_y": -5,
+          "phase": 1.4
+        }
+      }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0014",
+      "name": "Enemy 4",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          12,
+          -8
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          1.2,
+          1.2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.96,
+          0.72,
+          0.28,
+          1
+        ],
+        "layer": 1,
+        "order": 4,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": {
+        "kind": "dynamic",
+        "linear_velocity": [
+          0,
+          0
+        ],
+        "angular_velocity": 0,
+        "gravity_scale": 0,
+        "linear_damping": 0,
+        "angular_damping": 0,
+        "lock_rotation": true
+      },
+      "collider": {
+        "shape": {
+          "shape": "box",
+          "half_extents": [
+            0.55,
+            0.55
+          ]
+        },
+        "offset": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "density": 1,
+        "friction": 0.3,
+        "restitution": 0,
+        "sensor": false
+      },
+      "script": {
+        "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+        "properties": {
+          "enemy": true,
+          "speed": 2.2,
+          "direction": -1,
+          "min_x": -24,
+          "max_x": 24,
+          "min_y": -13,
+          "max_y": 13,
+          "base_y": -8,
+          "phase": 2.0999999999999996
+        }
+      }
     }
   ],
   "ui_document": "a1d999a0-d8d1-4a1e-a700-4c49ed030005"
