@@ -3,6 +3,10 @@ declare namespace Forge
         function axis(actionId: number): number
         function is_pressed(actionId: number): boolean
     end
+
+    declare namespace Events
+        function emit(name: string, value: (boolean | number | string)?): boolean
+    end
 end
 
 export type ForgeObject = {
@@ -16,4 +20,5 @@ export type ForgeObject = {
 export type ForgeScript = {
     on_start: ((self: ForgeObject) -> ())?,
     on_fixed_update: ((self: ForgeObject, dt: number) -> ())?,
+    on_event: ((self: ForgeObject, name: string, value: (boolean | number | string)?, sender_guid: string, emitted_tick: number) -> ())?,
 }
