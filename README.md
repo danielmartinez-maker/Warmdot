@@ -21,9 +21,9 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - Tilemaps use sparse 32x32 chunks with correct negative-coordinate mapping, deterministic serialization, batched paint edits, and bounded undo/redo history.
 - Scene authoring commands add, delete, and replace objects through a bounded undo/redo history with a saved-state marker.
 
-## Not implemented yet
+## Remaining P0 work
 
-This branch is the runtime kernel, not the complete P0 engine. The renderer samples explicitly registered image assets and keeps the benchmark on the one-batch solid-color path. Automatic attachment of animation players to scene objects is still outstanding. The native editor UI, tilemap painting tools, Luau scripts, audio, retained game UI, standalone export, and the colony simulation remain ahead. The stress benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+The first native scene editor is now available, but this branch is not the complete P0 alpha yet. The editor currently previews tinted rectangles and does not yet provide texture-backed previews, tilemap painting, asset browsing, script/audio inspectors, or multi-scene workflows. Automatic attachment of animation players to scene objects remains outstanding. Luau scripts, audio, retained game UI, standalone export, and the colony simulation sample also remain ahead. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
