@@ -100,6 +100,7 @@ struct EditorApp {
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
     script_diagnostics: Vec<ScriptDiagnostic>,
+    hidden_layers: BTreeSet<i32>,
     canvas_offset: Vec2,
     canvas_zoom: f32,
     move_gizmo_drag: Option<MoveGizmoDrag>,
@@ -144,6 +145,7 @@ impl EditorApp {
             preview_last_frame: None,
             preview_tick: 0,
             script_diagnostics: Vec::new(),
+            hidden_layers: BTreeSet::new(),
             canvas_offset: Vec2::ZERO,
             canvas_zoom: 1.0,
             move_gizmo_drag: None,
@@ -573,6 +575,27 @@ impl EditorApp {
                 }
             });
         if self.runtime.is_none() {
+            let layers = self
+                .scene
+                .objects
+                .iter()
+                .filter_map(|object| object.sprite.map(|sprite| sprite.layer))
+                .collect::<BTreeSet<_>>();
+            ui.collapsing("Render Layers", |ui| {
+                if layers.is_empty() {
+                    ui.weak("Add a sprite to create a render layer.");
+                }
+                for layer in &layers {
+                    let mut visible = !self.hidden_layers.contains(layer);
+                    if ui.checkbox(&mut visible, format!("Layer {layer}")).changed() {
+                        if visible {
+                            self.hidden_layers.remove(layer);
+                        } else {
+                            self.hidden_layers.insert(*layer);
+                        }
+                    }
+                }
+            });
             let assets = self
                 .catalog
                 .as_ref()
@@ -870,6 +893,16 @@ impl EditorApp {
                             )
                             .changed();
                     }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Render layer");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut sprite.layer).range(-10_000..=10_000))
+                        .changed();
+                    ui.label("Order");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut sprite.order).range(-10_000..=10_000))
+                        .changed();
                 });
             });
         }
@@ -1792,6 +1825,9 @@ impl EditorApp {
                 .collect::<Vec<_>>()
         };
         objects.sort_by_key(|sprite| (sprite.layer, sprite.order, sprite.object_guid));
+        if self.runtime.is_none() {
+            objects.retain(|sprite| !self.hidden_layers.contains(&sprite.layer));
+        }
         if let Some(drag) = self.move_gizmo_drag {
             if let Some(sprite) = objects
                 .iter_mut()
