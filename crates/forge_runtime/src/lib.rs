@@ -227,12 +227,13 @@ impl GameRuntime {
     }
 
     pub fn is_paused(&self) -> bool {
-        self.paused
+        self.paused || self.debugger_paused
     }
 
-    /// Advances exactly one fixed tick while paused. Returns None while the runtime is playing.
+    /// Advances exactly one fixed tick while manually paused. Returns None while playing or
+    /// stopped at a script breakpoint.
     pub fn step_once(&mut self) -> Option<RuntimeFrame> {
-        if !self.paused {
+        if !self.paused || self.debugger_paused {
             return None;
         }
         let plan = self.clock.advance_one_step();
