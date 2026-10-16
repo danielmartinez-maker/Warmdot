@@ -3,7 +3,11 @@
   "resource_guid": "529bb9ad-47b8-4992-874e-055c7fbf0002",
   "name": "Main",
   "dependencies": [
-    "a1d999a0-d8d1-4a1e-a700-4c49ed030001"
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030002",
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030003",
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030004",
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030005"
   ],
   "objects": [
     {
@@ -90,6 +94,15 @@
         "density": 1,
         "friction": 0.8
       }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0007",
+      "name": "UI Controller",
+      "script": {
+        "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030002",
+        "properties": {}
+      }
     }
-  ]
+  ],
+  "ui_document": "a1d999a0-d8d1-4a1e-a700-4c49ed030005"
 }

@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "resource_guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030005",
+  "name": "Action Arena HUD",
+  "dependencies": [],
+  "root_layout": {
+    "direction": "free",
+    "padding": 0,
+    "spacing": 0
+  },
+  "elements": [
+    {
+      "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030010",
+      "widget": {
+        "type": "panel"
+      },
+      "layout": {
+        "anchor_min": [
+          0,
+          0
+        ],
+        "anchor_max": [
+          1,
+          0
+        ],
+        "offset_min": [
+          16,
+          16
+        ],
+        "offset_max": [
+          -16,
+          0
+        ],
+        "min_size": [
+          0,
+          72
+        ],
+        "preferred_size": [
+          0,
+          72
+        ],
+        "direction": "horizontal",
+        "spacing": 16,
+        "padding": 12,
+        "grow": 0
+      },
+      "style": {
+        "background_color": [
+          0.04,
+          0.06,
+          0.1,
+          0.88
+        ]
+      },
+      "children": [
+        {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030011",
+          "widget": {
+            "type": "text",
+            "text": "ACTION ARENA - HP 3/3"
+          },
+          "layout": {
+            "preferred_size": [
+              300,
+              32
+            ],
+            "min_size": [
+              220,
+              28
+            ],
+            "grow": 1
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        },
+        {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030012",
+          "widget": {
+            "type": "button",
+            "label": "MENU",
+            "event": "arena.menu"
+          },
+          "layout": {
+            "preferred_size": [
+              120,
+              40
+            ],
+            "min_size": [
+              120,
+              40
+            ]
+          },
+          "style": {
+            "text_color": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "hover_color": [
+              0.25,
+              0.4,
+              0.68,
+              1
+            ],
+            "focus_color": [
+              0.18,
+              0.32,
+              0.55,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}
