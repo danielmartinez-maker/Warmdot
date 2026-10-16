@@ -15,8 +15,8 @@ use forge_luau_debug::{self as luau_debug, BreakpointContext, BreakpointHit, Res
 use forge_scene::ScriptPropertyValue;
 use forge_world::{RuntimeWorld, Transform2D};
 use mlua::{
-    Error as LuaError, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread,
-    Value as LuaValue, VmState,
+    Error as LuaError, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value as LuaValue,
+    VmState,
 };
 
 const MAX_SCRIPT_SOURCE_BYTES: usize = 1024 * 1024;
@@ -247,12 +247,7 @@ impl ScriptInstance {
                 return ScriptInvocation::Failed(error);
             }
         };
-        match luau_debug::resume(
-            &self._lua,
-            &thread,
-            args,
-            &self.breakpoint_context,
-        ) {
+        match luau_debug::resume(&self._lua, &thread, args, &self.breakpoint_context) {
             Ok(ResumeResult::Complete) => {
                 let context = self.context.borrow_mut().take().unwrap_or(fallback);
                 ScriptInvocation::Completed(context)
@@ -419,7 +414,9 @@ impl ScriptHost {
             .instances
             .get_mut(&object_guid)
             .ok_or(ScriptError::MissingInstance(object_guid))?;
-        instance.set_breakpoint(line, enabled).map_err(ScriptError::Lua)
+        instance
+            .set_breakpoint(line, enabled)
+            .map_err(ScriptError::Lua)
     }
 
     pub fn current_breakpoint(&self) -> Option<ScriptBreakpointHit> {
@@ -535,10 +532,7 @@ impl ScriptHost {
     }
 
     /// Continues the current callback and then finishes the rest of its fixed-tick script queue.
-    pub fn continue_breakpoint(
-        &mut self,
-        world: &mut RuntimeWorld,
-    ) -> Option<ScriptBreakpointHit> {
+    pub fn continue_breakpoint(&mut self, world: &mut RuntimeWorld) -> Option<ScriptBreakpointHit> {
         let hit = self.current_breakpoint.take()?;
         let invocation = self
             .instances
@@ -588,13 +582,7 @@ impl ScriptHost {
                         let Some(transform) = world.transform(entity) else {
                             continue;
                         };
-                        instance.invoke_callback(
-                            &callback,
-                            transform,
-                            &actions,
-                            tick,
-                            args,
-                        )
+                        instance.invoke_callback(&callback, transform, &actions, tick, args)
                     }
                     Err(error) => ScriptInvocation::Failed(error),
                 }
@@ -681,7 +669,8 @@ impl ScriptHost {
             definition.source_path = update.source_path.clone();
             definition.source = update.source.clone();
             let context = Rc::new(RefCell::new(None));
-            match ScriptInstance::compile(definition.clone(), context, self.pending_events.clone()) {
+            match ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())
+            {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
                         migrate_compatible_state(&previous.state, &instance.state, &instance._lua)
@@ -802,11 +791,9 @@ fn callback_arguments(
             event.tick,
         )
             .into_lua_multi(&instance._lua),
-        ScriptCallbackKind::FixedUpdate => (
-            instance.state.clone(),
-            delta.as_secs_f64(),
-        )
-            .into_lua_multi(&instance._lua),
+        ScriptCallbackKind::FixedUpdate => {
+            (instance.state.clone(), delta.as_secs_f64()).into_lua_multi(&instance._lua)
+        }
     }
 }
 
