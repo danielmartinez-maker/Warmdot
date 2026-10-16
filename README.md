@@ -11,8 +11,8 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The fixed-step clock caps frame time and simulation catch-up and reports dropped time; the runtime supports play, pause, one-tick stepping, and scene replacement with clock/input/physics reset.
 - Timestamped input actions are delivered in stable queue order; keyboard and mouse bindings aggregate multiple held sources and release cleanly when focus is lost.
 - The Rapier adapter supports fixed, dynamic, and position-based kinematic bodies; circle and box colliders; sensor/collision events; raycasts; and transform synchronization.
-- The headless action-arena sample runs a dynamic player against a fixed floor.
-- A windowed action-arena sample wires keyboard/mouse actions, fixed-step movement, spawning, collision gameplay, and the wgpu renderer together.
+- The editor-authored Action Arena project contains a top-down room, Luau-controlled player and enemies, collisions, HUD/menu, audio, and scene transitions; the separate Rust integration sample adds projectiles, scoring, lives, and restart.
+- A separate windowed Rust action-arena integration sample wires keyboard/mouse actions, fixed-step movement, spawning, collision gameplay, scoring, and the wgpu renderer together.
 - The native wgpu renderer samples registered RGBA images, applies sprite tint and alpha blending, and draws contiguous image groups with instanced quads; world extraction resolves each sprite's stable asset GUID.
 - The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
 - The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
@@ -23,9 +23,9 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The branch contains the P0.1 authoring model, P0.2 Luau scripting, P0.3 editor runtime-preview implementation, and P0.4 audio, scene transitions, and retained game UI. Windows run `38920804391` passed formatting, workspace type-check, workspace tests, release player build, sample validation, export, package checks, and artifact upload at commit `18da157e53720d0610c765d7f7918bab23294be0`.
+The branch now includes the P0 authoring model, Luau scripting, editor runtime preview, audio, scene transitions, retained game UI, diagnostics/profiling, schema fixtures, Windows export, and the offline first-game tutorial. Windows run [38938549080](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38938549080) passed formatting, workspace type-checking, all workspace tests (including the new colony navigation regressions), release-player build, Action Arena validation/export, license generation, package-content checks, and artifact upload at commit `57e956237b6fdfa558ea9548bcb6ba3b3bc4d604`. The `forge2d-action-arena-windows` artifact is 5,643,435 bytes.
 
-P0 remains open. The player-facing editor and standalone-player interaction sessions are still needed for desktop acceptance. The player input-map integration is on current head `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` and run `38922572623` is checking it. P0.5 logging/profiling, third-party license-text bundling, and migration fixtures/round-trip coverage remain; the offline first-game tutorial is now documented. The action arena and colony simulation still need the full P0.6 acceptance audit. The renderer benchmark has not been run on a desktop GPU, so no measured performance results are claimed.
+P0 remains open. A complete Action Arena loop and the colony editor/export project still need integration. The first-game tutorial and editor/player behavior still need player-facing desktop walkthroughs. No Desktop Commander device is connected to this task, so native editor/player acceptance is not available yet. The renderer benchmark has not been run on a desktop GPU, so no measured performance results are claimed. P1 has not started because the P0 completion gate is unmet.
 
 ## Workspace
 
@@ -40,11 +40,11 @@ P0 remains open. The player-facing editor and standalone-player interaction sess
 - `crates/forge_tilemap`: sparse chunk storage, versioned tilemap documents, paint edits, and bounded undo/redo
 - `crates/forge_input`: winit keyboard/mouse bindings translated into timestamped game actions
 - `crates/forge_editor_core`: validated scene edits with bounded undo/redo and dirty-state tracking
-- `examples/action_arena`: small headless physics scene
+- `examples/action_arena`: editor-authored Action Arena project plus a headless runtime smoke runner
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `examples/forge_player`: opens a `.forgeproj`, runs its default scene, authored animations, and saved tilemap with solid-cell colliders, refreshes project PNGs, and exports a portable player/project folder with a launcher
 - `examples/forge_editor`: creates or opens projects, authors scenes and tilemaps, provides a runtime preview with live script/PNG/property updates, and saves with undo/redo
-- `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
+- `examples/playable_action_arena`: separate windowed Rust gameplay integration sample with projectiles, scoring, lives, and restart
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
 - `docs/architecture/renderer-and-benchmark.md`: renderer scope and benchmark measurement contract
