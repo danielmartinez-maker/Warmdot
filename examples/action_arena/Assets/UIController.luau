@@ -15,6 +15,8 @@ return {
         elseif event_name == "arena.play" then
             Forge.Audio.play(CLICK, "ui")
             Forge.Scene.load(MAIN_SCENE)
+        elseif event_name == "arena.fire" then
+            Forge.Audio.play(CLICK, "sfx")
         end
     end,
 }
