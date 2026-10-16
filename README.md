@@ -22,14 +22,14 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The native editor supports scene editing plus a tilemap workspace with PNG tileset selection, tile painting and erasing, solid-cell metadata, bounded undo/redo, and a saved-state marker. Tilemaps save to `Assets/Default.forgetilemap.json`; the player loads that map as textured runtime tiles and creates fixed colliders for solid cells. This branch is still short of the complete P0 alpha: a full asset browser, Luau scripting, audio, retained game UI, multi-scene authoring, chunk-aware tile rendering/collision optimization, and deeper colony-simulation features remain. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+The native editor supports scene editing plus a tilemap workspace with PNG tileset selection, tile painting and erasing, solid-cell metadata, bounded undo/redo, and a saved-state marker. Tilemaps save to `Assets/Default.forgetilemap.json`; the player loads that map as textured runtime tiles and creates fixed colliders for solid cells. This branch is still short of the complete P0 alpha: a full asset browser, Luau scripting, audio, retained game UI, in-game scene transitions, chunk-aware tile rendering/collision optimization, and deeper colony-simulation features remain. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
 - `crates/forge_core`: stable IDs, fixed-step timing, and action input
 - `crates/forge_world`: runtime components and stable render/physics extraction
 - `crates/forge_scene`: versioned scene format and runtime compilation
-- `crates/forge_project`: project lifecycle and confined scene paths
+- `crates/forge_project`: project lifecycle plus confined load/save for multiple scene resources
 - `crates/forge_physics`: Rapier-backed rigid bodies, collision events, and raycasts
 - `crates/forge_runtime`: headless simulation host and ordered systems
 - `crates/forge_renderer`: native wgpu surface, camera projection, sprite batching, and runtime-world extraction
@@ -40,7 +40,7 @@ The native editor supports scene editing plus a tilemap workspace with PNG tiles
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `examples/forge_player`: opens a `.forgeproj`, runs its default scene, authored animations, and saved tilemap with solid-cell colliders, refreshes project PNGs, and exports a portable player/project folder with a launcher
-- `examples/forge_editor`: creates or opens projects, edits scenes and tilemaps, previews sprites and PNG tilesets, and saves scene or tilemap edits with undo/redo
+- `examples/forge_editor`: creates or opens projects, creates and switches among Scenes resources, edits tilemaps, previews sprites and PNG tilesets, and saves with undo/redo
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
