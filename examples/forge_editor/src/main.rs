@@ -62,6 +62,8 @@ struct EditorApp {
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
     script_diagnostics: Vec<ScriptDiagnostic>,
+    canvas_offset: Vec2,
+    canvas_zoom: f32,
 }
 
 impl EditorApp {
@@ -97,6 +99,8 @@ impl EditorApp {
             preview_last_frame: None,
             preview_tick: 0,
             script_diagnostics: Vec::new(),
+            canvas_offset: Vec2::ZERO,
+            canvas_zoom: 1.0,
         }
     }
 
@@ -1450,20 +1454,31 @@ impl EditorApp {
     }
 
     fn show_canvas(&mut self, ui: &mut egui::Ui) {
-        let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click());
+        let (rect, response) =
+            ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+        if response.dragged() {
+            self.canvas_offset += ui.input(|input| input.pointer.delta());
+        }
+        if response.hovered() {
+            let scroll = ui.input(|input| input.raw_scroll_delta.y);
+            if scroll != 0.0 {
+                self.canvas_zoom = (self.canvas_zoom * (scroll * 0.001).exp()).clamp(0.25, 8.0);
+            }
+        }
+        let origin = rect.center() + self.canvas_offset;
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, Color32::from_rgb(20, 24, 31));
         painter.line_segment(
             [
-                Pos2::new(rect.center().x, rect.top()),
-                Pos2::new(rect.center().x, rect.bottom()),
+                Pos2::new(origin.x, rect.top()),
+                Pos2::new(origin.x, rect.bottom()),
             ],
             Stroke::new(1.0, Color32::from_gray(55)),
         );
         painter.line_segment(
             [
-                Pos2::new(rect.left(), rect.center().y),
-                Pos2::new(rect.right(), rect.center().y),
+                Pos2::new(rect.left(), origin.y),
+                Pos2::new(rect.right(), origin.y),
             ],
             Stroke::new(1.0, Color32::from_gray(55)),
         );
@@ -1505,9 +1520,9 @@ impl EditorApp {
                 .collect::<Vec<_>>()
         };
         objects.sort_by_key(|sprite| (sprite.layer, sprite.order, sprite.object_guid));
-        let pixels_per_unit = 24.0;
+        let pixels_per_unit = 24.0 * self.canvas_zoom;
         for sprite in &objects {
-            let center = rect.center()
+            let center = origin
                 + Vec2::new(
                     sprite.translation[0] * pixels_per_unit,
                     sprite.translation[1] * pixels_per_unit,
@@ -1544,6 +1559,13 @@ impl EditorApp {
             egui::FontId::proportional(16.0),
             Color32::LIGHT_GRAY,
         );
+        painter.text(
+            rect.right_top() + Vec2::new(-12.0, 12.0),
+            egui::Align2::RIGHT_TOP,
+            format!("{:.0}%  •  drag to pan, wheel to zoom", self.canvas_zoom * 100.0),
+            egui::FontId::proportional(13.0),
+            Color32::LIGHT_GRAY,
+        );
 
         if response.clicked() {
             if let Some(pointer) = response.interact_pointer_pos() {
@@ -1551,7 +1573,7 @@ impl EditorApp {
                     .iter()
                     .rev()
                     .find(|sprite| {
-                        let center = rect.center()
+                        let center = origin
                             + Vec2::new(
                                 sprite.translation[0] * pixels_per_unit,
                                 sprite.translation[1] * pixels_per_unit,
@@ -1747,6 +1769,10 @@ impl eframe::App for EditorApp {
                         .clicked()
                     {
                         self.delete_selected();
+                    }
+                    if ui.button("Reset view").clicked() {
+                        self.canvas_offset = Vec2::ZERO;
+                        self.canvas_zoom = 1.0;
                     }
                 }
                 ui.separator();
