@@ -17,6 +17,7 @@ members = [
     "examples/forge_player",
     "examples/forge_editor",
     "examples/playable_action_arena",
+    "examples/colony_simulation",
 ]
 
 [workspace.package]
