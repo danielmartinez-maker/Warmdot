@@ -722,7 +722,7 @@ impl EditorApp {
                 files.len(),
                 files
                     .iter()
-                    .filter_map(|file| file.path.clone())
+                    .filter_map(|file| file.path().map(Path::to_path_buf))
                     .collect::<Vec<_>>(),
             )
         });
