@@ -48,6 +48,7 @@ The native editor supports scene editing plus a tilemap workspace with PNG tiles
 - `docs/architecture/assets-and-animation.md`: asset scan, stable identity, and animation data contract
 - `docs/architecture/tilemaps-and-edit-history.md`: chunk layout, coordinate mapping, and editor history contract
 - `docs/architecture/runtime-controls.md`: pause, stepping, and scene replacement behavior
+- `docs/architecture/project-export.md`: standalone player and project-folder packaging contract
 - `docs/architecture/input-bindings.md`: key/mouse action mapping and focus-loss semantics
 - `docs/architecture/editor-core.md`: scene command and save-state history behavior
 - `docs/architecture/playable-action-arena.md`: controls and systems used by the windowed sample
