@@ -27,20 +27,9 @@ return {
 
         local move_x = Forge.Input.axis(1)
         local move_y = Forge.Input.axis(2)
-        if move_x ~= 0 or move_y ~= 0 then
-            local magnitude = math.max(math.sqrt(move_x * move_x + move_y * move_y), 1)
-            x = x + move_x / magnitude * speed * dt
-            y = y + move_y / magnitude * speed * dt
-        else
-            local direction = self:get("direction") or 1
-            if x >= 2 then
-                direction = -1
-            elseif x <= -2 then
-                direction = 1
-            end
-            self:set("direction", direction)
-            x = x + direction * speed * 0.25 * dt
-        end
+        local magnitude = math.max(math.sqrt(move_x * move_x + move_y * move_y), 1)
+        x = x + move_x / magnitude * speed * dt
+        y = y + move_y / magnitude * speed * dt
         self:set_position(
             math.max(min_x, math.min(max_x, x)),
             math.max(min_y, math.min(max_y, y))

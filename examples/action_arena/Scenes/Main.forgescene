@@ -59,7 +59,7 @@
           -2
         ],
         "angular_velocity": 0,
-        "gravity_scale": 1,
+        "gravity_scale": 0,
         "linear_damping": 0.2,
         "angular_damping": 0.5,
         "lock_rotation": true
@@ -92,62 +92,6 @@
           "min_y": -16,
           "max_y": 16
         }
-      }
-    },
-    {
-      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0004",
-      "name": "Floor",
-      "transform": {
-        "translation": [
-          0,
-          4
-        ],
-        "rotation_radians": 0,
-        "scale": [
-          1,
-          1
-        ]
-      },
-      "sprite": {
-        "asset": null,
-        "animation_clip": null,
-        "size": [
-          16,
-          1
-        ],
-        "anchor": [
-          0.5,
-          0.5
-        ],
-        "tint": [
-          0.18,
-          0.25,
-          0.34,
-          1
-        ],
-        "layer": 0,
-        "order": 0,
-        "uv_rect": [
-          0,
-          0,
-          1,
-          1
-        ]
-      },
-      "camera": null,
-      "rigid_body": {
-        "kind": "fixed"
-      },
-      "collider": {
-        "shape": {
-          "shape": "box",
-          "half_extents": [
-            8,
-            0.5
-          ]
-        },
-        "density": 1,
-        "friction": 0.8
       }
     },
     {
