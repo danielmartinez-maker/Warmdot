@@ -66,6 +66,8 @@ impl Default for AuthoredTransform {
 pub struct AuthoredSprite {
     #[serde(default)]
     pub asset: Option<Guid>,
+    #[serde(default)]
+    pub animation_clip: Option<Guid>,
     #[serde(default = "unit_scale")]
     pub size: [f32; 2],
     #[serde(default = "white_tint")]
@@ -283,6 +285,15 @@ impl SceneDocument {
                         diagnostics.push(SceneDiagnostic::error(
                             "undeclared_asset_dependency",
                             format!("sprite asset {asset} is missing from scene dependencies"),
+                            Some(guid),
+                        ));
+                    }
+                }
+                if let Some(clip) = sprite.animation_clip {
+                    if !dependencies.contains(&clip) {
+                        diagnostics.push(SceneDiagnostic::error(
+                            "undeclared_animation_dependency",
+                            format!("animation clip {clip} is missing from scene dependencies"),
                             Some(guid),
                         ));
                     }
