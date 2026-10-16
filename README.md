@@ -40,7 +40,7 @@ The first native scene editor is now available, but this branch is not the compl
 - `crates/forge_editor_core`: validated scene edits with bounded undo/redo and dirty-state tracking
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
-- `examples/forge_player`: opens a `.forgeproj`, runs its default scene, uploads project PNGs, and refreshes changed images while the player is open
+- `examples/forge_player`: opens a `.forgeproj`, runs its default scene and authored animations, uploads project PNGs, and refreshes changed images while the player is open
 - `examples/forge_editor`: creates or opens projects, edits a scene tree plus sprite, camera, rigid-body, and collider properties, previews tinted or textured objects, and saves with undo/redo
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
