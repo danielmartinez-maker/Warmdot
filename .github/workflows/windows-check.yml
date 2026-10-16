@@ -49,6 +49,13 @@ jobs:
             'artifacts/action-arena-windows/Game/Scenes/Main.forgescene',
             'artifacts/action-arena-windows/Game/Scenes/Menu.forgescene',
             'artifacts/action-arena-windows/Game/Assets/MainHUD.forgeui.json',
+            'artifacts/action-arena-windows/Game/Assets/ArenaTiles.png',
+            'artifacts/action-arena-windows/Game/Assets/Default.forgetilemap.json',
+            'artifacts/action-arena-windows/Game/Assets/Menu.forgeui.json',
+            'artifacts/action-arena-windows/Game/Assets/PlayerController.luau',
+            'artifacts/action-arena-windows/Game/Assets/UIController.luau',
+            'artifacts/action-arena-windows/Game/Assets/Audio/arena-music.wav',
+            'artifacts/action-arena-windows/Game/Assets/Audio/click.wav',
             'artifacts/action-arena-windows/Game/.forge/asset-index.json'
           )
           foreach ($path in $required) {
