@@ -44,6 +44,8 @@ pub enum ScriptError {
     MissingObject(Guid),
     TooManyInstances,
     SourceTooLarge(usize),
+    MissingInstance(Guid),
+    InvalidProperty(String),
 }
 
 impl fmt::Display for ScriptError {
@@ -61,6 +63,12 @@ impl fmt::Display for ScriptError {
                 f,
                 "script source is {size} bytes; maximum is {MAX_SCRIPT_SOURCE_BYTES}"
             ),
+            Self::MissingInstance(guid) => {
+                write!(f, "script instance for object {guid} was not found")
+            }
+            Self::InvalidProperty(name) => {
+                write!(f, "script property {name:?} is invalid or changes type")
+            }
         }
     }
 }
@@ -202,6 +210,34 @@ impl ScriptHost {
         let context = Rc::new(RefCell::new(None));
         let instance = ScriptInstance::compile(definition.clone(), context)?;
         self.instances.insert(definition.object_guid, instance);
+        Ok(())
+    }
+
+    /// Applies compatible authored values to a live script without resetting its Luau VM.
+    pub fn update_properties(
+        &mut self,
+        object_guid: Guid,
+        properties: BTreeMap<String, ScriptPropertyValue>,
+    ) -> Result<(), ScriptError> {
+        let instance = self
+            .instances
+            .get_mut(&object_guid)
+            .ok_or(ScriptError::MissingInstance(object_guid))?;
+        for (name, value) in &properties {
+            if name.trim().is_empty()
+                || name.len() > 128
+                || matches!(value, ScriptPropertyValue::Number(number) if !number.is_finite())
+                || matches!(value, ScriptPropertyValue::String(text) if text.len() > 16 * 1024)
+                || instance
+                    .definition
+                    .properties
+                    .get(name)
+                    .is_some_and(|current| !same_property_type(current, value))
+            {
+                return Err(ScriptError::InvalidProperty(name.clone()));
+            }
+        }
+        instance.definition.properties = properties;
         Ok(())
     }
 
@@ -590,6 +626,72 @@ mod tests {
         let transform = world.transform(entity).expect("object transform");
         assert!((transform.translation[0] - 0.2).abs() < 0.0001);
         assert!((transform.translation[1] + 0.05).abs() < 0.0001);
+    }
+
+    #[test]
+    fn updating_script_properties_changes_the_next_tick_without_recompiling() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        let entity = world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/Move.luau".into(),
+            source: r#"
+                return {
+                    on_fixed_update = function(self, dt)
+                        self:translate(self:get("speed") * dt, 0)
+                    end,
+                }
+            "#
+            .into(),
+            properties: BTreeMap::from([("speed".into(), ScriptPropertyValue::Number(1.0))]),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach valid Luau script");
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(100), 1);
+
+        host.update_properties(
+            object_guid,
+            BTreeMap::from([("speed".into(), ScriptPropertyValue::Number(2.0))]),
+        )
+        .expect("apply compatible property value");
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(100), 2);
+
+        let position = world
+            .transform(entity)
+            .expect("scripted object transform")
+            .translation[0];
+        assert!((position - 0.3).abs() < 0.0001);
+    }
+
+    #[test]
+    fn live_property_update_rejects_type_changes_without_replacing_values() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/Move.luau".into(),
+            source: "return {}".into(),
+            properties: BTreeMap::from([("speed".into(), ScriptPropertyValue::Number(1.0))]),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach valid Luau script");
+
+        let result = host.update_properties(
+            object_guid,
+            BTreeMap::from([("speed".into(), ScriptPropertyValue::Bool(true))]),
+        );
+
+        assert!(matches!(result, Err(super::ScriptError::InvalidProperty(_))));
     }
 
     #[test]

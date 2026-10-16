@@ -10,7 +10,7 @@ use forge_core::{
     ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
-use forge_scene::{SceneDiagnostic, SceneDocument};
+use forge_scene::{SceneDiagnostic, SceneDocument, ScriptPropertyValue};
 use forge_scripting::ScriptHost;
 pub use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptError};
 use forge_world::{RuntimeWorld, WorldError};
@@ -422,6 +422,14 @@ impl GameRuntime {
 
     pub fn reload_script_asset(&mut self, asset: &LoadedScriptAsset) {
         self.script_host.reload_asset(asset);
+    }
+
+    pub fn update_script_properties(
+        &mut self,
+        object_guid: Guid,
+        properties: BTreeMap<String, ScriptPropertyValue>,
+    ) -> Result<(), ScriptError> {
+        self.script_host.update_properties(object_guid, properties)
     }
 
     pub fn report_script_asset_issue(

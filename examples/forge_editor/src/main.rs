@@ -8,11 +8,11 @@ use std::{
 };
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use forge_assets::{AssetCatalog, AssetKind};
+use forge_assets::{AssetCatalog, AssetChange, AssetChangeKind, AssetKind};
 use forge_core::{ActionId, Guid};
 use forge_editor_core::SceneEditHistory;
-use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_project::Project;
+use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform, CURRENT_SCENE_SCHEMA,
@@ -370,7 +370,9 @@ impl EditorApp {
         runtime.push_action(at, ActionId(2), move_y, move_y != 0.0);
         if !runtime.is_paused() {
             let frame = runtime.advance_frame(now.saturating_duration_since(previous));
-            self.preview_tick = frame.first_tick.saturating_add(u64::from(frame.fixed_steps));
+            self.preview_tick = frame
+                .first_tick
+                .saturating_add(u64::from(frame.fixed_steps));
         }
         self.collect_script_diagnostics();
         if self
@@ -379,6 +381,42 @@ impl EditorApp {
             .is_some_and(|runtime| !runtime.is_paused())
         {
             ctx.request_repaint_after(Duration::from_millis(16));
+        }
+    }
+
+    fn handle_asset_change(&mut self, change: AssetChange) {
+        if self.runtime.is_none() {
+            return;
+        }
+        if change.kind == AssetChangeKind::Removed {
+            if let Some(runtime) = self.runtime.as_mut() {
+                runtime.report_script_asset_issue(
+                    change.guid,
+                    change.relative_path,
+                    "script asset was removed during play; the last loaded version remains active",
+                );
+            }
+            return;
+        }
+        let updated_script = self.catalog.as_ref().and_then(|catalog| {
+            let record = catalog.get(change.guid)?;
+            (record.kind == AssetKind::Script).then(|| {
+                (
+                    record.relative_path.clone(),
+                    catalog.load_script(change.guid),
+                )
+            })
+        });
+        let Some((relative_path, updated_script)) = updated_script else {
+            return;
+        };
+        if let Some(runtime) = self.runtime.as_mut() {
+            match updated_script {
+                Ok(asset) => runtime.reload_script_asset(&asset),
+                Err(error) => {
+                    runtime.report_script_asset_issue(change.guid, relative_path, error.to_string())
+                }
+            }
         }
     }
 
@@ -404,6 +442,7 @@ impl EditorApp {
         for change in changes {
             self.textures.remove(&change.guid);
             self.texture_sizes.remove(&change.guid);
+            self.handle_asset_change(change);
         }
 
         let mut required = self
@@ -996,6 +1035,79 @@ impl EditorApp {
                 Ok(()) => self.status.clear(),
                 Err(error) => self.status = error.to_string(),
             }
+        }
+    }
+
+    fn show_runtime_inspector(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Runtime Inspector");
+        let Some(guid) = self.selected else {
+            ui.label("Select an object to inspect its script properties.");
+            return;
+        };
+        let Some(mut object) = self
+            .scene
+            .objects
+            .iter()
+            .find(|object| object.object_guid == guid)
+            .cloned()
+        else {
+            ui.label("Selected object is not in this scene.");
+            return;
+        };
+        let Some(mut script) = object.script.clone() else {
+            ui.label("Selected object has no attached script.");
+            return;
+        };
+        ui.label(format!("Script asset: {}", script.asset));
+        let mut changed = false;
+        for (name, value) in &mut script.properties {
+            ui.horizontal(|ui| {
+                ui.label(name);
+                changed |= match value {
+                    ScriptPropertyValue::Bool(value) => ui.checkbox(value, "").changed(),
+                    ScriptPropertyValue::Number(value) => {
+                        ui.add(egui::DragValue::new(value).speed(0.1)).changed()
+                    }
+                    ScriptPropertyValue::String(value) => {
+                        ui.text_edit_singleline(value).changed()
+                    }
+                };
+            });
+        }
+        if ui.button("Add runtime property").clicked() {
+            let mut suffix = 1_u32;
+            let name = loop {
+                let candidate = format!("property_{suffix}");
+                if !script.properties.contains_key(&candidate) {
+                    break candidate;
+                }
+                suffix = suffix.saturating_add(1);
+            };
+            script
+                .properties
+                .insert(name, ScriptPropertyValue::Number(0.0));
+            changed = true;
+        }
+        if !changed {
+            return;
+        }
+        object.script = Some(script.clone());
+        match self.history.replace_object(&mut self.scene, object) {
+            Ok(()) => {
+                let result = self
+                    .runtime
+                    .as_mut()
+                    .map(|runtime| runtime.update_script_properties(guid, script.properties));
+                match result {
+                    Some(Ok(())) => self.status = "Live script properties updated.".into(),
+                    Some(Err(error)) => {
+                        let _ = self.history.undo(&mut self.scene);
+                        self.status = format!("Live property update rejected: {error}");
+                    }
+                    None => self.status = "Runtime stopped before the property update.".into(),
+                }
+            }
+            Err(error) => self.status = error.to_string(),
         }
     }
 
@@ -1675,12 +1787,12 @@ impl eframe::App for EditorApp {
                 }
                 let can_undo = self.runtime.is_none()
                     && if self.tilemap_mode {
-                    self.tilemap
-                        .as_ref()
-                        .is_some_and(|tilemap| tilemap.history.undo_depth() > 0)
-                } else {
-                    self.history.undo_depth() > 0
-                };
+                        self.tilemap
+                            .as_ref()
+                            .is_some_and(|tilemap| tilemap.history.undo_depth() > 0)
+                    } else {
+                        self.history.undo_depth() > 0
+                    };
                 if ui
                     .add_enabled(can_undo, egui::Button::new("Undo"))
                     .clicked()
@@ -1698,12 +1810,12 @@ impl eframe::App for EditorApp {
                 }
                 let can_redo = self.runtime.is_none()
                     && if self.tilemap_mode {
-                    self.tilemap
-                        .as_ref()
-                        .is_some_and(|tilemap| tilemap.history.redo_depth() > 0)
-                } else {
-                    self.history.redo_depth() > 0
-                };
+                        self.tilemap
+                            .as_ref()
+                            .is_some_and(|tilemap| tilemap.history.redo_depth() > 0)
+                    } else {
+                        self.history.redo_depth() > 0
+                    };
                 if ui
                     .add_enabled(can_redo, egui::Button::new("Redo"))
                     .clicked()
@@ -1729,6 +1841,16 @@ impl eframe::App for EditorApp {
                 } else {
                     self.history.is_dirty()
                 };
+                if !self.tilemap_mode
+                    && ui
+                        .add_enabled(
+                            can_edit_scene && changed,
+                            egui::Button::new("Save scene"),
+                        )
+                        .clicked()
+                {
+                    self.save();
+                }
                 ui.label(if changed { "Unsaved changes" } else { "Saved" });
                 if !self.status.is_empty() {
                     ui.separator();
@@ -1743,9 +1865,7 @@ impl eframe::App for EditorApp {
             .default_size(320.0)
             .show(ui, |ui| {
                 if self.runtime.is_some() {
-                    ui.heading("Runtime Preview");
-                    ui.label("Selection remains available while playing. Stop to edit authored properties.");
-                    self.show_hierarchy(ui);
+                    self.show_runtime_inspector(ui);
                 } else if self.tilemap_mode {
                     self.show_tilemap_inspector(ui);
                 } else {
