@@ -1766,17 +1766,18 @@ impl eframe::App for EditorApp {
                 egui::ScrollArea::vertical()
                     .max_height(100.0)
                     .show(ui, |ui| {
-                    if self.script_diagnostics.is_empty() {
-                        ui.weak("Play the scene to inspect Luau runtime diagnostics.");
-                    } else {
-                        for diagnostic in self.script_diagnostics.iter().rev() {
-                            ui.label(format!(
-                                "{}  •  {}  •  tick {}  •  {}",
-                                diagnostic.source_path,
-                                diagnostic.object_guid,
-                                diagnostic.tick,
-                                diagnostic.message
-                            ));
+                        if self.script_diagnostics.is_empty() {
+                            ui.weak("Play the scene to inspect Luau runtime diagnostics.");
+                        } else {
+                            for diagnostic in self.script_diagnostics.iter().rev() {
+                                ui.label(format!(
+                                    "{}  •  {}  •  tick {}  •  {}",
+                                    diagnostic.source_path,
+                                    diagnostic.object_guid,
+                                    diagnostic.tick,
+                                    diagnostic.message
+                                ));
+                            }
                         }
                     });
             });
