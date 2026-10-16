@@ -14,8 +14,8 @@ use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
-    AuthoredRigidBodyKind, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
-    CURRENT_SCENE_SCHEMA,
+    AuthoredRigidBodyKind, AuthoredSprite, AuthoredTransform, CURRENT_SCENE_SCHEMA, SceneDocument,
+    SceneObject,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
 
