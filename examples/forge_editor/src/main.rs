@@ -157,6 +157,7 @@ impl EditorApp {
         let object = SceneObject {
             object_guid: Guid::new(),
             name: format!("Sprite {}", self.scene.objects.len() + 1),
+            prefab_instance: None,
             transform: AuthoredTransform::default(),
             sprite: Some(AuthoredSprite {
                 asset: None,
@@ -775,6 +776,7 @@ impl EditorApp {
             AssetKind::SpriteSheet => catalog.load_sprite_sheet(guid).map(|_| ()),
             AssetKind::AnimationClip => catalog.load_animation_clip(guid).map(|_| ()),
             AssetKind::Script => catalog.load_script(guid).map(|_| ()),
+            AssetKind::Prefab => catalog.load_prefab(guid).map(|_| ()),
         }
         .map_err(|error| error.to_string())
     }
@@ -2122,7 +2124,7 @@ fn import_asset_file(project_root: &Path, source: &Path) -> Result<String, Strin
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("{} has an invalid filename", source.display()))?;
     let lower_name = file_name.to_ascii_lowercase();
-    let suffix = [".forgeatlas.json", ".forgeanim.json", ".png", ".luau"]
+    let suffix = [".forgeprefab.json", ".forgeatlas.json", ".forgeanim.json", ".png", ".luau"]
         .into_iter()
         .find(|suffix| lower_name.ends_with(suffix))
         .ok_or_else(|| format!("{} has an unsupported asset type", source.display()))?;

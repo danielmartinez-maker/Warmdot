@@ -10,6 +10,7 @@ use forge_world::{
 use serde::{Deserialize, Serialize};
 
 pub const CURRENT_SCENE_SCHEMA: u32 = 1;
+pub const CURRENT_PREFAB_SCHEMA: u32 = 1;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -23,11 +24,32 @@ pub struct SceneDocument {
     pub objects: Vec<SceneObject>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefabInstance {
+    pub prefab_asset: Guid,
+    #[serde(default)]
+    pub overrides: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefabDocument {
+    pub schema_version: u32,
+    pub resource_guid: Guid,
+    pub name: String,
+    #[serde(default)]
+    pub dependencies: Vec<Guid>,
+    pub object: SceneObject,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SceneObject {
     pub object_guid: Guid,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefab_instance: Option<PrefabInstance>,
     #[serde(default)]
     pub transform: AuthoredTransform,
     #[serde(default)]
@@ -317,6 +339,29 @@ impl SceneDocument {
                     }
                 }
             }
+            if let Some(instance) = &object.prefab_instance {
+                if !dependencies.contains(&instance.prefab_asset) {
+                    diagnostics.push(SceneDiagnostic::error(
+                        "undeclared_prefab_dependency",
+                        format!(
+                            "prefab asset {} is missing from scene dependencies",
+                            instance.prefab_asset
+                        ),
+                        Some(guid),
+                    ));
+                }
+                if instance
+                    .overrides
+                    .iter()
+                    .any(|identifier| identifier.trim().is_empty() || identifier.len() > 128)
+                {
+                    diagnostics.push(SceneDiagnostic::error(
+                        "invalid_prefab_override",
+                        "prefab override identifiers must be non-empty and at most 128 bytes",
+                        Some(guid),
+                    ));
+                }
+            }
             if let Some(script) = &object.script {
                 if !dependencies.contains(&script.asset) {
                     diagnostics.push(SceneDiagnostic::error(
@@ -482,6 +527,65 @@ impl SceneDocument {
         let mut canonical = self.clone();
         canonical.dependencies.sort();
         canonical.objects.sort_by_key(|object| object.object_guid);
+        serde_json::to_string_pretty(&canonical)
+    }
+}
+
+impl PrefabDocument {
+    pub fn from_json(source: &str) -> Result<Self, Vec<SceneDiagnostic>> {
+        let document: Self = serde_json::from_str(source).map_err(|error| {
+            vec![SceneDiagnostic::error(
+                "invalid_prefab_json",
+                error.to_string(),
+                None,
+            )]
+        })?;
+        document.validate()?;
+        Ok(document)
+    }
+
+    pub fn validate(&self) -> Result<(), Vec<SceneDiagnostic>> {
+        let mut diagnostics = Vec::new();
+        if self.schema_version != CURRENT_PREFAB_SCHEMA {
+            diagnostics.push(SceneDiagnostic::error(
+                "unsupported_prefab_schema",
+                format!(
+                    "prefab schema {} is unsupported; this build reads schema {}",
+                    self.schema_version, CURRENT_PREFAB_SCHEMA
+                ),
+                None,
+            ));
+        }
+        if self.name.trim().is_empty() {
+            diagnostics.push(SceneDiagnostic::error(
+                "empty_prefab_name",
+                "prefab name must not be empty",
+                None,
+            ));
+        }
+        if self.object.prefab_instance.is_some() {
+            diagnostics.push(SceneDiagnostic::error(
+                "nested_prefab_template",
+                "prefab templates cannot contain another prefab instance",
+                Some(self.object.object_guid),
+            ));
+        }
+        if !diagnostics.is_empty() {
+            return Err(diagnostics);
+        }
+        SceneDocument {
+            schema_version: CURRENT_SCENE_SCHEMA,
+            resource_guid: self.resource_guid,
+            name: self.name.clone(),
+            dependencies: self.dependencies.clone(),
+            objects: vec![self.object.clone()],
+        }
+        .validate()
+    }
+
+    pub fn to_canonical_json(&self) -> Result<String, serde_json::Error> {
+        let mut canonical = self.clone();
+        canonical.dependencies.sort();
         serde_json::to_string_pretty(&canonical)
     }
 }

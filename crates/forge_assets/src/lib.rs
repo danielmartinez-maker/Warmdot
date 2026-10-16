@@ -14,6 +14,7 @@ use std::{
 };
 
 use forge_core::Guid;
+use forge_scene::PrefabDocument;
 use image::{ImageFormat, RgbaImage};
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +34,7 @@ pub enum AssetKind {
     SpriteSheet,
     AnimationClip,
     Script,
+    Prefab,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -333,6 +335,35 @@ impl AssetCatalog {
         let sheet = self.load_sprite_sheet(sheet_guid)?;
         clip.validate(sheet_guid, &sheet)?;
         Ok(clip)
+    }
+
+    pub fn load_prefab(&self, guid: Guid) -> Result<PrefabDocument, AssetError> {
+        let record = self.record_of_kind(guid, AssetKind::Prefab)?;
+        let bytes = read_limited(&self.resolve_record_path(record)?, MAX_METADATA_BYTES)?;
+        let source = String::from_utf8(bytes).map_err(|error| {
+            AssetError::Invalid(format!(
+                "{} is not valid UTF-8: {error}",
+                record.relative_path
+            ))
+        })?;
+        let prefab = PrefabDocument::from_json(&source).map_err(|diagnostics| {
+            AssetError::Invalid(
+                diagnostics
+                    .into_iter()
+                    .map(|diagnostic| diagnostic.to_string())
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        })?;
+        for dependency in &prefab.dependencies {
+            if self.get(*dependency).is_none() {
+                return Err(AssetError::Invalid(format!(
+                    "{} references missing asset {dependency}",
+                    record.relative_path
+                )));
+            }
+        }
+        Ok(prefab)
     }
 
     fn record_of_kind(&self, guid: Guid, expected: AssetKind) -> Result<&AssetRecord, AssetError> {
@@ -706,7 +737,7 @@ fn scan_directory(
         validate_relative_asset_path(&relative_path)?;
         let byte_limit = match kind {
             AssetKind::Png => MAX_PNG_SOURCE_BYTES,
-            AssetKind::SpriteSheet | AssetKind::AnimationClip => MAX_METADATA_BYTES,
+            AssetKind::SpriteSheet | AssetKind::AnimationClip | AssetKind::Prefab => MAX_METADATA_BYTES,
             AssetKind::Script => MAX_SCRIPT_SOURCE_BYTES,
         };
         let bytes = read_limited(&canonical, byte_limit)?;
@@ -718,7 +749,9 @@ fn scan_directory(
 
 fn asset_kind(path: &Path) -> Option<AssetKind> {
     let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
-    if file_name.ends_with(".forgeatlas.json") {
+    if file_name.ends_with(".forgeprefab.json") {
+        Some(AssetKind::Prefab)
+    } else if file_name.ends_with(".forgeatlas.json") {
         Some(AssetKind::SpriteSheet)
     } else if file_name.ends_with(".forgeanim.json") {
         Some(AssetKind::AnimationClip)
