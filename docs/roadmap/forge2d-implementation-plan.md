@@ -35,7 +35,9 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Windows run `38920804391` on parent commit `18da157e53720d0610c765d7f7918bab23294be0` passed formatting, workspace type-check, workspace tests, release player build, Action Arena validation, export, package-content checks, and artifact upload. The `forge2d-action-arena-windows` artifact is available from [run 38920804391](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38920804391). Current head `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` wires standalone player keyboard/mouse actions into the runtime; its Windows run `38922572623` is in progress.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1 remains draft and unmerged. Current head `5c5141e2dffbae4340e44ab813b9c68cb2f9ec39`. Windows run [38935389248](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38935389248) passed formatting, workspace type-checking, and all workspace tests, including the authored Action Arena input-to-movement and fire-to-SFX integration assertion. Its package job is rebuilding the release player and export. Run [38934893620](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38934893620) on parent `ec690f6b73a0d1bc81651a0a7fb0162c602f8130` also passed the full check; its package job built the player, validated the Action Arena project, and exported it, with license generation and expanded content checks running. Earlier run [38931980946](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38931980946) passed the complete check and package pipeline, including third-party license notices and artifact upload, on `ab0e0ab5df0c82e702185a6ff4a1505b0b32a96a`.
+
+### Present in the branch
 
 ### Present in the branch
 
@@ -51,10 +53,13 @@ Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1
 
 ### Confirmed gaps or partial coverage
 
-- The editor preview still needs a player-facing desktop session for focus loss, pause/step, live changes, last-good behavior, and breakpoint interaction. The standalone player's HUD, audio, and scene transition also need native desktop interaction acceptance.
-- Structured runtime/editor logging and the profiler overlay, migration fixtures and serialization round-trip coverage, and third-party license-text bundling remain open. The offline first-game tutorial is now in `docs/tutorials/first-playable-game.md`. The export includes Forge's MIT license; the runtime-contents document records that third-party license texts are not yet bundled.
-- Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; incremental large-map rendering/collision and navigation are not implemented.
-- The action and colony samples are early gameplay slices, not the complete P0 vertical slices. The renderer benchmark has not been run on a desktop GPU, so no performance results are claimed.
+- Editor preview and standalone player interactions still need a player-facing desktop session for focus loss, pause/step, live changes, last-good behavior, breakpoints, HUD/audio, and scene transitions. No Remote Desktop device is connected to this task, and native CUA controls are unavailable.
+- The tutorial exists and is offline, but it has not been completed through the editor and exported player.
+- Action Arena work is split across two samples: the saved editor project covers a top-down tiled room, controllable player, moving enemies with colliders, HUD/menu/music/audio, and scene transitions; the separate Rust integration sample covers projectiles, scoring, lives, and restart. One editor-authored/exported action game does not yet contain the complete gameplay loop.
+- The colony sample implements blocked-tile editing, queued resource jobs, deterministic BFS routes, time controls, and profiling, but remains a Rust example rather than a saved editor project or standalone `forge-player` export.
+- Tilemaps are chunked in storage, but rendering/collision still expand per tile; incremental large-map rendering/collision and generalized navigation remain open.
+- The renderer benchmark has not been run on a desktop GPU, so no performance results are claimed.
+
 
 ---
 
@@ -111,24 +116,22 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 
 ### P0.5 — Runtime diagnostics and dependable shipping
 
-- [ ] Add structured runtime/editor logging, a visible error console, and a profiler overlay for frame percentiles, system/script cost, draw calls, and entity/chunk counts.
-- [x] Make the Windows player/export path reproducible from clean CI and document its runtime/license contents. Windows run `38920804391` built, validated, exported, checked, and uploaded the Action Arena package; the artifact metadata and third-party-license limitation are documented.
-- [x] Add import/scene validation commands or editor equivalents with deterministic diagnostic output. `forge-player --validate` passed against the sample in run `38920804391`.
-- [ ] Add schema migration fixtures and serialization round trips for projects, scenes, prefabs, scripts, and tilemaps.
+- [x] Add structured runtime/editor logging, a visible error console, and a profiler overlay for frame percentiles, system/script cost, draw calls, and entity/chunk counts. Windows run `38931980946` passed the workspace tests on the diagnostics implementation.
+- [x] Make the Windows player/export path reproducible from clean CI and document its runtime/license contents. Run `38931980946` built, validated, exported, checked, generated third-party license notices, and uploaded the Action Arena package. Run `38934893620` also built, validated, and exported the updated editor project; the expanded package-content check is running.
+- [x] Add import/scene validation commands or editor equivalents with deterministic diagnostic output. `forge-player --validate` passed against Action Arena in runs `38931980946` and `38934893620`.
+- [x] Add schema migration fixtures and serialization round trips for projects, scenes, prefabs, scripts, and tilemaps. Workspace tests passed in run `38931980946`.
 - [x] Add an offline first-game tutorial in `docs/tutorials/first-playable-game.md`; its project assets and instructions are local and it does not require online services.
 
-**Exit:** Still open. Clean Windows CI now validates/builds/exports the Action Arena sample, but there is no native desktop open/interaction acceptance yet; runtime/editor logs and performance costs are not inspectable; migration round trips remain unverified. The tutorial is documented, but it still needs a player-facing completion pass.
+**Exit:** Still open. Structured logs, profiler data, migration fixtures, and license notices are implemented and have Windows CI evidence. The current package build is still checking the updated editor project and all exported assets. Native desktop acceptance and a player-facing tutorial completion pass remain pending.
 
 ### P0.6 — Two real sample vertical slices and release gate
 
-- [ ] Complete the action arena with enemy behavior, animations, collisions, camera, tile room, HUD, audio, transitions, saveable authored data, and editor-built workflow.
-- [ ] Complete a small colony simulation with walkable/unwalkable tile edits, resource jobs, queues/navigation, time controls, and system profiling.
-- [ ] Verify a newcomer can build and change the action game through the editor without Rust edits.
+- [ ] Complete one editor-authored Action Arena with enemy behavior, animations, collisions, camera, tile room, HUD, audio, transitions, saveable data, projectiles, and scoring. The saved project and Rust gameplay sample currently cover complementary subsets.
+- [x] Complete the colony simulation behaviors: walkable/unwalkable tile edits, resource jobs, queues/navigation, time controls, and system profiling. Workspace tests passed on run `38931980946`; the remaining integration gap is that the sample is not an editor-authored project or `forge-player` export.
+- [ ] Verify a newcomer can build and change the complete action game through the editor without Rust edits.
 - [ ] Run the P0 acceptance audit against every P0 bullet and both sample exits; publish no performance claim without measurements.
 
-**P0 completion gate:** Every P0 item above is checked with current repository evidence, Windows CI is green, both vertical slices run through editor and standalone export, and remaining gaps are explicitly zero.
-
----
+**P0 completion gate:** Every P0 item above is checked with current repository evidence, Windows CI is green, both vertical slices run through editor and standalone export, and remaining gaps are explicitly zero. This gate is not met: sample integration, the native desktop sessions, the tutorial walkthrough, and the full audit remain open.
 
 ## P1 — Differentiated Public Beta (start only after P0 gate)
 
@@ -171,4 +174,7 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 - 2026-10-16: Completed the P0.1 authoring-model slice on `aa6173577d4116defac860a406ea1e2ab8a04ea4`: bounded drag/drop asset import; parent hierarchy and world transforms; prefab instances with granular sprite property overrides; move/rotate/scale/anchor gizmos with snapping; selectable render layers; and validated history/save handling. Windows run `38873215811` passed formatting, workspace type-check, and workspace tests.
 - 2026-10-16: Added compatible scalar state migration and typed next-tick events to P0.2, then fixed event docs/types and bounded editor preview input while paused with window-focus/text-input gating. Windows formatting, type-check, and workspace tests passed on `d34a4835157ba07beb0f54377b5036e8058a6485` (run `38875425714`). Line breakpoints remain the P0.2 code gap; P0.3 still needs player-facing verification.
 - 2026-10-16: Added resumable Luau line breakpoints, deterministic callback queue suspension, fixed-tick Continue semantics, and editor Set/Remove/Continue controls with accepted-line and hit feedback. Windows formatting, workspace type-check, and workspace tests passed on `faeaa9679bfd2d497f6acddbf943fd37b73cd895` (run `38879901911`). P0.3 still needs a player-facing desktop acceptance session.
-- Next: finish P0.5 structured logs/profiling and schema migration round trips; continue P0.6 action-arena and colony vertical slices; obtain desktop acceptance before considering P0 complete or opening P1.
+- 2026-10-16: Completed P0.5 structured logs/profiling, migration/round-trip fixtures, and third-party license packaging. Windows run `38931980946` passed format/type-check/tests, Action Arena validation/export, license generation, package checks, and artifact upload. The latest editor-project package validation is running in `38934893620` and `38935389248`.
+- 2026-10-16: Expanded the colony simulation with blocked-tile editing, queued food jobs, deterministic BFS rerouting, pause/time-scale controls, worker cap, and profiling. Windows run `38931980946` passed. It remains a Rust example and is not yet available as an editor-authored/exported project.
+- 2026-10-16: Expanded the Action Arena into a saved top-down project with tilemap borders, zero-gravity controllable player, moving collider enemies, UI menu/HUD, audio, and scene transitions. The Rust integration sample has projectiles/scoring. Fixed an unexposed fire-state property, removed player launch velocity, and added input-to-movement/fire-to-SFX coverage; run `38935389248` passed formatting, type-check, and workspace tests.
+- Next: complete the single editor-authored/exported action vertical slice, add the colony project/export path, obtain native desktop acceptance and complete the tutorial walkthrough, then run the P0 acceptance audit. Do not start P1 before the documented gate is satisfied.
