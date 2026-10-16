@@ -23,9 +23,9 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The branch now includes the P0 authoring model, Luau scripting, editor runtime preview, audio, scene transitions, retained game UI, diagnostics/profiling, schema fixtures, Windows export, and the offline first-game tutorial. Windows run [38938549080](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38938549080) passed formatting, workspace type-checking, all workspace tests (including the new colony navigation regressions), release-player build, Action Arena validation/export, license generation, package-content checks, and artifact upload at commit `57e956237b6fdfa558ea9548bcb6ba3b3bc4d604`. The `forge2d-action-arena-windows` artifact is 5,643,435 bytes.
+The branch now includes the P0 authoring model, Luau scripting, editor runtime preview, audio, scene transitions, retained game UI, diagnostics/profiling, schema fixtures, Windows export, and the offline first-game tutorial. Windows run [38948522741](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38948522741) passed formatting, workspace type-checking, all workspace tests, release-player build, validation/export of both editor-authored projects, third-party license generation, package-content checks, and both artifact uploads at commit `4d041011fcb7219c0040534b94a623a681e87561`. Artifacts: [forge2d-action-arena-windows](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38948522741) (5,664,463 bytes) and [forge2d-colony-windows](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38948522741) (5,494,087 bytes).
 
-P0 remains open. A complete Action Arena loop and the colony editor/export project still need integration. The first-game tutorial and editor/player behavior still need player-facing desktop walkthroughs. No Desktop Commander device is connected to this task, so native editor/player acceptance is not available yet. The renderer benchmark has not been run on a desktop GPU, so no measured performance results are claimed. P1 has not started because the P0 completion gate is unmet.
+The single-project Action Arena loop now includes player movement, animated enemies, projectile collisions/scoring, lives, HUD, menu, audio, scene transitions, and restart flow. The saved colony project runs workers to food nodes around blocked cells and exports as a standalone project. P0 remains open for native editor/player acceptance, the first-game tutorial walkthrough, and the full P0 audit. No Desktop Commander device is connected to this task, so the GUI acceptance cannot be completed from this session. The renderer benchmark has not been run on a desktop GPU, so no measured performance results are claimed. P1 has not started because the P0 completion gate is unmet.
 
 ## Workspace
 
@@ -45,7 +45,8 @@ P0 remains open. A complete Action Arena loop and the colony editor/export proje
 - `examples/forge_player`: opens a `.forgeproj`, runs its default scene, authored animations, and saved tilemap with solid-cell colliders, refreshes project PNGs, and exports a portable player/project folder with a launcher
 - `examples/forge_editor`: creates or opens projects, authors scenes and tilemaps, provides a runtime preview with live script/PNG/property updates, and saves with undo/redo
 - `examples/playable_action_arena`: separate windowed Rust gameplay integration sample with projectiles, scoring, lives, and restart
-- `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
+- `examples/colony_simulation`: 64-worker native colony stress sample with fixed-step resource trips and worker creation
+- `examples/colony_project`: editor-authored colony project with animated workers, deterministic routing, resource deliveries, and standalone export
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
 - `docs/architecture/renderer-and-benchmark.md`: renderer scope and benchmark measurement contract
 - `docs/architecture/assets-and-animation.md`: asset scan, stable identity, and animation data contract
@@ -69,6 +70,7 @@ Use stable Rust. On Windows, install the Visual C++ Build Tools workload and Win
     cargo run -p forge-player -- --export path/to/project.forgeproj path/to/export-folder
     cargo run -p forge-editor -- path/to/project.forgeproj
     cargo run -p colony-simulation
+    cargo run -p forge-player -- examples/colony_project/project.forgeproj
     cargo run --release -p renderer-benchmark -- --sprites 10000 --warmup 120 --samples 600
 
 The Windows GitHub Actions workflow checks formatting, type-checks the workspace, and runs all workspace tests.
