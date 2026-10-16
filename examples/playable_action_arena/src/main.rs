@@ -11,9 +11,7 @@ use forge_core::{ActionId, Guid};
 use forge_input::InputMap;
 use forge_renderer::GpuRenderer;
 use forge_runtime::{GameRuntime, RuntimeConfig};
-use forge_scene::{
-    AuthoredCamera, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
-};
+use forge_scene::{AuthoredCamera, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject};
 use forge_world::{Sprite, Transform2D};
 use winit::{
     application::ApplicationHandler,
@@ -88,8 +86,7 @@ impl GameState {
 
     fn handle_input(&mut self, event: &WindowEvent) {
         let at = self.runtime.simulation_time();
-        self.input
-            .handle_window_event(event, at, &mut self.runtime);
+        self.input.handle_window_event(event, at, &mut self.runtime);
     }
 }
 
@@ -161,10 +158,10 @@ fn make_scene() -> SceneDocument {
     }
 }
 
-fn make_game_system(score: Arc<AtomicU32>) -> impl for<'a> FnMut(
-    &mut forge_world::RuntimeWorld,
-    &forge_runtime::FixedUpdateContext<'a>,
-) + Send {
+fn make_game_system(
+    score: Arc<AtomicU32>,
+) -> impl for<'a> FnMut(&mut forge_world::RuntimeWorld, &forge_runtime::FixedUpdateContext<'a>) + Send
+{
     let mut bullets = Vec::<Guid>::new();
     let mut enemies = Vec::<Guid>::new();
     move |world, context| {
@@ -325,11 +322,12 @@ impl ApplicationHandler for App {
                 )
                 .expect("could not create action-arena window"),
         );
-        match GpuRenderer::new(event_loop.owned_display_handle(), window.clone())
-            .and_then(|renderer| GameState::new(window.clone(), renderer).map_err(|error| {
-                forge_renderer::RendererError::Surface(error.to_string())
-            }))
-        {
+        match GpuRenderer::new(event_loop.owned_display_handle(), window.clone()).and_then(
+            |renderer| {
+                GameState::new(window.clone(), renderer)
+                    .map_err(|error| forge_renderer::RendererError::Surface(error.to_string()))
+            },
+        ) {
             Ok(state) => {
                 window.request_redraw();
                 self.state = Some(state);
