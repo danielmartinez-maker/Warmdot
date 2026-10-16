@@ -13,9 +13,7 @@ use forge_audio::{AudioBus, AudioEngine};
 use forge_core::{ActionId, DiagnosticBuffer, DiagnosticLevel, DiagnosticRecord, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::{Project, SceneCatalog};
-use forge_runtime::{
-    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand,
-};
+use forge_runtime::{BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
@@ -279,7 +277,9 @@ impl EditorApp {
                 self.history.mark_saved();
                 self.status = "Saved".into();
             }
-            Err(error) => self.set_error_status("editor.save_failed", format!("Save failed: {error}")),
+            Err(error) => {
+                self.set_error_status("editor.save_failed", format!("Save failed: {error}"))
+            }
         }
     }
 
@@ -298,7 +298,10 @@ impl EditorApp {
                 self.history = SceneEditHistory::new(256);
                 self.status.clear();
             }
-            Err(error) => self.set_error_status("editor.scene_open_failed", format!("Scene open failed: {error}")),
+            Err(error) => self.set_error_status(
+                "editor.scene_open_failed",
+                format!("Scene open failed: {error}"),
+            ),
         }
     }
 
@@ -331,7 +334,10 @@ impl EditorApp {
                 self.history = SceneEditHistory::new(256);
                 self.status = "New scene created.".into();
             }
-            Err(error) => self.set_error_status("editor.scene_create_failed", format!("Scene create failed: {error}")),
+            Err(error) => self.set_error_status(
+                "editor.scene_create_failed",
+                format!("Scene create failed: {error}"),
+            ),
         }
     }
 
@@ -361,7 +367,10 @@ impl EditorApp {
         };
         let relative_path = format!("Assets/Prefabs/{}.forgeprefab.json", prefab.resource_guid);
         if let Err(error) = self.project.save_prefab(&relative_path, &prefab) {
-            self.set_error_status("editor.prefab_save_failed", format!("Prefab save failed: {error}"));
+            self.set_error_status(
+                "editor.prefab_save_failed",
+                format!("Prefab save failed: {error}"),
+            );
             return;
         }
         let refresh = self
@@ -370,7 +379,10 @@ impl EditorApp {
             .expect("catalog was checked above")
             .refresh();
         if let Err(error) = refresh {
-            self.set_error_status("editor.prefab_catalog_refresh_failed", format!("Prefab was saved but the asset catalog refresh failed: {error}"));
+            self.set_error_status(
+                "editor.prefab_catalog_refresh_failed",
+                format!("Prefab was saved but the asset catalog refresh failed: {error}"),
+            );
             return;
         }
         let prefab_guid = self.catalog.as_ref().and_then(|catalog| {
@@ -401,7 +413,10 @@ impl EditorApp {
             }) {
             Ok(prefab) => prefab,
             Err(error) => {
-                self.set_error_status("editor.prefab_instance_failed", format!("Prefab instance failed: {error}"));
+                self.set_error_status(
+                    "editor.prefab_instance_failed",
+                    format!("Prefab instance failed: {error}"),
+                );
                 return;
             }
         };
@@ -433,7 +448,10 @@ impl EditorApp {
             }
             Err(error) => {
                 self.scene.dependencies = previous_dependencies;
-                self.set_error_status("editor.prefab_instance_failed", format!("Prefab instance failed: {error}"));
+                self.set_error_status(
+                    "editor.prefab_instance_failed",
+                    format!("Prefab instance failed: {error}"),
+                );
             }
         }
     }
@@ -464,7 +482,10 @@ impl EditorApp {
             }) {
             Ok(prefab) => prefab,
             Err(error) => {
-                self.set_error_status("editor.prefab_refresh_failed", format!("Prefab refresh failed: {error}"));
+                self.set_error_status(
+                    "editor.prefab_refresh_failed",
+                    format!("Prefab refresh failed: {error}"),
+                );
                 return;
             }
         };
@@ -481,7 +502,10 @@ impl EditorApp {
             Ok(()) => {
                 self.status = "Prefab instance refreshed; overridden properties were kept.".into()
             }
-            Err(error) => self.set_error_status("editor.prefab_refresh_failed", format!("Prefab refresh failed: {error}")),
+            Err(error) => self.set_error_status(
+                "editor.prefab_refresh_failed",
+                format!("Prefab refresh failed: {error}"),
+            ),
         }
     }
 
@@ -561,7 +585,10 @@ impl EditorApp {
             }
         };
         if let Err(error) = fs::write(path, source) {
-            self.set_error_status("editor.tilemap_save_failed", format!("Tilemap save failed: {error}"));
+            self.set_error_status(
+                "editor.tilemap_save_failed",
+                format!("Tilemap save failed: {error}"),
+            );
             return;
         }
         let tilemap = self.tilemap.as_mut().expect("tilemap was checked above");
@@ -592,13 +619,19 @@ impl EditorApp {
             None
         };
         if let Err(error) = validate_scene_dependencies(&self.scene, catalog) {
-            self.set_error_status("editor.preview_start_failed", format!("Play failed: {error}"));
+            self.set_error_status(
+                "editor.preview_start_failed",
+                format!("Play failed: {error}"),
+            );
             return;
         }
         let preview_ui = match load_preview_ui(&self.scene, catalog) {
             Ok(ui) => ui,
             Err(error) => {
-                self.set_error_status("editor.preview_ui_load_failed", format!("Play failed: game UI could not load: {error}"));
+                self.set_error_status(
+                    "editor.preview_ui_load_failed",
+                    format!("Play failed: game UI could not load: {error}"),
+                );
                 return;
             }
         };
@@ -628,7 +661,10 @@ impl EditorApp {
                     self.status.clone(),
                 );
             }
-            Err(error) => self.set_error_status("editor.preview_start_failed", format!("Play failed: {error}")),
+            Err(error) => self.set_error_status(
+                "editor.preview_start_failed",
+                format!("Play failed: {error}"),
+            ),
         }
     }
 
@@ -860,11 +896,7 @@ impl EditorApp {
             process_audio_commands(self.audio.as_mut(), assets, commands)
         });
         for error in errors {
-            self.log_event(
-                DiagnosticLevel::Error,
-                "audio.command_failed",
-                error,
-            );
+            self.log_event(DiagnosticLevel::Error, "audio.command_failed", error);
         }
     }
 
@@ -880,7 +912,10 @@ impl EditorApp {
         let scene_catalog = match SceneCatalog::open(self.project.root()) {
             Ok(catalog) => catalog,
             Err(error) => {
-                self.set_error_status("editor.scene_transition_failed", format!("Scene transition failed: {error}"));
+                self.set_error_status(
+                    "editor.scene_transition_failed",
+                    format!("Scene transition failed: {error}"),
+                );
                 return;
             }
         };
@@ -990,7 +1025,10 @@ impl EditorApp {
         let changes = match catalog.refresh() {
             Ok(changes) => changes,
             Err(error) => {
-                self.set_error_status("editor.asset_scan_failed", format!("Asset scan failed: {error}"));
+                self.set_error_status(
+                    "editor.asset_scan_failed",
+                    format!("Asset scan failed: {error}"),
+                );
                 return;
             }
         };
@@ -1051,7 +1089,10 @@ impl EditorApp {
             self.texture_sizes.insert(guid, size);
         }
         if let Some(error) = errors.into_iter().next() {
-            self.set_error_status("editor.texture_load_failed", format!("Texture load failed: {error}"));
+            self.set_error_status(
+                "editor.texture_load_failed",
+                format!("Texture load failed: {error}"),
+            );
         }
     }
 
@@ -1149,7 +1190,10 @@ impl EditorApp {
                     self.project_name_draft = self.project.document().name.clone();
                     self.status = "Project settings saved.".into();
                 }
-                Err(error) => self.set_error_status("editor.project_settings_failed", format!("Project settings failed: {error}")),
+                Err(error) => self.set_error_status(
+                    "editor.project_settings_failed",
+                    format!("Project settings failed: {error}"),
+                ),
             }
         }
         ui.separator();
@@ -1165,7 +1209,10 @@ impl EditorApp {
         {
             match self.project.set_default_scene(&self.scene_path) {
                 Ok(()) => self.status = "Default scene updated.".into(),
-                Err(error) => self.set_error_status("editor.default_scene_update_failed", format!("Default scene update failed: {error}")),
+                Err(error) => self.set_error_status(
+                    "editor.default_scene_update_failed",
+                    format!("Default scene update failed: {error}"),
+                ),
             }
         }
         if !can_change_default {
@@ -1971,7 +2018,10 @@ impl EditorApp {
                     Some(Ok(())) => self.status = "Live script properties updated.".into(),
                     Some(Err(error)) => {
                         let _ = self.history.undo(&mut self.scene);
-                        self.set_error_status("editor.live_property_update_rejected", format!("Live property update rejected: {error}"));
+                        self.set_error_status(
+                            "editor.live_property_update_rejected",
+                            format!("Live property update rejected: {error}"),
+                        );
                     }
                     None => self.status = "Runtime stopped before the property update.".into(),
                 }
@@ -2871,7 +2921,10 @@ impl EditorApp {
             }
         }
         if let Some(error) = ui_error {
-            self.set_error_status("editor.game_ui_preview_failed", format!("Game UI preview failed: {error}"));
+            self.set_error_status(
+                "editor.game_ui_preview_failed",
+                format!("Game UI preview failed: {error}"),
+            );
         }
 
         if response.clicked() && !ui_input_consumed {
@@ -3862,7 +3915,9 @@ impl eframe::App for EditorApp {
                                     DiagnosticLevel::Error => Color32::LIGHT_RED,
                                     DiagnosticLevel::Warning => Color32::YELLOW,
                                     DiagnosticLevel::Info => Color32::LIGHT_BLUE,
-                                    DiagnosticLevel::Debug | DiagnosticLevel::Trace => Color32::GRAY,
+                                    DiagnosticLevel::Debug | DiagnosticLevel::Trace => {
+                                        Color32::GRAY
+                                    }
                                 };
                                 ui.colored_label(
                                     color,

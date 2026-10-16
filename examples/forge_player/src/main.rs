@@ -147,7 +147,11 @@ impl ApplicationHandler for PlayerApp {
         match GpuRenderer::new(event_loop.owned_display_handle(), window.clone()) {
             Ok(mut renderer) => {
                 if let Err(error) = load_project_textures(&self.assets, &mut renderer) {
-                    emit_message(DiagnosticLevel::Error, "player.texture_load_failed", error.to_string());
+                    emit_message(
+                        DiagnosticLevel::Error,
+                        "player.texture_load_failed",
+                        error.to_string(),
+                    );
                     event_loop.exit();
                     return;
                 }
@@ -155,7 +159,11 @@ impl ApplicationHandler for PlayerApp {
                 self.state = Some(RunState { window, renderer });
             }
             Err(error) => {
-                emit_message(DiagnosticLevel::Error, "player.renderer_init_failed", error.to_string());
+                emit_message(
+                    DiagnosticLevel::Error,
+                    "player.renderer_init_failed",
+                    error.to_string(),
+                );
                 event_loop.exit();
             }
         }
@@ -190,7 +198,11 @@ impl ApplicationHandler for PlayerApp {
                     .route_pointer_move(self.cursor_position, size.width, size.height)
                 {
                     Ok(result) => submit_ui_event(&mut self.runtime, result),
-                    Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_pointer_move_failed", error.to_string()),
+                    Err(error) => emit_message(
+                        DiagnosticLevel::Error,
+                        "player.ui_pointer_move_failed",
+                        error.to_string(),
+                    ),
                 }
                 state.window.request_redraw();
             }
@@ -213,7 +225,11 @@ impl ApplicationHandler for PlayerApp {
                 };
                 match result {
                     Ok(result) => submit_ui_event(&mut self.runtime, result),
-                    Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_pointer_input_failed", error.to_string()),
+                    Err(error) => emit_message(
+                        DiagnosticLevel::Error,
+                        "player.ui_pointer_input_failed",
+                        error.to_string(),
+                    ),
                 }
                 state.window.request_redraw();
             }
@@ -234,7 +250,11 @@ impl ApplicationHandler for PlayerApp {
                     let size = state.window.inner_size();
                     match self.ui.route_key(key, size.width, size.height) {
                         Ok(result) => submit_ui_event(&mut self.runtime, result),
-                        Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_keyboard_input_failed", error.to_string()),
+                        Err(error) => emit_message(
+                            DiagnosticLevel::Error,
+                            "player.ui_keyboard_input_failed",
+                            error.to_string(),
+                        ),
                     }
                     state.window.request_redraw();
                 }
@@ -248,7 +268,11 @@ impl ApplicationHandler for PlayerApp {
                         &mut self.scene,
                         &mut self.ui,
                     ) {
-                        emit_message(DiagnosticLevel::Error, "player.asset_refresh_failed", error.to_string());
+                        emit_message(
+                            DiagnosticLevel::Error,
+                            "player.asset_refresh_failed",
+                            error.to_string(),
+                        );
                         event_loop.exit();
                         return;
                     }
@@ -295,7 +319,11 @@ impl ApplicationHandler for PlayerApp {
                 {
                     Ok(commands) => ui_commands_to_sprites(commands),
                     Err(error) => {
-                        emit_message(DiagnosticLevel::Error, "player.ui_draw_extraction_failed", error.to_string());
+                        emit_message(
+                            DiagnosticLevel::Error,
+                            "player.ui_draw_extraction_failed",
+                            error.to_string(),
+                        );
                         Vec::new()
                     }
                 };
@@ -308,7 +336,11 @@ impl ApplicationHandler for PlayerApp {
                         state.window.request_redraw();
                     }
                     Err(error) => {
-                        emit_message(DiagnosticLevel::Error, "player.render_failed", error.to_string());
+                        emit_message(
+                            DiagnosticLevel::Error,
+                            "player.render_failed",
+                            error.to_string(),
+                        );
                         event_loop.exit();
                     }
                 }
@@ -378,7 +410,11 @@ fn process_audio_commands(
             }
         };
         if let Err(error) = result {
-            emit_message(DiagnosticLevel::Error, "player.audio_command_failed", error.to_string());
+            emit_message(
+                DiagnosticLevel::Error,
+                "player.audio_command_failed",
+                error.to_string(),
+            );
         }
     }
 }
@@ -398,7 +434,11 @@ fn process_scene_transition_requests(
     if scene_catalog.is_none() {
         let catalog = SceneCatalog::open(project_root).map_err(|error| error.to_string());
         if let Err(error) = &catalog {
-            emit_message(DiagnosticLevel::Error, "player.scene_catalog_unavailable", error.to_string());
+            emit_message(
+                DiagnosticLevel::Error,
+                "player.scene_catalog_unavailable",
+                error.to_string(),
+            );
         }
         *scene_catalog = Some(catalog);
     }
@@ -409,31 +449,51 @@ fn process_scene_transition_requests(
         let scene = match catalog.load_scene(scene_guid) {
             Ok(scene) => scene,
             Err(error) => {
-                emit_message(DiagnosticLevel::Error, "player.scene_transition_rejected", format!("{scene_guid}: {error}"));
+                emit_message(
+                    DiagnosticLevel::Error,
+                    "player.scene_transition_rejected",
+                    format!("{scene_guid}: {error}"),
+                );
                 continue;
             }
         };
         if let Err(error) = validate_scene_dependencies(&scene, assets) {
-            emit_message(DiagnosticLevel::Error, "player.scene_transition_rejected", format!("{scene_guid}: {error}"));
+            emit_message(
+                DiagnosticLevel::Error,
+                "player.scene_transition_rejected",
+                format!("{scene_guid}: {error}"),
+            );
             continue;
         }
         let replacement_ui = match load_scene_ui(&scene, assets) {
             Ok(ui) => ui,
             Err(error) => {
-                emit_message(DiagnosticLevel::Error, "player.scene_transition_invalid_ui", format!("{scene_guid}: {error}"));
+                emit_message(
+                    DiagnosticLevel::Error,
+                    "player.scene_transition_invalid_ui",
+                    format!("{scene_guid}: {error}"),
+                );
                 continue;
             }
         };
         match GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets) {
             Ok(replacement) => {
-                emit_message(DiagnosticLevel::Info, "player.scene_entered", format!("{} ({scene_guid})", scene.name));
+                emit_message(
+                    DiagnosticLevel::Info,
+                    "player.scene_entered",
+                    format!("{} ({scene_guid})", scene.name),
+                );
                 *runtime = replacement;
                 *current_scene = scene;
                 *ui = replacement_ui;
                 return;
             }
             Err(error) => {
-                emit_message(DiagnosticLevel::Error, "player.scene_transition_failed", format!("{scene_guid}: {error}"));
+                emit_message(
+                    DiagnosticLevel::Error,
+                    "player.scene_transition_failed",
+                    format!("{scene_guid}: {error}"),
+                );
             }
         }
     }
@@ -515,7 +575,11 @@ fn ui_commands_to_sprites(commands: Vec<UiDrawCommand>) -> Vec<TexturedSprite> {
 fn submit_ui_event(runtime: &mut GameRuntime, result: UiInputResult) {
     if let Some(UiButtonEvent { source_id, name }) = result.event {
         if !runtime.emit_ui_event(name.clone(), source_id) {
-            emit_message(DiagnosticLevel::Warning, "player.ui_event_rejected", format!("event {name:?} was rejected by the script event queue"));
+            emit_message(
+                DiagnosticLevel::Warning,
+                "player.ui_event_rejected",
+                format!("event {name:?} was rejected by the script event queue"),
+            );
         }
     }
 }
@@ -884,7 +948,11 @@ fn refresh_project_assets(
                 {
                     match load_scene_ui(scene, assets) {
                         Ok(replacement) => *ui = replacement,
-                        Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_reload_rejected", error.to_string()),
+                        Err(error) => emit_message(
+                            DiagnosticLevel::Error,
+                            "player.ui_reload_rejected",
+                            error.to_string(),
+                        ),
                     }
                 } else if assets
                     .get(change.guid)
@@ -1303,7 +1371,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let audio = match AudioEngine::new() {
         Ok(audio) => Some(audio),
         Err(error) => {
-            emit_message(DiagnosticLevel::Warning, "player.audio_unavailable", format!("continuing without game audio: {error}"));
+            emit_message(
+                DiagnosticLevel::Warning,
+                "player.audio_unavailable",
+                format!("continuing without game audio: {error}"),
+            );
             None
         }
     };
