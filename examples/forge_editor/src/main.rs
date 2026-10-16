@@ -4327,11 +4327,7 @@ mod tests {
             },
             |context| {
                 egui::CentralPanel::default().show(context, |ui| {
-                    let _ = ui.interact(
-                        ui.max_rect(),
-                        canvas_id,
-                        egui::Sense::click_and_drag(),
-                    );
+                    let _ = ui.interact(ui.max_rect(), canvas_id, egui::Sense::click_and_drag());
                 });
             },
         );
@@ -4341,10 +4337,8 @@ mod tests {
         app.advance_runtime(&context);
 
         assert_eq!(
-            app.preview_actions[0],
-            1.0,
+            app.preview_actions[0], 1.0,
             "the focused runtime canvas should receive D movement input"
         );
     }
-
 }
