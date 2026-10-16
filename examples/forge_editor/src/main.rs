@@ -2087,26 +2087,27 @@ impl EditorApp {
             });
             self.transform_gizmo_drag = target.map(
                 |(object_guid, transform, pointer_center, anchor, sprite_size)| {
-                self.selected = Some(object_guid);
-                self.selected_asset = None;
-                let pointer_start = response
-                    .interact_pointer_pos()
-                    .unwrap_or(origin_before_drag);
-                let pointer_offset = pointer_start - pointer_center;
-                TransformGizmoDrag {
-                    object_guid,
-                    pointer_start,
-                    pointer_center,
-                    pointer_start_angle: pointer_offset.y.atan2(pointer_offset.x),
-                    pointer_start_radius: pointer_offset.length().max(1.0),
-                    transform_start: transform,
-                    transform_preview: transform,
-                    anchor_start: anchor,
-                    anchor_preview: anchor,
-                    sprite_size,
-                    mode: self.gizmo_mode,
-                }
-            });
+                    self.selected = Some(object_guid);
+                    self.selected_asset = None;
+                    let pointer_start = response
+                        .interact_pointer_pos()
+                        .unwrap_or(origin_before_drag);
+                    let pointer_offset = pointer_start - pointer_center;
+                    TransformGizmoDrag {
+                        object_guid,
+                        pointer_start,
+                        pointer_center,
+                        pointer_start_angle: pointer_offset.y.atan2(pointer_offset.x),
+                        pointer_start_radius: pointer_offset.length().max(1.0),
+                        transform_start: transform,
+                        transform_preview: transform,
+                        anchor_start: anchor,
+                        anchor_preview: anchor,
+                        sprite_size,
+                        mode: self.gizmo_mode,
+                    }
+                },
+            );
         }
         if response.dragged() {
             if let Some(pointer) = response.interact_pointer_pos() {
