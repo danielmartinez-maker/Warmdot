@@ -14,8 +14,8 @@ use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
-    AuthoredRigidBodyKind, AuthoredSprite, AuthoredTransform, CURRENT_SCENE_SCHEMA, SceneDocument,
-    SceneObject,
+    AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
+    ScriptPropertyValue, CURRENT_SCENE_SCHEMA, SceneDocument, SceneObject,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
 
@@ -390,9 +390,21 @@ impl EditorApp {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let available_scripts = self
+            .catalog
+            .as_ref()
+            .map(|catalog| {
+                catalog
+                    .entries()
+                    .filter(|record| record.kind == AssetKind::Script)
+                    .map(|record| (record.guid, record.relative_path.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let mut changed = false;
         let mut selected_texture_changed = false;
         let mut selected_animation_changed = false;
+        let mut selected_script_changed = false;
         ui.small(guid.to_string());
         changed |= ui.text_edit_singleline(&mut replacement.name).changed();
 
@@ -743,6 +755,93 @@ impl EditorApp {
             }
         });
 
+        let mut remove_script = false;
+        if replacement.script.is_none() {
+            if ui.button("Add Luau Script").clicked() {
+                if let Some((asset, _)) = available_scripts.first() {
+                    replacement.script = Some(AuthoredScript {
+                        asset: *asset,
+                        properties: BTreeMap::new(),
+                    });
+                    selected_script_changed = true;
+                    changed = true;
+                } else {
+                    self.status = "Add a .luau file under Assets before attaching a script.".into();
+                }
+            }
+        }
+        if let Some(script) = replacement.script.as_mut() {
+            ui.collapsing("Luau Script", |ui| {
+                let selected_name = available_scripts
+                    .iter()
+                    .find(|(guid, _)| *guid == script.asset)
+                    .map(|(_, path)| path.clone())
+                    .unwrap_or_else(|| format!("Missing asset {}", script.asset));
+                let response = egui::ComboBox::from_id_salt(("script_asset", guid))
+                    .selected_text(selected_name)
+                    .show_ui(ui, |ui| {
+                        for (asset, path) in &available_scripts {
+                            ui.selectable_value(&mut script.asset, *asset, path);
+                        }
+                    });
+                selected_script_changed |= response.response.changed();
+                changed |= response.response.changed();
+                if available_scripts.is_empty() {
+                    ui.small("Place .luau scripts in the project's Assets folder.");
+                }
+
+                let names = script.properties.keys().cloned().collect::<Vec<_>>();
+                let mut removed_property = None;
+                for name in names {
+                    ui.horizontal(|ui| {
+                        ui.label(&name);
+                        if let Some(value) = script.properties.get_mut(&name) {
+                            match value {
+                                ScriptPropertyValue::Bool(value) => {
+                                    changed |= ui.checkbox(value, "").changed();
+                                }
+                                ScriptPropertyValue::Number(value) => {
+                                    changed |= ui
+                                        .add(egui::DragValue::new(value).speed(0.1))
+                                        .changed();
+                                }
+                                ScriptPropertyValue::String(value) => {
+                                    changed |= ui.text_edit_singleline(value).changed();
+                                }
+                            }
+                        }
+                        if ui.small_button("Remove").clicked() {
+                            removed_property = Some(name);
+                        }
+                    });
+                }
+                if let Some(name) = removed_property {
+                    script.properties.remove(&name);
+                    changed = true;
+                }
+                if ui.button("Add property").clicked() {
+                    let mut name = "property".to_owned();
+                    let mut suffix = 2_u32;
+                    while script.properties.contains_key(&name) {
+                        name = format!("property_{suffix}");
+                        suffix += 1;
+                    }
+                    script
+                        .properties
+                        .insert(name, ScriptPropertyValue::Number(0.0));
+                    changed = true;
+                }
+                if ui.button("Remove script component").clicked() {
+                    remove_script = true;
+                }
+            });
+        }
+        if remove_script {
+            replacement.script = None;
+            selected_script_changed = true;
+            changed = true;
+        }
+
         if selected_texture_changed {
             if let Some(sprite) = replacement.sprite.as_mut() {
                 sprite.animation_clip = None;
@@ -773,6 +872,11 @@ impl EditorApp {
                     if !self.scene.dependencies.contains(&dependency) {
                         self.scene.dependencies.push(dependency);
                     }
+                }
+            }
+            if let Some(script) = &replacement.script {
+                if !self.scene.dependencies.contains(&script.asset) {
+                    self.scene.dependencies.push(script.asset);
                 }
             }
             self.last_asset_scan = None;
