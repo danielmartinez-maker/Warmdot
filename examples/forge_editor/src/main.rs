@@ -2773,8 +2773,77 @@ fn record_prefab_overrides(before: &SceneObject, after: &mut SceneObject) {
             overrides.insert(identifier.into());
         }
     }
+    if before.sprite != after.sprite {
+        match (&before.sprite, &after.sprite) {
+            (Some(before), Some(after)) => {
+                for (changed, identifier) in [
+                    (before.asset != after.asset, "component.sprite.asset"),
+                    (
+                        before.animation_clip != after.animation_clip,
+                        "component.sprite.animation_clip",
+                    ),
+                    (
+                        before.size[0] != after.size[0],
+                        "component.sprite.size.x",
+                    ),
+                    (
+                        before.size[1] != after.size[1],
+                        "component.sprite.size.y",
+                    ),
+                    (
+                        before.anchor[0] != after.anchor[0],
+                        "component.sprite.anchor.x",
+                    ),
+                    (
+                        before.anchor[1] != after.anchor[1],
+                        "component.sprite.anchor.y",
+                    ),
+                    (
+                        before.tint[0] != after.tint[0],
+                        "component.sprite.tint.r",
+                    ),
+                    (
+                        before.tint[1] != after.tint[1],
+                        "component.sprite.tint.g",
+                    ),
+                    (
+                        before.tint[2] != after.tint[2],
+                        "component.sprite.tint.b",
+                    ),
+                    (
+                        before.tint[3] != after.tint[3],
+                        "component.sprite.tint.a",
+                    ),
+                    (
+                        before.uv_rect[0] != after.uv_rect[0],
+                        "component.sprite.uv_rect.x",
+                    ),
+                    (
+                        before.uv_rect[1] != after.uv_rect[1],
+                        "component.sprite.uv_rect.y",
+                    ),
+                    (
+                        before.uv_rect[2] != after.uv_rect[2],
+                        "component.sprite.uv_rect.width",
+                    ),
+                    (
+                        before.uv_rect[3] != after.uv_rect[3],
+                        "component.sprite.uv_rect.height",
+                    ),
+                    (before.layer != after.layer, "component.sprite.layer"),
+                    (before.order != after.order, "component.sprite.order"),
+                ] {
+                    if changed {
+                        overrides.insert(identifier.into());
+                    }
+                }
+            }
+            _ => {
+                overrides.insert("component.sprite".into());
+            }
+        }
+    }
     for (changed, identifier) in [
-        (before.sprite != after.sprite, "component.sprite"),
         (before.camera != after.camera, "component.camera"),
         (
             before.rigid_body != after.rigid_body,
@@ -2822,6 +2891,50 @@ fn merge_prefab_overrides(template: &SceneObject, instance: &SceneObject) -> Sce
     }
     if link.overrides.contains("component.sprite") {
         merged.sprite = instance.sprite;
+    } else if let (Some(sprite), Some(instance_sprite)) =
+        (merged.sprite.as_mut(), instance.sprite)
+    {
+        for (identifier, field) in [
+            ("component.sprite.asset", 0),
+            ("component.sprite.animation_clip", 1),
+            ("component.sprite.size.x", 2),
+            ("component.sprite.size.y", 3),
+            ("component.sprite.anchor.x", 4),
+            ("component.sprite.anchor.y", 5),
+            ("component.sprite.tint.r", 6),
+            ("component.sprite.tint.g", 7),
+            ("component.sprite.tint.b", 8),
+            ("component.sprite.tint.a", 9),
+            ("component.sprite.uv_rect.x", 10),
+            ("component.sprite.uv_rect.y", 11),
+            ("component.sprite.uv_rect.width", 12),
+            ("component.sprite.uv_rect.height", 13),
+            ("component.sprite.layer", 14),
+            ("component.sprite.order", 15),
+        ] {
+            if !link.overrides.contains(identifier) {
+                continue;
+            }
+            match field {
+                0 => sprite.asset = instance_sprite.asset,
+                1 => sprite.animation_clip = instance_sprite.animation_clip,
+                2 => sprite.size[0] = instance_sprite.size[0],
+                3 => sprite.size[1] = instance_sprite.size[1],
+                4 => sprite.anchor[0] = instance_sprite.anchor[0],
+                5 => sprite.anchor[1] = instance_sprite.anchor[1],
+                6 => sprite.tint[0] = instance_sprite.tint[0],
+                7 => sprite.tint[1] = instance_sprite.tint[1],
+                8 => sprite.tint[2] = instance_sprite.tint[2],
+                9 => sprite.tint[3] = instance_sprite.tint[3],
+                10 => sprite.uv_rect[0] = instance_sprite.uv_rect[0],
+                11 => sprite.uv_rect[1] = instance_sprite.uv_rect[1],
+                12 => sprite.uv_rect[2] = instance_sprite.uv_rect[2],
+                13 => sprite.uv_rect[3] = instance_sprite.uv_rect[3],
+                14 => sprite.layer = instance_sprite.layer,
+                15 => sprite.order = instance_sprite.order,
+                _ => unreachable!(),
+            }
+        }
     }
     if link.overrides.contains("component.camera") {
         merged.camera = instance.camera;
