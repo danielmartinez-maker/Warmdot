@@ -18,6 +18,8 @@ pub struct SceneDocument {
     pub schema_version: u32,
     pub resource_guid: Guid,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_document: Option<Guid>,
     #[serde(default)]
     pub dependencies: Vec<Guid>,
     #[serde(default)]
@@ -285,6 +287,17 @@ impl SceneDocument {
                     None,
                 ));
             }
+        }
+
+        if self
+            .ui_document
+            .is_some_and(|ui_document| !dependencies.contains(&ui_document))
+        {
+            diagnostics.push(SceneDiagnostic::error(
+                "undeclared_ui_dependency",
+                "UI document is missing from scene dependencies",
+                None,
+            ));
         }
 
         let mut objects = BTreeSet::new();
@@ -773,6 +786,7 @@ impl PrefabDocument {
         SceneDocument {
             schema_version: CURRENT_SCENE_SCHEMA,
             resource_guid: self.resource_guid,
+            ui_document: None,
             name: self.name.clone(),
             dependencies: self.dependencies.clone(),
             objects: vec![self.object.clone()],
@@ -862,6 +876,7 @@ mod script_authoring_tests {
         SceneDocument {
             schema_version: CURRENT_SCENE_SCHEMA,
             resource_guid: Guid::new(),
+            ui_document: None,
             name: "Script scene".into(),
             dependencies,
             objects: vec![SceneObject {

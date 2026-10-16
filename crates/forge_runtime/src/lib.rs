@@ -16,7 +16,7 @@ use forge_core::{
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument, ScriptPropertyValue};
-use forge_scripting::ScriptHost;
+use forge_scripting::{ScriptEventValue, ScriptHost};
 pub use forge_scripting::{
     ScriptAudioCommand, ScriptBreakpointHit, ScriptDefinition, ScriptDiagnostic, ScriptError,
 };
@@ -593,6 +593,18 @@ impl GameRuntime {
 
     pub fn take_audio_commands(&mut self) -> Vec<ScriptAudioCommand> {
         self.script_host.take_audio_commands()
+    }
+
+    /// Queues a UI event for delivery to script callbacks on the next fixed tick.
+    pub fn emit_ui_event(&mut self, name: impl Into<String>, source_id: Guid) -> bool {
+        let step_nanos = self.clock.step().as_nanos().max(1);
+        let tick = u64::try_from(self.simulation_time.as_nanos() / step_nanos).unwrap_or(u64::MAX);
+        self.script_host.queue_external_event(
+            name,
+            ScriptEventValue::String("clicked".into()),
+            source_id,
+            tick,
+        )
     }
 
     pub fn take_scene_transition_requests(&mut self) -> Vec<Guid> {

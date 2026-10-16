@@ -270,6 +270,7 @@ impl EditorApp {
         let scene = SceneDocument {
             schema_version: CURRENT_SCENE_SCHEMA,
             resource_guid: Guid::new(),
+            ui_document: None,
             name,
             dependencies: Vec::new(),
             objects: Vec::new(),
@@ -1043,6 +1044,7 @@ impl EditorApp {
             AssetKind::Script => catalog.load_script(guid).map(|_| ()),
             AssetKind::Prefab => catalog.load_prefab(guid).map(|_| ()),
             AssetKind::Audio => catalog.load_audio(guid).map(|_| ()),
+            AssetKind::Ui => catalog.load_ui_source(guid).map(|_| ()),
         }
         .map_err(|error| error.to_string())
     }

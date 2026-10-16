@@ -12,6 +12,7 @@ forge_assets = { path = "../../crates/forge_assets" }
 forge_core = { path = "../../crates/forge_core" }
 forge_scene = { path = "../../crates/forge_scene" }
 forge_tilemap = { path = "../../crates/forge_tilemap" }
+forge_ui = { path = "../../crates/forge_ui" }
 forge_project = { path = "../../crates/forge_project" }
 forge_renderer = { path = "../../crates/forge_renderer" }
 forge_runtime = { path = "../../crates/forge_runtime" }

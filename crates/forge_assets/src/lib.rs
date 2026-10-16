@@ -25,6 +25,7 @@ const MAX_PNG_SOURCE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_SCRIPT_SOURCE_BYTES: u64 = 1024 * 1024;
 const MAX_AUDIO_SOURCE_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_UI_SOURCE_BYTES: u64 = 1024 * 1024;
 const MAX_TEXTURE_DIMENSION: u32 = 16_384;
 const MAX_TEXTURE_PIXELS: u64 = 32 * 1024 * 1024;
 
@@ -37,6 +38,7 @@ pub enum AssetKind {
     Script,
     Prefab,
     Audio,
+    Ui,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -383,6 +385,22 @@ impl AssetCatalog {
         })
     }
 
+    pub fn load_ui_source(&self, guid: Guid) -> Result<LoadedUiAsset, AssetError> {
+        let record = self.record_of_kind(guid, AssetKind::Ui)?;
+        let bytes = read_limited(&self.resolve_record_path(record)?, MAX_UI_SOURCE_BYTES)?;
+        let source = String::from_utf8(bytes).map_err(|error| {
+            AssetError::Invalid(format!(
+                "{} is not valid UTF-8: {error}",
+                record.relative_path
+            ))
+        })?;
+        Ok(LoadedUiAsset {
+            guid,
+            relative_path: record.relative_path.clone(),
+            source,
+        })
+    }
+
     pub fn load_script(&self, guid: Guid) -> Result<LoadedScriptAsset, AssetError> {
         let record = self.record_of_kind(guid, AssetKind::Script)?;
         let bytes = read_limited(&self.resolve_record_path(record)?, MAX_SCRIPT_SOURCE_BYTES)?;
@@ -476,6 +494,13 @@ impl AssetCatalog {
             .map_err(|error| AssetError::Io(error.error))?;
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LoadedUiAsset {
+    pub guid: Guid,
+    pub relative_path: String,
+    pub source: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -814,6 +839,7 @@ fn scan_directory(
             }
             AssetKind::Script => MAX_SCRIPT_SOURCE_BYTES,
             AssetKind::Audio => MAX_AUDIO_SOURCE_BYTES,
+            AssetKind::Ui => MAX_UI_SOURCE_BYTES,
         };
         let bytes = read_limited(&canonical, byte_limit)?;
         let record = (kind, bytes.len() as u64, fingerprint(&bytes));
@@ -824,7 +850,9 @@ fn scan_directory(
 
 fn asset_kind(path: &Path) -> Option<AssetKind> {
     let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
-    if file_name.ends_with(".forgeprefab.json") {
+    if file_name.ends_with(".forgeui.json") {
+        Some(AssetKind::Ui)
+    } else if file_name.ends_with(".forgeprefab.json") {
         Some(AssetKind::Prefab)
     } else if file_name.ends_with(".forgeatlas.json") {
         Some(AssetKind::SpriteSheet)
@@ -988,5 +1016,39 @@ mod audio_asset_tests {
             .find(|record| record.relative_path == "Assets/broken.wav")
             .expect("WAV should be indexed");
         assert!(catalog.load_audio(audio.guid).is_err());
+    }
+}
+
+
+#[cfg(test)]
+mod ui_asset_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn catalogs_ui_documents_by_stable_guid_and_reloads_source() {
+        let project = tempfile::tempdir().expect("temporary project");
+        let assets_dir = project.path().join("Assets");
+        fs::create_dir_all(&assets_dir).expect("Assets folder");
+        let ui_path = assets_dir.join("Hud.forgeui.json");
+        fs::write(&ui_path, r#"{"schema_version":1,"resource_guid":"00000000-0000-4000-8000-000000000001","name":"HUD"}"#)
+            .expect("write UI document");
+
+        let mut catalog = AssetCatalog::open(project.path()).expect("open asset catalog");
+        let record = catalog
+            .entries()
+            .find(|record| record.relative_path == "Assets/Hud.forgeui.json")
+            .expect("UI document is indexed");
+        assert_eq!(record.kind, AssetKind::Ui);
+        let guid = record.guid;
+        let loaded = catalog.load_ui_source(guid).expect("load UI source");
+        assert_eq!(loaded.guid, guid);
+        assert!(loaded.source.contains("HUD"));
+
+        fs::write(&ui_path, r#"{"schema_version":1,"resource_guid":"00000000-0000-4000-8000-000000000001","name":"HUD v2"}"#)
+            .expect("write updated UI document");
+        let changes = catalog.refresh().expect("refresh UI catalog");
+        assert!(changes.iter().any(|change| change.guid == guid));
+        assert!(catalog.load_ui_source(guid).unwrap().source.contains("HUD v2"));
     }
 }

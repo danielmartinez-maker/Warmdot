@@ -1,0 +1,16 @@
+[package]
+name = "forge_ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Retained game UI documents, layout, focus, and input routing"
+
+[dependencies]
+forge_assets = { path = "../forge_assets" }
+forge_core = { path = "../forge_core" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

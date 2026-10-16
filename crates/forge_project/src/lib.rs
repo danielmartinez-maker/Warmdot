@@ -88,6 +88,7 @@ impl Project {
         let scene = SceneDocument {
             schema_version: forge_scene::CURRENT_SCENE_SCHEMA,
             resource_guid: Guid::new(),
+            ui_document: None,
             name: "Main".into(),
             dependencies: Vec::new(),
             objects: Vec::new(),
@@ -632,6 +633,7 @@ mod tests {
         let scene = SceneDocument {
             schema_version: forge_scene::CURRENT_SCENE_SCHEMA,
             resource_guid: scene_guid,
+            ui_document: None,
             name: "Second".into(),
             dependencies: Vec::new(),
             objects: Vec::new(),

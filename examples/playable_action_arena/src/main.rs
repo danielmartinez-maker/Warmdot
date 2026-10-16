@@ -184,6 +184,7 @@ fn make_scene() -> SceneDocument {
     SceneDocument {
         schema_version: forge_scene::CURRENT_SCENE_SCHEMA,
         resource_guid: Guid::new(),
+            ui_document: None,
         name: "Action Arena".into(),
         dependencies: Vec::new(),
         objects,

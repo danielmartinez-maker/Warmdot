@@ -148,6 +148,8 @@ pub struct GpuRenderer {
     configuration: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     camera_bind_group: wgpu::BindGroup,
+    ui_camera_buffer: wgpu::Buffer,
+    ui_camera_bind_group: wgpu::BindGroup,
     texture_layout: wgpu::BindGroupLayout,
     texture_sampler: wgpu::Sampler,
     white_texture: wgpu::Texture,
@@ -237,6 +239,27 @@ impl GpuRenderer {
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+        let ui_camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("forge2d-ui-camera-uniform"),
+            contents: bytemuck::bytes_of(&CameraUniform {
+                viewport: [configuration.width as f32, configuration.height as f32, 1.0, 1.0],
+                camera: [
+                    configuration.width as f32 * 0.5,
+                    configuration.height as f32 * 0.5,
+                    0.0,
+                    1.0,
+                ],
+            }),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let ui_camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("forge2d-ui-camera-bind-group"),
+            layout: &camera_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: ui_camera_buffer.as_entire_binding(),
             }],
         });
         let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -375,6 +398,8 @@ impl GpuRenderer {
             configuration,
             pipeline,
             camera_bind_group,
+            ui_camera_buffer,
+            ui_camera_bind_group,
             texture_layout,
             texture_sampler,
             white_texture,
@@ -512,6 +537,22 @@ impl GpuRenderer {
         self.render_textured(&sprites, camera, clear_color)
     }
 
+    /// Draws world sprites with their camera, followed by UI sprites in pixel-based screen space.
+    pub fn render_world_with_ui(
+        &mut self,
+        world: &mut RuntimeWorld,
+        ui_sprites: &[TexturedSprite],
+        clear_color: [f64; 4],
+    ) -> Result<RenderOutcome, RendererError> {
+        let camera = world.extract_camera().map(Camera::from).unwrap_or_default();
+        let sprites = world
+            .extract_sprites()
+            .into_iter()
+            .map(TexturedSprite::from)
+            .collect::<Vec<_>>();
+        self.render_textured_with_ui(&sprites, camera, ui_sprites, clear_color)
+    }
+
     pub fn render_textured(
         &mut self,
         sprites: &[TexturedSprite],
@@ -526,7 +567,31 @@ impl GpuRenderer {
             .iter()
             .map(|sprite| sprite.texture_asset)
             .collect::<Vec<_>>();
-        self.render_internal(&instances, Some(&texture_assets), camera, clear_color)
+        self.render_internal(&instances, Some(&texture_assets), camera, clear_color, None)
+    }
+
+    pub fn render_textured_with_ui(
+        &mut self,
+        sprites: &[TexturedSprite],
+        camera: Camera,
+        ui_sprites: &[TexturedSprite],
+        clear_color: [f64; 4],
+    ) -> Result<RenderOutcome, RendererError> {
+        let instances = sprites
+            .iter()
+            .map(|sprite| sprite.instance)
+            .collect::<Vec<_>>();
+        let texture_assets = sprites
+            .iter()
+            .map(|sprite| sprite.texture_asset)
+            .collect::<Vec<_>>();
+        self.render_internal(
+            &instances,
+            Some(&texture_assets),
+            camera,
+            clear_color,
+            Some(ui_sprites),
+        )
     }
 
     pub fn render(
@@ -535,7 +600,7 @@ impl GpuRenderer {
         camera: Camera,
         clear_color: [f64; 4],
     ) -> Result<RenderOutcome, RendererError> {
-        self.render_internal(sprites, None, camera, clear_color)
+        self.render_internal(sprites, None, camera, clear_color, None)
     }
 
     fn render_internal(
@@ -544,8 +609,9 @@ impl GpuRenderer {
         texture_assets: Option<&[Option<Guid>]>,
         camera: Camera,
         clear_color: [f64; 4],
+        ui_sprites: Option<&[TexturedSprite]>,
     ) -> Result<RenderOutcome, RendererError> {
-        let instance_count =
+        let world_instance_count =
             u32::try_from(sprites.len()).map_err(|_| RendererError::TooManySprites)?;
         if let Some(texture_assets) = texture_assets {
             if texture_assets.len() != sprites.len() {
@@ -559,7 +625,29 @@ impl GpuRenderer {
                 }
             }
         }
-        let required_bytes = sprites
+        let ui_instance_count = ui_sprites
+            .map(|sprites| u32::try_from(sprites.len()).map_err(|_| RendererError::TooManySprites))
+            .transpose()?
+            .unwrap_or(0);
+        if let Some(ui_sprites) = ui_sprites {
+            for asset in ui_sprites
+                .iter()
+                .filter_map(|sprite| sprite.texture_asset)
+            {
+                if !self.textures.contains_key(&asset) {
+                    return Err(RendererError::UnknownTexture(asset));
+                }
+            }
+        }
+        let total_instance_count = world_instance_count
+            .checked_add(ui_instance_count)
+            .ok_or(RendererError::TooManySprites)?;
+        let mut all_instances = Vec::with_capacity(total_instance_count as usize);
+        all_instances.extend_from_slice(sprites);
+        if let Some(ui_sprites) = ui_sprites {
+            all_instances.extend(ui_sprites.iter().map(|sprite| sprite.instance));
+        }
+        let required_bytes = all_instances
             .len()
             .checked_mul(size_of::<SpriteInstance>())
             .and_then(|bytes| u64::try_from(bytes).ok())
@@ -579,7 +667,7 @@ impl GpuRenderer {
         }
         if required_bytes != 0 {
             self.queue
-                .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(sprites));
+                .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&all_instances));
         }
         let uniform = CameraUniform {
             viewport: [
@@ -597,6 +685,25 @@ impl GpuRenderer {
         };
         self.queue
             .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&uniform));
+        let ui_uniform = CameraUniform {
+            viewport: [
+                self.configuration.width as f32,
+                self.configuration.height as f32,
+                1.0,
+                1.0,
+            ],
+            camera: [
+                self.configuration.width as f32 * 0.5,
+                self.configuration.height as f32 * 0.5,
+                0.0,
+                1.0,
+            ],
+        };
+        self.queue.write_buffer(
+            &self.ui_camera_buffer,
+            0,
+            bytemuck::bytes_of(&ui_uniform),
+        );
 
         let surface_texture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture) => texture,
@@ -660,22 +767,20 @@ impl GpuRenderer {
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
             let mut start = 0;
-            while start < instance_count {
-                let asset =
-                    texture_assets.and_then(|assets| assets.get(start as usize).copied().flatten());
+            while start < world_instance_count {
+                let asset = texture_assets
+                    .and_then(|assets| assets.get(start as usize).copied().flatten());
                 let bind_group = match asset {
-                    Some(guid) => {
-                        &self
-                            .textures
-                            .get(&guid)
-                            .expect("texture assets were validated before rendering")
-                            .bind_group
-                    }
+                    Some(guid) => &self
+                        .textures
+                        .get(&guid)
+                        .expect("texture assets were validated before rendering")
+                        .bind_group,
                     None => &self.white_bind_group,
                 };
                 pass.set_bind_group(1, bind_group, &[]);
                 let mut end = start + 1;
-                while end < instance_count {
+                while end < world_instance_count {
                     let next_asset = texture_assets
                         .and_then(|assets| assets.get(end as usize).copied().flatten());
                     if next_asset != asset {
@@ -685,6 +790,33 @@ impl GpuRenderer {
                 }
                 pass.draw(0..6, start..end);
                 start = end;
+            }
+            if let Some(ui_sprites) = ui_sprites {
+                pass.set_bind_group(0, &self.ui_camera_bind_group, &[]);
+                let mut ui_start = 0;
+                while ui_start < ui_instance_count {
+                    let asset = ui_sprites[ui_start as usize].texture_asset;
+                    let bind_group = match asset {
+                        Some(guid) => &self
+                            .textures
+                            .get(&guid)
+                            .expect("UI textures were validated before rendering")
+                            .bind_group,
+                        None => &self.white_bind_group,
+                    };
+                    pass.set_bind_group(1, bind_group, &[]);
+                    let mut ui_end = ui_start + 1;
+                    while ui_end < ui_instance_count
+                        && ui_sprites[ui_end as usize].texture_asset == asset
+                    {
+                        ui_end += 1;
+                    }
+                    pass.draw(
+                        0..6,
+                        world_instance_count + ui_start..world_instance_count + ui_end,
+                    );
+                    ui_start = ui_end;
+                }
             }
         }
         self.queue.submit([encoder.finish()]);

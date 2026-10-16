@@ -11,8 +11,9 @@ use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_audio::{AudioBus, AudioEngine};
 use forge_core::Guid;
 use forge_project::{PROJECT_FILE_NAME, Project, SceneCatalog};
-use forge_renderer::{GpuRenderer, RenderOutcome};
+use forge_renderer::{GpuRenderer, RenderOutcome, SpriteInstance, TexturedSprite};
 use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
+use forge_ui::{UiButtonEvent, UiDrawCommand, UiInputResult, UiKey, UiRuntime};
 use forge_scene::{
     AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
@@ -23,6 +24,7 @@ use winit::{
     dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
@@ -34,7 +36,10 @@ struct RunState {
 struct PlayerApp {
     project_name: String,
     project_root: PathBuf,
+    scene: SceneDocument,
     runtime: GameRuntime,
+    ui: UiRuntime,
+    cursor_position: [f32; 2],
     assets: AssetCatalog,
     audio: Option<AudioEngine>,
     scene_catalog: Option<Result<SceneCatalog, String>>,
@@ -47,7 +52,9 @@ impl PlayerApp {
     fn new(
         project_name: String,
         project_root: PathBuf,
+        scene: SceneDocument,
         runtime: GameRuntime,
+        ui: UiRuntime,
         assets: AssetCatalog,
         audio: Option<AudioEngine>,
     ) -> Self {
@@ -55,7 +62,10 @@ impl PlayerApp {
         Self {
             project_name,
             project_root,
+            scene,
             runtime,
+            ui,
+            cursor_position: [0.0, 0.0],
             assets,
             audio,
             scene_catalog: None,
@@ -115,12 +125,78 @@ impl ApplicationHandler for PlayerApp {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.renderer.resize(size.width, size.height),
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = [position.x as f32, position.y as f32];
+                let size = state.window.inner_size();
+                match self.ui.route_pointer_move(
+                    self.cursor_position,
+                    size.width,
+                    size.height,
+                ) {
+                    Ok(result) => submit_ui_event(&mut self.runtime, result),
+                    Err(error) => eprintln!("game UI pointer move failed: {error}"),
+                }
+                state.window.request_redraw();
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.ui.clear_pointer();
+                state.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: button_state,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                let size = state.window.inner_size();
+                let result = if button_state == winit::event::ElementState::Pressed {
+                    self.ui.route_pointer_down(
+                        self.cursor_position,
+                        size.width,
+                        size.height,
+                    )
+                } else {
+                    self.ui.route_pointer_up(
+                        self.cursor_position,
+                        size.width,
+                        size.height,
+                    )
+                };
+                match result {
+                    Ok(result) => submit_ui_event(&mut self.runtime, result),
+                    Err(error) => eprintln!("game UI pointer input failed: {error}"),
+                }
+                state.window.request_redraw();
+            }
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == winit::event::ElementState::Pressed && !event.repeat =>
+            {
+                let key = match event.physical_key {
+                    PhysicalKey::Code(KeyCode::Tab | KeyCode::ArrowDown | KeyCode::ArrowRight) => {
+                        Some(UiKey::Next)
+                    }
+                    PhysicalKey::Code(KeyCode::ArrowUp | KeyCode::ArrowLeft) => {
+                        Some(UiKey::Previous)
+                    }
+                    PhysicalKey::Code(KeyCode::Enter | KeyCode::Space) => Some(UiKey::Activate),
+                    _ => None,
+                };
+                if let Some(key) = key {
+                    let size = state.window.inner_size();
+                    match self.ui.route_key(key, size.width, size.height) {
+                        Ok(result) => submit_ui_event(&mut self.runtime, result),
+                        Err(error) => eprintln!("game UI keyboard input failed: {error}"),
+                    }
+                    state.window.request_redraw();
+                }
+            }
             WindowEvent::RedrawRequested => {
                 if refresh_assets {
                     if let Err(error) = refresh_project_assets(
                         &mut self.assets,
                         &mut state.renderer,
                         &mut self.runtime,
+                        &mut self.scene,
+                        &mut self.ui,
                     ) {
                         eprintln!("project asset refresh failed: {error}");
                         event_loop.exit();
@@ -140,6 +216,8 @@ impl ApplicationHandler for PlayerApp {
                     &self.project_root,
                     &self.assets,
                     &mut self.runtime,
+                    &mut self.scene,
+                    &mut self.ui,
                     &mut self.scene_catalog,
                     scene_requests,
                 );
@@ -149,10 +227,22 @@ impl ApplicationHandler for PlayerApp {
                         diagnostic.source_path, diagnostic.tick, diagnostic.message
                     );
                 }
-                match state
-                    .renderer
-                    .render_world(self.runtime.world_mut(), [0.035, 0.045, 0.065, 1.0])
+                let window_size = state.window.inner_size();
+                let ui_sprites = match self
+                    .ui
+                    .draw_commands(window_size.width, window_size.height)
                 {
+                    Ok(commands) => ui_commands_to_sprites(commands),
+                    Err(error) => {
+                        eprintln!("game UI draw extraction failed: {error}");
+                        Vec::new()
+                    }
+                };
+                match state.renderer.render_world_with_ui(
+                    self.runtime.world_mut(),
+                    &ui_sprites,
+                    [0.035, 0.045, 0.065, 1.0],
+                ) {
                     Ok(RenderOutcome::Presented | RenderOutcome::Skipped) => {
                         state.window.request_redraw();
                     }
@@ -204,6 +294,8 @@ fn process_scene_transition_requests(
     project_root: &Path,
     assets: &AssetCatalog,
     runtime: &mut GameRuntime,
+    current_scene: &mut SceneDocument,
+    ui: &mut UiRuntime,
     scene_catalog: &mut Option<Result<SceneCatalog, String>>,
     requests: Vec<Guid>,
 ) {
@@ -232,10 +324,19 @@ fn process_scene_transition_requests(
             eprintln!("scene transition to {scene_guid} was rejected: {error}");
             continue;
         }
+        let replacement_ui = match load_scene_ui(&scene, assets) {
+            Ok(ui) => ui,
+            Err(error) => {
+                eprintln!("scene transition to {scene_guid} has invalid UI: {error}");
+                continue;
+            }
+        };
         match GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets) {
             Ok(replacement) => {
                 eprintln!("entered scene {} ({scene_guid})", scene.name);
                 *runtime = replacement;
+                *current_scene = scene;
+                *ui = replacement_ui;
                 return;
             }
             Err(error) => {
@@ -275,9 +376,52 @@ fn validate_scene_dependencies(
             AssetKind::Audio => {
                 assets.load_audio(guid)?;
             }
+            AssetKind::Ui => {
+                assets.load_ui_source(guid)?;
+            }
         }
     }
     Ok(())
+}
+
+fn load_scene_ui(scene: &SceneDocument, assets: &AssetCatalog) -> Result<UiRuntime, Box<dyn Error>> {
+    let Some(guid) = scene.ui_document else {
+        return Ok(UiRuntime::empty());
+    };
+    let source = assets.load_ui_source(guid)?;
+    let document = forge_ui::UiDocument::from_json(&source.source)?;
+    let ui = UiRuntime::new(document)?;
+    ui.validate_assets(assets)?;
+    Ok(ui)
+}
+
+fn ui_commands_to_sprites(commands: Vec<UiDrawCommand>) -> Vec<TexturedSprite> {
+    commands
+        .into_iter()
+        .map(|command| TexturedSprite {
+            instance: SpriteInstance {
+                position: [
+                    command.rect.x + command.rect.width * 0.5,
+                    command.rect.y + command.rect.height * 0.5,
+                ],
+                size: [command.rect.width, command.rect.height],
+                scale: [1.0, 1.0],
+                rotation_radians: 0.0,
+                anchor: [0.5, 0.5],
+                tint: command.tint,
+                uv_rect: [0.0, 0.0, 1.0, 1.0],
+            },
+            texture_asset: command.texture_asset,
+        })
+        .collect()
+}
+
+fn submit_ui_event(runtime: &mut GameRuntime, result: UiInputResult) {
+    if let Some(UiButtonEvent { source_id, name }) = result.event {
+        if !runtime.emit_ui_event(name.clone(), source_id) {
+            eprintln!("game UI event {name:?} was rejected by the script event queue");
+        }
+    }
 }
 
 fn load_project_tilemap(project_root: &Path) -> Result<Option<TileMapDocument>, Box<dyn Error>> {
@@ -618,6 +762,8 @@ fn refresh_project_assets(
     assets: &mut AssetCatalog,
     renderer: &mut GpuRenderer,
     runtime: &mut GameRuntime,
+    scene: &mut SceneDocument,
+    ui: &mut UiRuntime,
 ) -> Result<(), Box<dyn Error>> {
     for change in assets.refresh()? {
         match change.kind {
@@ -630,7 +776,16 @@ fn refresh_project_assets(
                 );
             }
             AssetChangeKind::Added | AssetChangeKind::Modified => {
-                if assets
+                if scene.ui_document == Some(change.guid)
+                    && assets
+                        .get(change.guid)
+                        .is_some_and(|record| record.kind == AssetKind::Ui)
+                {
+                    match load_scene_ui(scene, assets) {
+                        Ok(replacement) => *ui = replacement,
+                        Err(error) => eprintln!("game UI reload was rejected: {error}"),
+                    }
+                } else if assets
                     .get(change.guid)
                     .is_some_and(|record| record.kind == AssetKind::Png)
                 {
@@ -685,6 +840,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(tilemap) = load_project_tilemap(&project_root)? {
         append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
     }
+    let ui = load_scene_ui(&scene, &assets)?;
     let runtime = GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), &assets)?;
     let audio = match AudioEngine::new() {
         Ok(audio) => Some(audio),
@@ -699,7 +855,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     event_loop.run_app(&mut PlayerApp::new(
         project_name,
         project_root,
+        scene,
         runtime,
+        ui,
         assets,
         audio,
     ))?;

@@ -809,7 +809,40 @@ impl ScriptHost {
         std::mem::take(&mut *self.pending_audio_commands.borrow_mut())
     }
 
-    pub fn take_scene_transition_requests(&mut self) -> Vec<Guid> {
+    /// Queues a bounded event from an external Forge-owned system for the next script tick.
+    pub fn queue_external_event(
+        &mut self,
+        name: impl Into<String>,
+        value: ScriptEventValue,
+        sender_guid: Guid,
+        tick: u64,
+    ) -> bool {
+        let name = name.into();
+        let valid_value = match &value {
+            ScriptEventValue::Number(number) => number.is_finite(),
+            ScriptEventValue::String(text) => text.len() <= MAX_SCRIPT_EVENT_PAYLOAD_BYTES,
+            _ => true,
+        };
+        if name.trim().is_empty()
+            || name.len() > MAX_SCRIPT_EVENT_NAME_BYTES
+            || !valid_value
+        {
+            return false;
+        }
+        let mut pending = self.pending_events.borrow_mut();
+        if pending.len() >= MAX_QUEUED_SCRIPT_EVENTS {
+            return false;
+        }
+        pending.push(ScriptEvent {
+            name,
+            value,
+            sender_guid,
+            tick,
+        });
+        true
+    }
+
+    pub fn take_scene_transition_requests(&mut self) {
         std::mem::take(&mut *self.pending_scene_requests.borrow_mut())
     }
 
@@ -1677,5 +1710,49 @@ mod tests {
 
         assert!(host.take_scene_transition_requests().is_empty());
         assert_eq!(host.take_diagnostics().len(), 1);
+    }
+}
+
+
+#[cfg(test)]
+mod external_event_tests {
+    use super::*;
+
+    #[test]
+    fn external_events_are_validated_and_queue_capacity_is_bounded() {
+        let mut host = ScriptHost::new();
+        let sender = Guid::new();
+        assert!(host.queue_external_event(
+            "menu.start",
+            ScriptEventValue::String("clicked".into()),
+            sender,
+            7
+        ));
+        assert!(!host.queue_external_event(
+            " ",
+            ScriptEventValue::Nil,
+            sender,
+            7
+        ));
+        assert!(!host.queue_external_event(
+            "menu.invalid",
+            ScriptEventValue::Number(f64::NAN),
+            sender,
+            7
+        ));
+        for index in 1..MAX_QUEUED_SCRIPT_EVENTS {
+            assert!(host.queue_external_event(
+                format!("menu.event.{index}"),
+                ScriptEventValue::Nil,
+                sender,
+                7
+            ));
+        }
+        assert!(!host.queue_external_event(
+            "menu.overflow",
+            ScriptEventValue::Nil,
+            sender,
+            7
+        ));
     }
 }
