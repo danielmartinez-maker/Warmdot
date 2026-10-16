@@ -580,50 +580,23 @@ impl ScriptHost {
                 let Some(callback) = callback else {
                     continue;
                 };
-                let args = match callback_arguments(instance, &queued.kind, delta) {
-                    Ok(args) => args,
-                    Err(error) => {
-                        if let Some(entity) = world.entity_for_guid(queued.object_guid) {
-                            if let Some(transform) = world.transform(entity) {
-                                let failed = instance.invoke_callback(
-                                    &callback,
-                                    transform,
-                                    &actions,
-                                    tick,
-                                    MultiValue::default(),
-                                );
-                                if let ScriptInvocation::Paused(hit) = failed {
-                                    ScriptInvocation::Failed(LuaError::RuntimeError(
-                                        format!("failed to prepare callback arguments: {error}; unexpected breakpoint at line {}", hit.line).into(),
-                                    ))
-                                } else {
-                                    ScriptInvocation::Failed(error)
-                                }
-                            } else {
-                                ScriptInvocation::Failed(error)
-                            }
-                        } else {
-                            ScriptInvocation::Failed(error)
-                        }
+                match callback_arguments(instance, &queued.kind, delta) {
+                    Ok(args) => {
+                        let Some(entity) = world.entity_for_guid(queued.object_guid) else {
+                            continue;
+                        };
+                        let Some(transform) = world.transform(entity) else {
+                            continue;
+                        };
+                        instance.invoke_callback(
+                            &callback,
+                            transform,
+                            &actions,
+                            tick,
+                            args,
+                        )
                     }
-                };
-                if let Some(entity) = world.entity_for_guid(queued.object_guid) {
-                    if let Some(transform) = world.transform(entity) {
-                        match args {
-                            Ok(args) => instance.invoke_callback(
-                                &callback,
-                                transform,
-                                &actions,
-                                tick,
-                                args,
-                            ),
-                            Err(error) => ScriptInvocation::Failed(error),
-                        }
-                    } else {
-                        continue;
-                    }
-                } else {
-                    continue;
+                    Err(error) => ScriptInvocation::Failed(error),
                 }
             };
             if let Some(next_hit) =
