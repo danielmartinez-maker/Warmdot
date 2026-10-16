@@ -11,9 +11,13 @@ use std::{
 
 use forge_assets::LoadedScriptAsset;
 use forge_core::{ActionId, ActionState, Guid};
+use forge_luau_debug::{self as luau_debug, BreakpointContext, BreakpointHit, ResumeResult};
 use forge_scene::ScriptPropertyValue;
 use forge_world::{RuntimeWorld, Transform2D};
-use mlua::{Error as LuaError, Function, Lua, Table, Value as LuaValue, VmState};
+use mlua::{
+    Error as LuaError, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread,
+    Value as LuaValue, VmState,
+};
 
 const MAX_SCRIPT_SOURCE_BYTES: usize = 1024 * 1024;
 const MAX_VM_MEMORY_BYTES: usize = 4 * 1024 * 1024;
@@ -56,6 +60,15 @@ pub struct ScriptEvent {
     pub name: String,
     pub value: ScriptEventValue,
     pub sender_guid: Guid,
+    pub tick: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScriptBreakpointHit {
+    pub object_guid: Guid,
+    pub asset_guid: Guid,
+    pub source_path: String,
+    pub line: u32,
     pub tick: u64,
 }
 
@@ -127,6 +140,20 @@ struct ScriptInstance {
     definition: ScriptDefinition,
     start_pending: bool,
     disabled: bool,
+    breakpoint_lines: BTreeSet<u32>,
+    breakpoint_context: BreakpointContext,
+    suspended: Option<SuspendedCallback>,
+}
+
+struct SuspendedCallback {
+    thread: Thread,
+    context: ScriptCallContext,
+}
+
+enum ScriptInvocation {
+    Completed(ScriptCallContext),
+    Paused(BreakpointHit),
+    Failed(LuaError),
 }
 
 impl ScriptInstance {
@@ -141,6 +168,7 @@ impl ScriptInstance {
 
         let lua = Lua::new();
         lua.set_memory_limit(MAX_VM_MEMORY_BYTES)?;
+        luau_debug::install(&lua)?;
         let interrupt_checkpoints = Rc::new(Cell::new(0_usize));
         let checkpoints = interrupt_checkpoints.clone();
         lua.set_interrupt(move |_| {
@@ -178,50 +206,168 @@ impl ScriptInstance {
             definition,
             start_pending: true,
             disabled: false,
+            breakpoint_lines: BTreeSet::new(),
+            breakpoint_context: BreakpointContext::default(),
+            suspended: None,
         })
     }
 
-    fn invoke<F>(
+    fn invoke_callback(
         &mut self,
+        callback: &Function,
         transform: Transform2D,
         actions: &BTreeMap<ActionId, ActionState>,
         tick: u64,
-        call: F,
-    ) -> Result<ScriptCallContext, LuaError>
-    where
-        F: FnOnce(&Lua, &Table) -> Result<(), LuaError>,
-    {
-        *self.context.borrow_mut() = Some(ScriptCallContext {
+        args: MultiValue,
+    ) -> ScriptInvocation {
+        let fallback = ScriptCallContext {
             transform,
             properties: self.definition.properties.clone(),
             actions: actions.clone(),
             object_guid: self.definition.object_guid,
             tick,
             emitted_events: Vec::new(),
-        });
+        };
+        *self.context.borrow_mut() = Some(fallback.clone());
         self.interrupt_checkpoints.set(0);
-        let result = call(&self._lua, &self.state);
-        let context = self
-            .context
-            .borrow_mut()
-            .take()
-            .unwrap_or_else(|| ScriptCallContext {
-                transform,
-                properties: self.definition.properties.clone(),
-                actions: actions.clone(),
-                object_guid: self.definition.object_guid,
-                tick,
-                emitted_events: Vec::new(),
-            });
-        result?;
-        Ok(context)
+
+        if self.breakpoint_lines.is_empty() {
+            let result = callback.call::<()>(args);
+            let context = self.context.borrow_mut().take().unwrap_or(fallback);
+            return match result {
+                Ok(()) => ScriptInvocation::Completed(context),
+                Err(error) => ScriptInvocation::Failed(error),
+            };
+        }
+
+        let thread = match self._lua.create_thread(callback.clone()) {
+            Ok(thread) => thread,
+            Err(error) => {
+                self.context.borrow_mut().take();
+                return ScriptInvocation::Failed(error);
+            }
+        };
+        match luau_debug::resume(
+            &self._lua,
+            &thread,
+            args,
+            &self.breakpoint_context,
+        ) {
+            Ok(ResumeResult::Complete) => {
+                let context = self.context.borrow_mut().take().unwrap_or(fallback);
+                ScriptInvocation::Completed(context)
+            }
+            Ok(ResumeResult::Paused(hit)) => {
+                let context = self.context.borrow_mut().take().unwrap_or(fallback);
+                self.suspended = Some(SuspendedCallback { thread, context });
+                ScriptInvocation::Paused(hit)
+            }
+            Ok(ResumeResult::Failed(message)) => {
+                self.context.borrow_mut().take();
+                ScriptInvocation::Failed(LuaError::RuntimeError(message.into()))
+            }
+            Err(error) => {
+                self.context.borrow_mut().take();
+                ScriptInvocation::Failed(error)
+            }
+        }
     }
+
+    fn resume_suspended(&mut self) -> ScriptInvocation {
+        let Some(suspended) = self.suspended.take() else {
+            return ScriptInvocation::Failed(LuaError::RuntimeError(
+                "no suspended Luau callback is available".into(),
+            ));
+        };
+        let fallback = suspended.context.clone();
+        *self.context.borrow_mut() = Some(fallback.clone());
+        match luau_debug::resume(
+            &self._lua,
+            &suspended.thread,
+            MultiValue::default(),
+            &self.breakpoint_context,
+        ) {
+            Ok(ResumeResult::Complete) => {
+                let context = self.context.borrow_mut().take().unwrap_or(fallback);
+                ScriptInvocation::Completed(context)
+            }
+            Ok(ResumeResult::Paused(hit)) => {
+                let context = self.context.borrow_mut().take().unwrap_or(fallback);
+                self.suspended = Some(SuspendedCallback {
+                    thread: suspended.thread,
+                    context,
+                });
+                ScriptInvocation::Paused(hit)
+            }
+            Ok(ResumeResult::Failed(message)) => {
+                self.context.borrow_mut().take();
+                ScriptInvocation::Failed(LuaError::RuntimeError(message.into()))
+            }
+            Err(error) => {
+                self.context.borrow_mut().take();
+                ScriptInvocation::Failed(error)
+            }
+        }
+    }
+
+    fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<bool, LuaError> {
+        let callbacks = [
+            self.on_start.clone(),
+            self.on_event.clone(),
+            self.on_fixed_update.clone(),
+        ];
+        let mut applied = false;
+        for callback in callbacks.into_iter().flatten() {
+            applied |= luau_debug::set_breakpoint(&self._lua, &callback, line, enabled)?.is_some();
+        }
+        if enabled && applied {
+            self.breakpoint_lines.insert(line);
+        } else if !enabled {
+            self.breakpoint_lines.remove(&line);
+        }
+        Ok(applied)
+    }
+
+    fn restore_breakpoints(&mut self, lines: &BTreeSet<u32>) -> Result<(), LuaError> {
+        for line in lines {
+            self.set_breakpoint(*line, true)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+enum ScriptCallbackKind {
+    Start,
+    Event(ScriptEvent),
+    FixedUpdate,
+}
+
+struct QueuedScriptCallback {
+    object_guid: Guid,
+    kind: ScriptCallbackKind,
+}
+
+struct PendingScriptUpdate {
+    actions: BTreeMap<ActionId, ActionState>,
+    delta: Duration,
+    tick: u64,
+}
+
+struct DeferredScriptReload {
+    asset_guid: Guid,
+    source_path: String,
+    source: String,
 }
 
 pub struct ScriptHost {
     instances: BTreeMap<Guid, ScriptInstance>,
     diagnostics: Vec<ScriptDiagnostic>,
     pending_events: SharedEvents,
+    pending_callbacks: VecDeque<QueuedScriptCallback>,
+    pending_update: Option<PendingScriptUpdate>,
+    current_breakpoint: Option<ScriptBreakpointHit>,
+    deferred_reloads: BTreeMap<Guid, DeferredScriptReload>,
 }
 
 impl Default for ScriptHost {
@@ -236,6 +382,10 @@ impl ScriptHost {
             instances: BTreeMap::new(),
             diagnostics: Vec::new(),
             pending_events: Rc::new(RefCell::new(Vec::new())),
+            pending_callbacks: VecDeque::new(),
+            pending_update: None,
+            current_breakpoint: None,
+            deferred_reloads: BTreeMap::new(),
         }
     }
 
@@ -257,6 +407,23 @@ impl ScriptHost {
             ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())?;
         self.instances.insert(definition.object_guid, instance);
         Ok(())
+    }
+
+    pub fn set_breakpoint(
+        &mut self,
+        object_guid: Guid,
+        line: u32,
+        enabled: bool,
+    ) -> Result<bool, ScriptError> {
+        let instance = self
+            .instances
+            .get_mut(&object_guid)
+            .ok_or(ScriptError::MissingInstance(object_guid))?;
+        instance.set_breakpoint(line, enabled).map_err(ScriptError::Lua)
+    }
+
+    pub fn current_breakpoint(&self) -> Option<ScriptBreakpointHit> {
+        self.current_breakpoint.clone()
     }
 
     /// Applies compatible authored values to a live script without resetting its Luau VM.
@@ -283,6 +450,21 @@ impl ScriptHost {
                 return Err(ScriptError::InvalidProperty(name.clone()));
             }
         }
+        let old_properties = instance.definition.properties.clone();
+        if let Some(suspended) = instance.suspended.as_mut() {
+            suspended
+                .context
+                .properties
+                .retain(|name, _| properties.contains_key(name));
+            for (name, value) in &properties {
+                if old_properties.get(name) != Some(value) {
+                    suspended
+                        .context
+                        .properties
+                        .insert(name.clone(), value.clone());
+                }
+            }
+        }
         instance.definition.properties = properties;
         Ok(())
     }
@@ -294,6 +476,19 @@ impl ScriptHost {
         delta: Duration,
         tick: u64,
     ) {
+        let _ = self.update_with_breakpoints(world, actions, delta, tick);
+    }
+
+    pub fn update_with_breakpoints(
+        &mut self,
+        world: &mut RuntimeWorld,
+        actions: &BTreeMap<ActionId, ActionState>,
+        delta: Duration,
+        tick: u64,
+    ) -> Option<ScriptBreakpointHit> {
+        if self.pending_update.is_some() {
+            return self.current_breakpoint.clone();
+        }
         let pending_events = std::mem::take(&mut *self.pending_events.borrow_mut());
         let mut orphaned = Vec::new();
         for (object_guid, instance) in &mut self.instances {
@@ -304,88 +499,246 @@ impl ScriptHost {
             if instance.disabled {
                 continue;
             }
-
             if instance.start_pending {
                 instance.start_pending = false;
-                if let Some(callback) = instance.on_start.clone() {
-                    run_callback(
-                        instance,
-                        &callback,
-                        world,
-                        actions,
-                        Duration::ZERO,
-                        tick,
-                        &mut self.diagnostics,
-                    );
+                if instance.on_start.is_some() {
+                    self.pending_callbacks.push_back(QueuedScriptCallback {
+                        object_guid: *object_guid,
+                        kind: ScriptCallbackKind::Start,
+                    });
                 }
             }
-            if !instance.disabled {
-                if let Some(callback) = instance.on_event.clone() {
-                    for event in &pending_events {
-                        run_event_callback(
-                            instance,
-                            &callback,
-                            event,
-                            world,
-                            actions,
-                            tick,
-                            &mut self.diagnostics,
-                        );
-                        if instance.disabled {
-                            break;
-                        }
-                    }
+            if instance.on_event.is_some() {
+                for event in &pending_events {
+                    self.pending_callbacks.push_back(QueuedScriptCallback {
+                        object_guid: *object_guid,
+                        kind: ScriptCallbackKind::Event(event.clone()),
+                    });
                 }
             }
-            if !instance.disabled {
-                if let Some(callback) = instance.on_fixed_update.clone() {
-                    run_callback(
-                        instance,
-                        &callback,
-                        world,
-                        actions,
-                        delta,
-                        tick,
-                        &mut self.diagnostics,
-                    );
-                }
+            if instance.on_fixed_update.is_some() {
+                self.pending_callbacks.push_back(QueuedScriptCallback {
+                    object_guid: *object_guid,
+                    kind: ScriptCallbackKind::FixedUpdate,
+                });
             }
         }
         for object_guid in orphaned {
             self.instances.remove(&object_guid);
+        }
+        self.pending_update = Some(PendingScriptUpdate {
+            actions: actions.clone(),
+            delta,
+            tick,
+        });
+        self.process_pending_callbacks(world)
+    }
+
+    /// Continues the current callback and then finishes the rest of its fixed-tick script queue.
+    pub fn continue_breakpoint(
+        &mut self,
+        world: &mut RuntimeWorld,
+    ) -> Option<ScriptBreakpointHit> {
+        let hit = self.current_breakpoint.take()?;
+        let invocation = self
+            .instances
+            .get_mut(&hit.object_guid)
+            .map(ScriptInstance::resume_suspended);
+        if let Some(invocation) = invocation {
+            if let Some(next_hit) =
+                self.finish_invocation(hit.object_guid, invocation, world, hit.tick)
+            {
+                return Some(next_hit);
+            }
+        }
+        self.process_pending_callbacks(world)
+    }
+
+    fn process_pending_callbacks(
+        &mut self,
+        world: &mut RuntimeWorld,
+    ) -> Option<ScriptBreakpointHit> {
+        while let Some(queued) = self.pending_callbacks.pop_front() {
+            let Some(update) = self.pending_update.as_ref() else {
+                break;
+            };
+            let actions = update.actions.clone();
+            let delta = update.delta;
+            let tick = update.tick;
+            let invocation = {
+                let Some(instance) = self.instances.get_mut(&queued.object_guid) else {
+                    continue;
+                };
+                if instance.disabled {
+                    continue;
+                }
+                let callback = match &queued.kind {
+                    ScriptCallbackKind::Start => instance.on_start.clone(),
+                    ScriptCallbackKind::Event(_) => instance.on_event.clone(),
+                    ScriptCallbackKind::FixedUpdate => instance.on_fixed_update.clone(),
+                };
+                let Some(callback) = callback else {
+                    continue;
+                };
+                let args = match callback_arguments(instance, &queued.kind, delta) {
+                    Ok(args) => args,
+                    Err(error) => {
+                        if let Some(entity) = world.entity_for_guid(queued.object_guid) {
+                            if let Some(transform) = world.transform(entity) {
+                                let failed = instance.invoke_callback(
+                                    &callback,
+                                    transform,
+                                    &actions,
+                                    tick,
+                                    MultiValue::default(),
+                                );
+                                if let ScriptInvocation::Paused(hit) = failed {
+                                    ScriptInvocation::Failed(LuaError::RuntimeError(
+                                        format!("failed to prepare callback arguments: {error}; unexpected breakpoint at line {}", hit.line).into(),
+                                    ))
+                                } else {
+                                    ScriptInvocation::Failed(error)
+                                }
+                            } else {
+                                ScriptInvocation::Failed(error)
+                            }
+                        } else {
+                            ScriptInvocation::Failed(error)
+                        }
+                    }
+                };
+                if let Some(entity) = world.entity_for_guid(queued.object_guid) {
+                    if let Some(transform) = world.transform(entity) {
+                        match args {
+                            Ok(args) => instance.invoke_callback(
+                                &callback,
+                                transform,
+                                &actions,
+                                tick,
+                                args,
+                            ),
+                            Err(error) => ScriptInvocation::Failed(error),
+                        }
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            };
+            if let Some(next_hit) =
+                self.finish_invocation(queued.object_guid, invocation, world, tick)
+            {
+                return Some(next_hit);
+            }
+        }
+        self.pending_update = None;
+        self.apply_deferred_reloads();
+        None
+    }
+
+    fn finish_invocation(
+        &mut self,
+        object_guid: Guid,
+        invocation: ScriptInvocation,
+        world: &mut RuntimeWorld,
+        tick: u64,
+    ) -> Option<ScriptBreakpointHit> {
+        match invocation {
+            ScriptInvocation::Completed(context) => {
+                let (instances, diagnostics) = (&mut self.instances, &mut self.diagnostics);
+                if let Some(instance) = instances.get_mut(&object_guid) {
+                    apply_callback_result(instance, world, Ok(context), tick, diagnostics);
+                }
+                None
+            }
+            ScriptInvocation::Failed(error) => {
+                let (instances, diagnostics) = (&mut self.instances, &mut self.diagnostics);
+                if let Some(instance) = instances.get_mut(&object_guid) {
+                    disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
+                }
+                None
+            }
+            ScriptInvocation::Paused(native_hit) => {
+                let instance = self.instances.get(&object_guid)?;
+                let hit = ScriptBreakpointHit {
+                    object_guid,
+                    asset_guid: instance.definition.asset_guid,
+                    source_path: instance.definition.source_path.clone(),
+                    line: native_hit.line,
+                    tick,
+                };
+                self.current_breakpoint = Some(hit.clone());
+                Some(hit)
+            }
         }
     }
 
     /// Recompiles every active instance that references this source. Invalid updates leave the
     /// last working instance installed and produce a diagnostic.
     pub fn reload_asset(&mut self, asset: &LoadedScriptAsset) {
+        let update = DeferredScriptReload {
+            asset_guid: asset.guid,
+            source_path: asset.relative_path.clone(),
+            source: asset.source.clone(),
+        };
+        if self.current_breakpoint.is_some() {
+            self.deferred_reloads.insert(update.asset_guid, update);
+        } else {
+            self.apply_script_reload(update);
+        }
+    }
+
+    fn apply_deferred_reloads(&mut self) {
+        let updates = std::mem::take(&mut self.deferred_reloads);
+        for (_, update) in updates {
+            self.apply_script_reload(update);
+        }
+    }
+
+    fn apply_script_reload(&mut self, update: DeferredScriptReload) {
         let targets = self
             .instances
             .iter()
-            .filter(|(_, instance)| instance.definition.asset_guid == asset.guid)
+            .filter(|(_, instance)| instance.definition.asset_guid == update.asset_guid)
             .map(|(object_guid, instance)| (*object_guid, instance.definition.clone()))
             .collect::<Vec<_>>();
 
         for (object_guid, mut definition) in targets {
-            definition.source_path = asset.relative_path.clone();
-            definition.source = asset.source.clone();
+            definition.source_path = update.source_path.clone();
+            definition.source = update.source.clone();
             let context = Rc::new(RefCell::new(None));
-            match ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())
-            {
+            match ScriptInstance::compile(definition.clone(), context, self.pending_events.clone()) {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
                         migrate_compatible_state(&previous.state, &instance.state, &instance._lua)
-                            .map(|warnings| (previous.start_pending, warnings))
+                            .map(|warnings| {
+                                (
+                                    previous.start_pending,
+                                    previous.breakpoint_lines.clone(),
+                                    warnings,
+                                )
+                            })
                     });
                     match migration {
-                        Some(Ok((start_pending, warnings))) => {
+                        Some(Ok((start_pending, breakpoints, warnings))) => {
                             instance.start_pending = start_pending;
+                            if let Err(error) = instance.restore_breakpoints(&breakpoints) {
+                                self.record_diagnostic(
+                                    object_guid,
+                                    update.asset_guid,
+                                    update.source_path.clone(),
+                                    0,
+                                    format!("breakpoints could not be restored after reload; the last-good script remains active: {error}"),
+                                );
+                                continue;
+                            }
                             self.instances.insert(object_guid, instance);
                             for warning in warnings {
                                 self.record_diagnostic(
                                     object_guid,
-                                    asset.guid,
-                                    asset.relative_path.clone(),
+                                    update.asset_guid,
+                                    update.source_path.clone(),
                                     0,
                                     warning,
                                 );
@@ -393,8 +746,8 @@ impl ScriptHost {
                         }
                         Some(Err(error)) => self.record_diagnostic(
                             object_guid,
-                            asset.guid,
-                            asset.relative_path.clone(),
+                            update.asset_guid,
+                            update.source_path.clone(),
                             0,
                             format!("script state migration failed; the last-good script remains active: {error}"),
                         ),
@@ -405,8 +758,8 @@ impl ScriptHost {
                 }
                 Err(error) => self.record_diagnostic(
                     object_guid,
-                    asset.guid,
-                    asset.relative_path.clone(),
+                    update.asset_guid,
+                    update.source_path.clone(),
                     0,
                     error.to_string(),
                 ),
@@ -454,59 +807,34 @@ impl ScriptHost {
             asset_guid,
             source_path: source_path.into(),
             tick,
-            message: message.into(),
+            message,
         });
     }
 }
 
-fn run_callback(
-    instance: &mut ScriptInstance,
-    callback: &Function,
-    world: &mut RuntimeWorld,
-    actions: &BTreeMap<ActionId, ActionState>,
+fn callback_arguments(
+    instance: &ScriptInstance,
+    kind: &ScriptCallbackKind,
     delta: Duration,
-    tick: u64,
-    diagnostics: &mut Vec<ScriptDiagnostic>,
-) {
-    let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
-        return;
-    };
-    let Some(transform) = world.transform(entity) else {
-        return;
-    };
-
-    let result = instance.invoke(transform, actions, tick, |_, state| {
-        callback.call::<()>((state.clone(), delta.as_secs_f64()))
-    });
-    apply_callback_result(instance, world, result, tick, diagnostics);
-}
-
-fn run_event_callback(
-    instance: &mut ScriptInstance,
-    callback: &Function,
-    event: &ScriptEvent,
-    world: &mut RuntimeWorld,
-    actions: &BTreeMap<ActionId, ActionState>,
-    tick: u64,
-    diagnostics: &mut Vec<ScriptDiagnostic>,
-) {
-    let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
-        return;
-    };
-    let Some(transform) = world.transform(entity) else {
-        return;
-    };
-
-    let result = instance.invoke(transform, actions, tick, |lua, state| {
-        callback.call::<()>((
-            state.clone(),
+) -> Result<MultiValue, LuaError> {
+    match kind {
+        ScriptCallbackKind::Start => {
+            (instance.state.clone(), 0.0_f64).into_lua_multi(&instance._lua)
+        }
+        ScriptCallbackKind::Event(event) => (
+            instance.state.clone(),
             event.name.clone(),
-            event_value_to_lua(lua, &event.value)?,
+            event_value_to_lua(&instance._lua, &event.value)?,
             event.sender_guid.to_string(),
             event.tick,
-        ))
-    });
-    apply_callback_result(instance, world, result, tick, diagnostics);
+        )
+            .into_lua_multi(&instance._lua),
+        ScriptCallbackKind::FixedUpdate => (
+            instance.state.clone(),
+            delta.as_secs_f64(),
+        )
+            .into_lua_multi(&instance._lua),
+    }
 }
 
 fn apply_callback_result(
