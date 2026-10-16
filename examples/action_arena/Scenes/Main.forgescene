@@ -24,7 +24,32 @@
           1
         ]
       },
-      "sprite": null,
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          0.9,
+          1.1
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.18,
+          0.88,
+          0.8,
+          1
+        ],
+        "layer": 1,
+        "order": 0,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
       "camera": null,
       "rigid_body": {
         "kind": "dynamic",
@@ -60,7 +85,11 @@
         "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
         "properties": {
           "speed": 1.5,
-          "direction": 1
+          "direction": 1,
+          "min_x": -28,
+          "max_x": 28,
+          "min_y": -16,
+          "max_y": 16
         }
       }
     },
@@ -78,7 +107,32 @@
           1
         ]
       },
-      "sprite": null,
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          16,
+          1
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.18,
+          0.25,
+          0.34,
+          1
+        ],
+        "layer": 0,
+        "order": 0,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
       "camera": null,
       "rigid_body": {
         "kind": "fixed"
@@ -102,6 +156,36 @@
         "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030002",
         "properties": {}
       }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0010",
+      "name": "Camera",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": null,
+      "camera": {
+        "zoom": [
+          1,
+          1
+        ],
+        "pixels_per_world_unit": 20,
+        "priority": 1,
+        "active": true
+      },
+      "rigid_body": null,
+      "collider": null,
+      "script": null
     }
   ],
   "ui_document": "a1d999a0-d8d1-4a1e-a700-4c49ed030005"
