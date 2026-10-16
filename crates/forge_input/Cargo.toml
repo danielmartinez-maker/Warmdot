@@ -9,7 +9,7 @@ description = "Keyboard and mouse action bindings for Forge runtime"
 [dependencies]
 forge_core = { path = "../forge_core" }
 forge_runtime = { path = "../forge_runtime" }
-winit = "=0.30.12"
+winit = "=0.30.13"
 
 [lints]
 workspace = true
