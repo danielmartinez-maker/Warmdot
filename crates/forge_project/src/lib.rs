@@ -429,10 +429,7 @@ mod tests {
 
     #[test]
     fn scene_lookup_resolves_nested_scene_by_stable_guid() {
-        let root = std::env::temp_dir().join(format!(
-            "forge-project-scene-lookup-{}",
-            Guid::new()
-        ));
+        let root = std::env::temp_dir().join(format!("forge-project-scene-lookup-{}", Guid::new()));
         let project = Project::create(&root, "Scene lookup").expect("create project");
         let scene_guid = Guid::new();
         let scene = SceneDocument {

@@ -1628,5 +1628,4 @@ mod tests {
         assert!(host.take_scene_transition_requests().is_empty());
         assert_eq!(host.take_diagnostics().len(), 1);
     }
-
 }
