@@ -50,14 +50,14 @@ impl SceneCommand {
                     return Err(EditorError::InvalidCommand("insert position is outside the scene"));
                 }
                 scene.objects.insert(*index, object.clone());
-                validate_or_restore(scene, || {
+                validate_or_restore(scene, |scene| {
                     scene.objects.remove(*index);
                 })
             }
             Self::Remove { index, object } => {
                 ensure_object_at(scene, *index, object.object_guid)?;
                 let removed = scene.objects.remove(*index);
-                validate_or_restore(scene, || {
+                validate_or_restore(scene, |scene| {
                     scene.objects.insert(*index, removed);
                 })
             }
@@ -73,7 +73,7 @@ impl SceneCommand {
                     ));
                 }
                 let original = std::mem::replace(&mut scene.objects[*index], after.clone());
-                validate_or_restore(scene, || {
+                validate_or_restore(scene, |scene| {
                     scene.objects[*index] = original;
                 })
             }
@@ -261,10 +261,10 @@ fn ensure_object_at(
 
 fn validate_or_restore(
     scene: &mut SceneDocument,
-    restore: impl FnOnce(),
+    restore: impl FnOnce(&mut SceneDocument),
 ) -> Result<(), EditorError> {
     if let Err(diagnostics) = scene.validate() {
-        restore();
+        restore(scene);
         return Err(EditorError::Scene(diagnostics));
     }
     Ok(())
