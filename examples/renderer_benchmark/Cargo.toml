@@ -9,7 +9,7 @@ description = "Interactive Forge 2D sprite renderer benchmark"
 [dependencies]
 forge_renderer = { path = "../../crates/forge_renderer" }
 serde_json.workspace = true
-winit = "=0.30.12"
+winit = "=0.30.13"
 
 [lints]
 workspace = true
