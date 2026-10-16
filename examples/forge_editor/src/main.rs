@@ -1454,8 +1454,7 @@ impl EditorApp {
     }
 
     fn show_canvas(&mut self, ui: &mut egui::Ui) {
-        let (rect, response) =
-            ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+        let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         if response.dragged() {
             self.canvas_offset += ui.input(|input| input.pointer.delta());
         }
@@ -1562,7 +1561,10 @@ impl EditorApp {
         painter.text(
             rect.right_top() + Vec2::new(-12.0, 12.0),
             egui::Align2::RIGHT_TOP,
-            format!("{:.0}%  •  drag to pan, wheel to zoom", self.canvas_zoom * 100.0),
+            format!(
+                "{:.0}%  •  drag to pan, wheel to zoom",
+                self.canvas_zoom * 100.0
+            ),
             egui::FontId::proportional(13.0),
             Color32::LIGHT_GRAY,
         );
