@@ -13,6 +13,7 @@ forge_core = { path = "../../crates/forge_core" }
 forge_editor_core = { path = "../../crates/forge_editor_core" }
 forge_project = { path = "../../crates/forge_project" }
 forge_scene = { path = "../../crates/forge_scene" }
+forge_tilemap = { path = "../../crates/forge_tilemap" }
 
 [lints]
 workspace = true
