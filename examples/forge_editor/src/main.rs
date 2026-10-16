@@ -95,6 +95,9 @@ impl EditorApp {
             camera: None,
             rigid_body: None,
             collider: None,
+            script: None,
+            collider: None,
+            script: None,
         };
         self.selected = Some(object.object_guid);
         match self.history.create_object(&mut self.scene, object, None) {

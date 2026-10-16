@@ -313,7 +313,10 @@ impl AssetCatalog {
         let record = self.record_of_kind(guid, AssetKind::Script)?;
         let bytes = read_limited(&self.resolve_record_path(record)?, MAX_SCRIPT_SOURCE_BYTES)?;
         let source = String::from_utf8(bytes).map_err(|error| {
-            AssetError::Invalid(format!("{} is not valid UTF-8: {error}", record.relative_path))
+            AssetError::Invalid(format!(
+                "{} is not valid UTF-8: {error}",
+                record.relative_path
+            ))
         })?;
         Ok(LoadedScriptAsset {
             guid,

@@ -271,6 +271,7 @@ fn append_tilemap_to_scene(
             camera: None,
             rigid_body,
             collider,
+            script: None,
         });
     }
     Ok(())

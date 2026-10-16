@@ -112,6 +112,9 @@ fn make_scene() -> SceneDocument {
         camera: None,
         rigid_body: None,
         collider: None,
+        script: None,
+        collider: None,
+        script: None,
     });
     objects.push(SceneObject {
         object_guid: Guid::new(),
@@ -126,6 +129,9 @@ fn make_scene() -> SceneDocument {
         }),
         rigid_body: None,
         collider: None,
+        script: None,
+        collider: None,
+        script: None,
     });
     for index in 0..48 {
         let seed = index as u32 * 747_796_405 + 2_891_336_453;
@@ -151,6 +157,9 @@ fn make_scene() -> SceneDocument {
             camera: None,
             rigid_body: None,
             collider: None,
+            script: None,
+            collider: None,
+            script: None,
         });
     }
     SceneDocument {

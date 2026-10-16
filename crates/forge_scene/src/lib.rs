@@ -38,6 +38,24 @@ pub struct SceneObject {
     pub rigid_body: Option<AuthoredRigidBody>,
     #[serde(default)]
     pub collider: Option<AuthoredCollider>,
+    #[serde(default)]
+    pub script: Option<AuthoredScript>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoredScript {
+    pub asset: Guid,
+    #[serde(default)]
+    pub properties: BTreeMap<String, ScriptPropertyValue>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ScriptPropertyValue {
+    Bool(bool),
+    Number(f64),
+    String(String),
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -299,6 +317,28 @@ impl SceneDocument {
                     }
                 }
             }
+            if let Some(script) = &object.script {
+                if !dependencies.contains(&script.asset) {
+                    diagnostics.push(SceneDiagnostic::error(
+                        "undeclared_script_dependency",
+                        format!("script asset {} is missing from scene dependencies", script.asset),
+                        Some(guid),
+                    ));
+                }
+                for (name, value) in &script.properties {
+                    if name.trim().is_empty()
+                        || name.len() > 128
+                        || matches!(value, ScriptPropertyValue::Number(number) if !number.is_finite())
+                        || matches!(value, ScriptPropertyValue::String(text) if text.len() > 16 * 1024)
+                    {
+                        diagnostics.push(SceneDiagnostic::error(
+                            "invalid_script_property",
+                            format!("script property {name:?} is empty, too large, or non-finite"),
+                            Some(guid),
+                        ));
+                    }
+                }
+            }
             if let Some(camera) = object.camera {
                 if !camera
                     .zoom
@@ -504,4 +544,73 @@ const fn full_uv_rect() -> [f32; 4] {
 
 const fn default_friction() -> f32 {
     0.5
+}
+
+#[cfg(test)]
+mod script_authoring_tests {
+    use super::*;
+
+    fn scene_with_script(script: AuthoredScript, dependencies: Vec<Guid>) -> SceneDocument {
+        SceneDocument {
+            schema_version: CURRENT_SCENE_SCHEMA,
+            resource_guid: Guid::new(),
+            name: "Script scene".into(),
+            dependencies,
+            objects: vec![SceneObject {
+                object_guid: Guid::new(),
+                name: "Scripted object".into(),
+                transform: AuthoredTransform::default(),
+                sprite: None,
+                camera: None,
+                rigid_body: None,
+                collider: None,
+                script: Some(script),
+            }],
+        }
+    }
+
+    #[test]
+    fn script_properties_round_trip_with_declared_asset_dependency() {
+        let asset = Guid::new();
+        let scene = scene_with_script(
+            AuthoredScript {
+                asset,
+                properties: BTreeMap::from([
+                    ("speed".into(), ScriptPropertyValue::Number(3.5)),
+                    ("enabled".into(), ScriptPropertyValue::Bool(true)),
+                    ("label".into(), ScriptPropertyValue::String("runner".into())),
+                ]),
+            },
+            vec![asset],
+        );
+        scene.validate().expect("valid script dependency and properties");
+        let json = serde_json::to_string(&scene).expect("serialize scene");
+        let restored = SceneDocument::from_json(&json).expect("load scene");
+        assert_eq!(restored.objects[0].script, scene.objects[0].script);
+    }
+
+    #[test]
+    fn old_scene_json_without_script_fields_remains_loadable() {
+        let scene = SceneDocument::from_json(
+            r#"{"schema_version":1,"resource_guid":"00000000-0000-4000-8000-000000000001","name":"Old scene","objects":[{"object_guid":"00000000-0000-4000-8000-000000000002","name":"Old object"}]}"#,
+        ).expect("old scene stays compatible");
+        assert!(scene.objects[0].script.is_none());
+    }
+
+    #[test]
+    fn rejects_missing_dependency_and_non_finite_script_properties() {
+        let scene = scene_with_script(
+            AuthoredScript {
+                asset: Guid::new(),
+                properties: BTreeMap::from([
+                    ("speed".into(), ScriptPropertyValue::Number(f64::NAN)),
+                    ("".into(), ScriptPropertyValue::Bool(false)),
+                ]),
+            },
+            Vec::new(),
+        );
+        let diagnostics = scene.validate().expect_err("invalid script data is rejected");
+        assert!(diagnostics.iter().any(|item| item.code == "undeclared_script_dependency"));
+        assert!(diagnostics.iter().any(|item| item.code == "invalid_script_property"));
+    }
 }
