@@ -2782,14 +2782,8 @@ fn record_prefab_overrides(before: &SceneObject, after: &mut SceneObject) {
                         before.animation_clip != after.animation_clip,
                         "component.sprite.animation_clip",
                     ),
-                    (
-                        before.size[0] != after.size[0],
-                        "component.sprite.size.x",
-                    ),
-                    (
-                        before.size[1] != after.size[1],
-                        "component.sprite.size.y",
-                    ),
+                    (before.size[0] != after.size[0], "component.sprite.size.x"),
+                    (before.size[1] != after.size[1], "component.sprite.size.y"),
                     (
                         before.anchor[0] != after.anchor[0],
                         "component.sprite.anchor.x",
@@ -2798,22 +2792,10 @@ fn record_prefab_overrides(before: &SceneObject, after: &mut SceneObject) {
                         before.anchor[1] != after.anchor[1],
                         "component.sprite.anchor.y",
                     ),
-                    (
-                        before.tint[0] != after.tint[0],
-                        "component.sprite.tint.r",
-                    ),
-                    (
-                        before.tint[1] != after.tint[1],
-                        "component.sprite.tint.g",
-                    ),
-                    (
-                        before.tint[2] != after.tint[2],
-                        "component.sprite.tint.b",
-                    ),
-                    (
-                        before.tint[3] != after.tint[3],
-                        "component.sprite.tint.a",
-                    ),
+                    (before.tint[0] != after.tint[0], "component.sprite.tint.r"),
+                    (before.tint[1] != after.tint[1], "component.sprite.tint.g"),
+                    (before.tint[2] != after.tint[2], "component.sprite.tint.b"),
+                    (before.tint[3] != after.tint[3], "component.sprite.tint.a"),
                     (
                         before.uv_rect[0] != after.uv_rect[0],
                         "component.sprite.uv_rect.x",
@@ -2891,8 +2873,7 @@ fn merge_prefab_overrides(template: &SceneObject, instance: &SceneObject) -> Sce
     }
     if link.overrides.contains("component.sprite") {
         merged.sprite = instance.sprite;
-    } else if let (Some(sprite), Some(instance_sprite)) =
-        (merged.sprite.as_mut(), instance.sprite)
+    } else if let (Some(sprite), Some(instance_sprite)) = (merged.sprite.as_mut(), instance.sprite)
     {
         for (identifier, field) in [
             ("component.sprite.asset", 0),
