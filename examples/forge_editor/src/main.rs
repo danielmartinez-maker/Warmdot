@@ -2277,7 +2277,10 @@ impl EditorApp {
                                 egui::StrokeKind::Middle,
                             );
                             painter.rect_filled(
-                                object_rect.right_bottom() + Vec2::splat(8.0),
+                                Rect::from_center_size(
+                                    object_rect.right_bottom() + Vec2::splat(8.0),
+                                    Vec2::splat(10.0),
+                                ),
                                 0.0,
                                 Color32::from_rgb(255, 180, 70),
                             );
