@@ -11,7 +11,10 @@ use forge_assets::{AssetCatalog, AssetKind};
 use forge_core::Guid;
 use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
-use forge_scene::{AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject};
+use forge_scene::{
+    AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
+    AuthoredRigidBodyKind, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
+};
 
 struct EditorApp {
     project: Project,
@@ -296,6 +299,233 @@ impl EditorApp {
                 });
             });
         }
+
+        ui.collapsing("Camera", |ui| {
+            let mut enabled = replacement.camera.is_some();
+            if ui.checkbox(&mut enabled, "Enabled").changed() {
+                replacement.camera = enabled.then_some(AuthoredCamera {
+                    zoom: [1.0, 1.0],
+                    pixels_per_world_unit: 32.0,
+                    priority: 0,
+                    active: true,
+                });
+                changed = true;
+            }
+            if let Some(camera) = replacement.camera.as_mut() {
+                ui.horizontal(|ui| {
+                    ui.label("Zoom");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut camera.zoom[0])
+                                .speed(0.05)
+                                .range(0.01..=100.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut camera.zoom[1])
+                                .speed(0.05)
+                                .range(0.01..=100.0),
+                        )
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Pixels / unit");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut camera.pixels_per_world_unit)
+                                .speed(0.5)
+                                .range(0.01..=4096.0),
+                        )
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Priority");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut camera.priority).range(-1000..=1000))
+                        .changed();
+                    changed |= ui.checkbox(&mut camera.active, "Active").changed();
+                });
+            }
+        });
+
+        ui.collapsing("Rigid body", |ui| {
+            let mut enabled = replacement.rigid_body.is_some();
+            if ui.checkbox(&mut enabled, "Enabled").changed() {
+                replacement.rigid_body = enabled.then_some(AuthoredRigidBody::default());
+                changed = true;
+            }
+            if let Some(body) = replacement.rigid_body.as_mut() {
+                ui.horizontal(|ui| {
+                    ui.label("Kind");
+                    if ui
+                        .selectable_label(body.kind == AuthoredRigidBodyKind::Fixed, "Fixed")
+                        .clicked()
+                    {
+                        body.kind = AuthoredRigidBodyKind::Fixed;
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_label(body.kind == AuthoredRigidBodyKind::Dynamic, "Dynamic")
+                        .clicked()
+                    {
+                        body.kind = AuthoredRigidBodyKind::Dynamic;
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_label(
+                            body.kind == AuthoredRigidBodyKind::KinematicPositionBased,
+                            "Kinematic",
+                        )
+                        .clicked()
+                    {
+                        body.kind = AuthoredRigidBodyKind::KinematicPositionBased;
+                        changed = true;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Velocity");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut body.linear_velocity[0]).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut body.linear_velocity[1]).speed(0.1))
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Gravity scale");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut body.gravity_scale).speed(0.05))
+                        .changed();
+                    changed |= ui.checkbox(&mut body.lock_rotation, "Lock rotation").changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Damping");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut body.linear_damping).speed(0.05))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut body.angular_damping).speed(0.05))
+                        .changed();
+                });
+            }
+        });
+
+        ui.collapsing("Collider", |ui| {
+            let mut enabled = replacement.collider.is_some();
+            if ui.checkbox(&mut enabled, "Enabled").changed() {
+                replacement.collider = enabled.then_some(AuthoredCollider {
+                    shape: AuthoredColliderShape::Box {
+                        half_extents: [0.5, 0.5],
+                    },
+                    offset: [0.0, 0.0],
+                    rotation_radians: 0.0,
+                    density: 1.0,
+                    friction: 0.5,
+                    restitution: 0.0,
+                    sensor: false,
+                });
+                changed = true;
+            }
+            if let Some(collider) = replacement.collider.as_mut() {
+                ui.horizontal(|ui| {
+                    ui.label("Shape");
+                    if ui
+                        .selectable_label(
+                            matches!(collider.shape, AuthoredColliderShape::Box { .. }),
+                            "Box",
+                        )
+                        .clicked()
+                    {
+                        collider.shape = AuthoredColliderShape::Box {
+                            half_extents: [0.5, 0.5],
+                        };
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_label(
+                            matches!(collider.shape, AuthoredColliderShape::Circle { .. }),
+                            "Circle",
+                        )
+                        .clicked()
+                    {
+                        collider.shape = AuthoredColliderShape::Circle { radius: 0.5 };
+                        changed = true;
+                    }
+                });
+                match &mut collider.shape {
+                    AuthoredColliderShape::Circle { radius } => {
+                        ui.horizontal(|ui| {
+                            ui.label("Radius");
+                            changed |= ui
+                                .add(egui::DragValue::new(radius).speed(0.05).range(0.01..=10000.0))
+                                .changed();
+                        });
+                    }
+                    AuthoredColliderShape::Box { half_extents } => {
+                        ui.horizontal(|ui| {
+                            ui.label("Half extents");
+                            changed |= ui
+                                .add(
+                                    egui::DragValue::new(&mut half_extents[0])
+                                        .speed(0.05)
+                                        .range(0.01..=10000.0),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add(
+                                    egui::DragValue::new(&mut half_extents[1])
+                                        .speed(0.05)
+                                        .range(0.01..=10000.0),
+                                )
+                                .changed();
+                        });
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Offset");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut collider.offset[0]).speed(0.05))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut collider.offset[1]).speed(0.05))
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Material");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut collider.density)
+                                .speed(0.05)
+                                .range(0.01..=10000.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut collider.friction)
+                                .speed(0.05)
+                                .range(0.0..=10.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut collider.restitution)
+                                .speed(0.05)
+                                .range(0.0..=10.0),
+                        )
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut collider.rotation_radians)
+                                .speed(0.02),
+                        )
+                        .changed();
+                    changed |= ui.checkbox(&mut collider.sensor, "Sensor").changed();
+                });
+            }
+        });
 
         if changed {
             if let Some(asset) = replacement.sprite.and_then(|sprite| sprite.asset) {
