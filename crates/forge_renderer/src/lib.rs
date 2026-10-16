@@ -105,7 +105,9 @@ impl fmt::Display for RendererError {
                 f.write_str("sprite batch exceeds the supported instance count")
             }
             Self::InvalidTexture(message) => write!(f, "invalid sprite texture: {message}"),
-            Self::UnknownTexture(guid) => write!(f, "sprite texture asset {guid} is not registered"),
+            Self::UnknownTexture(guid) => {
+                write!(f, "sprite texture asset {guid} is not registered")
+            }
         }
     }
 }
@@ -510,7 +512,10 @@ impl GpuRenderer {
         camera: Camera,
         clear_color: [f64; 4],
     ) -> Result<RenderOutcome, RendererError> {
-        let instances = sprites.iter().map(|sprite| sprite.instance).collect::<Vec<_>>();
+        let instances = sprites
+            .iter()
+            .map(|sprite| sprite.instance)
+            .collect::<Vec<_>>();
         let texture_assets = sprites
             .iter()
             .map(|sprite| sprite.texture_asset)
@@ -650,14 +655,16 @@ impl GpuRenderer {
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
             let mut start = 0;
             while start < instance_count {
-                let asset = texture_assets
-                    .and_then(|assets| assets.get(start as usize).copied().flatten());
+                let asset =
+                    texture_assets.and_then(|assets| assets.get(start as usize).copied().flatten());
                 let bind_group = match asset {
-                    Some(guid) => &self
-                        .textures
-                        .get(&guid)
-                        .expect("texture assets were validated before rendering")
-                        .bind_group,
+                    Some(guid) => {
+                        &self
+                            .textures
+                            .get(&guid)
+                            .expect("texture assets were validated before rendering")
+                            .bind_group
+                    }
                     None => &self.white_bind_group,
                 };
                 pass.set_bind_group(1, bind_group, &[]);
