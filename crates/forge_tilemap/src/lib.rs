@@ -61,7 +61,11 @@ pub struct TileMapDocument {
     pub schema_version: u32,
     pub resource_guid: Guid,
     pub tileset_guid: Guid,
+    /// Tile cell dimensions in world units.
     pub tile_size: [f32; 2],
+    /// Tile dimensions in pixels within the referenced PNG tileset.
+    #[serde(default = "default_texture_tile_size")]
+    pub texture_tile_size: [u32; 2],
     pub chunks: Vec<TileChunkDocument>,
 }
 
@@ -99,6 +103,7 @@ impl TileMapDocument {
             resource_guid,
             tileset_guid,
             tile_size,
+            texture_tile_size: default_texture_tile_size(),
             chunks: Vec::new(),
         };
         document.validate()?;
@@ -130,6 +135,11 @@ impl TileMapDocument {
         {
             return Err(TileMapError::Invalid(
                 "tile width and height must be finite positive values".into(),
+            ));
+        }
+        if self.texture_tile_size.contains(&0) {
+            return Err(TileMapError::Invalid(
+                "tileset pixel width and height must be positive".into(),
             ));
         }
         let mut chunks = BTreeSet::new();
@@ -360,6 +370,7 @@ impl ChunkedTileMap {
             resource_guid,
             tileset_guid,
             tile_size,
+            texture_tile_size: default_texture_tile_size(),
             chunks,
         };
         document.validate()?;
@@ -446,6 +457,10 @@ impl TileMapHistory {
     pub fn redo_depth(&self) -> usize {
         self.edits.len() - self.cursor
     }
+}
+
+fn default_texture_tile_size() -> [u32; 2] {
+    [16, 16]
 }
 
 fn split_coordinate(coordinate: TileCoord) -> (ChunkCoord, usize) {
