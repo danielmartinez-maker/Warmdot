@@ -462,7 +462,9 @@ impl SpriteSheetDocument {
             .frames
             .iter()
             .find(|frame| frame.name == frame_name)
-            .ok_or_else(|| AssetError::Invalid(format!("sprite frame {frame_name} does not exist")))?;
+            .ok_or_else(|| {
+                AssetError::Invalid(format!("sprite frame {frame_name} does not exist"))
+            })?;
         Ok([
             frame.rect.x as f32 / texture_width as f32,
             frame.rect.y as f32 / texture_height as f32,
