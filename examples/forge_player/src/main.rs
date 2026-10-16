@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     env,
     error::Error,
     fs, io,
@@ -18,6 +19,7 @@ use forge_scene::{
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
 };
 use forge_tilemap::{TileCell, TileMapDocument};
+use serde::Serialize;
 use forge_ui::{UiButtonEvent, UiDrawCommand, UiInputResult, UiKey, UiRuntime};
 use winit::{
     application::ApplicationHandler,
@@ -809,8 +811,359 @@ fn refresh_project_assets(
     Ok(())
 }
 
+
+#[derive(Debug, Serialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "snake_case")]
+enum ValidationSeverity {
+    Error,
+}
+
+#[derive(Debug, Serialize, Eq, Ord, PartialEq, PartialOrd)]
+struct ValidationDiagnostic {
+    severity: ValidationSeverity,
+    code: String,
+    path: String,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct ValidationReport {
+    schema_version: u32,
+    project_name: Option<String>,
+    valid: bool,
+    scene_count: usize,
+    asset_count: usize,
+    diagnostics: Vec<ValidationDiagnostic>,
+}
+
+fn add_validation_diagnostic(
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    code: &str,
+    path: impl Into<String>,
+    message: impl Into<String>,
+) {
+    diagnostics.push(ValidationDiagnostic {
+        severity: ValidationSeverity::Error,
+        code: code.into(),
+        path: path.into(),
+        message: message.into(),
+    });
+}
+
+fn validate_project(path: &Path) -> ValidationReport {
+    let mut report = ValidationReport {
+        schema_version: 1,
+        project_name: None,
+        valid: false,
+        scene_count: 0,
+        asset_count: 0,
+        diagnostics: Vec::new(),
+    };
+    let project = match Project::open(path) {
+        Ok(project) => project,
+        Err(error) => {
+            add_validation_diagnostic(
+                &mut report.diagnostics,
+                "project.invalid",
+                ".forgeproj",
+                error.to_string(),
+            );
+            return finish_validation_report(report);
+        }
+    };
+    report.project_name = Some(project.document().name.clone());
+    let root = project.root().to_path_buf();
+    let assets = match AssetCatalog::open_read_only(&root) {
+        Ok(assets) => {
+            report.asset_count = assets.entries().count();
+            Some(assets)
+        }
+        Err(error) => {
+            add_validation_diagnostic(
+                &mut report.diagnostics,
+                "assets.catalog_invalid",
+                ".forge/asset-index.json",
+                error.to_string(),
+            );
+            None
+        }
+    };
+
+    let mut scenes = BTreeMap::new();
+    let default_scene = project.default_scene().clone();
+    scenes.insert(default_scene.resource_guid, default_scene);
+    report.scene_count = 1;
+    match SceneCatalog::open(&root) {
+        Ok(catalog) => {
+            let scene_guids = catalog.scene_guids().collect::<Vec<_>>();
+            report.scene_count = scene_guids.len();
+            if !scene_guids.contains(&project.document().default_scene_guid) {
+                add_validation_diagnostic(
+                    &mut report.diagnostics,
+                    "project.default_scene_unindexed",
+                    "Scenes",
+                    "default scene is not indexed below the Scenes folder",
+                );
+            }
+            for guid in scene_guids {
+                match catalog.load_scene(guid) {
+                    Ok(scene) => {
+                        scenes.insert(guid, scene);
+                    }
+                    Err(error) => add_validation_diagnostic(
+                        &mut report.diagnostics,
+                        "scene.invalid",
+                        format!("Scenes/{guid}"),
+                        error.to_string(),
+                    ),
+                }
+            }
+        }
+        Err(error) => add_validation_diagnostic(
+            &mut report.diagnostics,
+            "scenes.catalog_invalid",
+            "Scenes",
+            error.to_string(),
+        ),
+    }
+
+    if let Some(assets) = assets.as_ref() {
+        for record in assets.entries() {
+            let result = match record.kind {
+                AssetKind::Png => assets.load_png(record.guid).map(|_| ()),
+                AssetKind::SpriteSheet => assets.load_sprite_sheet(record.guid).map(|_| ()),
+                AssetKind::AnimationClip => assets.load_animation_clip(record.guid).map(|_| ()),
+                AssetKind::Script => assets.load_script(record.guid).and_then(|script| {
+                    forge_scripting::validate_source(&script.source)
+                        .map_err(forge_assets::AssetError::Invalid)
+                }),
+                AssetKind::Prefab => assets.load_prefab(record.guid).map(|_| ()),
+                AssetKind::Audio => assets.load_audio(record.guid).map(|_| ()),
+                AssetKind::Ui => assets.load_ui_source(record.guid).and_then(|source| {
+                    let document = forge_ui::UiDocument::from_json(&source.source)
+                        .map_err(|error| forge_assets::AssetError::Invalid(error.to_string()))?;
+                    let ui = UiRuntime::new(document)
+                        .map_err(|error| forge_assets::AssetError::Invalid(error.to_string()))?;
+                    ui.validate_assets(assets)
+                        .map_err(|error| forge_assets::AssetError::Invalid(error.to_string()))?;
+                    Ok(())
+                }),
+            };
+            if let Err(error) = result {
+                add_validation_diagnostic(
+                    &mut report.diagnostics,
+                    "asset.invalid",
+                    record.relative_path.clone(),
+                    error.to_string(),
+                );
+            }
+        }
+        for scene in scenes.values() {
+            validate_scene_asset_references(scene, assets, &mut report.diagnostics);
+        }
+        validate_project_tilemap(&root, assets, &mut report.diagnostics);
+    }
+
+    finish_validation_report(report)
+}
+
+fn require_asset_kind(
+    assets: &AssetCatalog,
+    guid: Guid,
+    expected: AssetKind,
+    path: &str,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+) {
+    match assets.get(guid) {
+        None => add_validation_diagnostic(
+            diagnostics,
+            "asset.missing_reference",
+            path,
+            format!("asset {guid} is not in the project catalog"),
+        ),
+        Some(record) if record.kind != expected => add_validation_diagnostic(
+            diagnostics,
+            "asset.wrong_kind",
+            path,
+            format!("asset {guid} is {:?}; expected {:?}", record.kind, expected),
+        ),
+        Some(_) => {}
+    }
+}
+
+fn validate_scene_asset_references(
+    scene: &SceneDocument,
+    assets: &AssetCatalog,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+) {
+    let path = format!("Scenes/{}", scene.resource_guid);
+    for dependency in &scene.dependencies {
+        if assets.get(*dependency).is_none() {
+            add_validation_diagnostic(
+                diagnostics,
+                "scene.missing_dependency",
+                &path,
+                format!("scene dependency {dependency} is not in the project asset catalog"),
+            );
+        }
+    }
+    if let Some(guid) = scene.ui_document {
+        require_asset_kind(
+            assets,
+            guid,
+            AssetKind::Ui,
+            &path,
+            diagnostics,
+        );
+    }
+    for object in &scene.objects {
+        let object_path = format!("{path}#{}", object.object_guid);
+        if let Some(sprite) = object.sprite {
+            if let Some(guid) = sprite.asset {
+                require_asset_kind(
+                    assets,
+                    guid,
+                    AssetKind::Png,
+                    &object_path,
+                    diagnostics,
+                );
+            }
+            if let Some(guid) = sprite.animation_clip {
+                require_asset_kind(
+                    assets,
+                    guid,
+                    AssetKind::AnimationClip,
+                    &object_path,
+                    diagnostics,
+                );
+            }
+        }
+        if let Some(instance) = &object.prefab_instance {
+            require_asset_kind(
+                assets,
+                instance.prefab_asset,
+                AssetKind::Prefab,
+                &object_path,
+                diagnostics,
+            );
+        }
+        if let Some(script) = &object.script {
+            require_asset_kind(
+                assets,
+                script.asset,
+                AssetKind::Script,
+                &object_path,
+                diagnostics,
+            );
+        }
+    }
+}
+
+fn validate_project_tilemap(
+    root: &Path,
+    assets: &AssetCatalog,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+) {
+    let relative_path = "Assets/Default.forgetilemap.json";
+    let path = root.join(relative_path);
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return,
+        Err(error) => {
+            add_validation_diagnostic(
+                diagnostics,
+                "tilemap.read_failed",
+                relative_path,
+                error.to_string(),
+            );
+            return;
+        }
+        Ok(_) => {}
+    }
+    let tilemap = match load_project_tilemap(root) {
+        Ok(Some(tilemap)) => tilemap,
+        Ok(None) => return,
+        Err(error) => {
+            add_validation_diagnostic(
+                diagnostics,
+                "tilemap.invalid",
+                relative_path,
+                error.to_string(),
+            );
+            return;
+        }
+    };
+    let texture = match assets.load_png(tilemap.tileset_guid) {
+        Ok(texture) => texture,
+        Err(error) => {
+            add_validation_diagnostic(
+                diagnostics,
+                "tilemap.invalid_tileset",
+                relative_path,
+                error.to_string(),
+            );
+            return;
+        }
+    };
+    let columns = texture.width / tilemap.texture_tile_size[0];
+    let rows = texture.height / tilemap.texture_tile_size[1];
+    let tile_count = columns.checked_mul(rows).filter(|count| *count > 0);
+    let Some(tile_count) = tile_count else {
+        add_validation_diagnostic(
+            diagnostics,
+            "tilemap.invalid_tileset_layout",
+            relative_path,
+            "tileset has no complete tiles at the configured pixel size",
+        );
+        return;
+    };
+    let invalid = tilemap
+        .chunks
+        .iter()
+        .flat_map(|chunk| {
+            chunk.entries.iter().map(move |entry| {
+                (
+                    chunk.coordinate.x,
+                    chunk.coordinate.y,
+                    entry.local_index,
+                    entry.cell.tile_index,
+                )
+            })
+        })
+        .filter(|entry| entry.3 >= tile_count)
+        .min();
+    if let Some((chunk_x, chunk_y, local_index, tile_index)) = invalid {
+        add_validation_diagnostic(
+            diagnostics,
+            "tilemap.tile_index_out_of_range",
+            relative_path,
+            format!(
+                "tile index {tile_index} at chunk ({chunk_x}, {chunk_y}) cell {local_index} exceeds tileset tile count {tile_count}"
+            ),
+        );
+    }
+}
+
+fn finish_validation_report(mut report: ValidationReport) -> ValidationReport {
+    report.diagnostics.sort();
+    report.diagnostics.dedup();
+    report.valid = report.diagnostics.is_empty();
+    report
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
+    if args.first().is_some_and(|argument| argument == "--validate") {
+        if args.len() != 2 {
+            return Err("usage: forge-player --validate <project directory or .forgeproj path>".into());
+        }
+        let report = validate_project(Path::new(&args[1]));
+        let valid = report.valid;
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if !valid {
+            return Err("project validation failed".into());
+        }
+        return Ok(());
+    }
     if args.first().is_some_and(|argument| argument == "--export") {
         if args.len() != 3 {
             return Err(

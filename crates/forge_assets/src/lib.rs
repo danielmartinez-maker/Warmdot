@@ -212,6 +212,142 @@ impl AssetCatalog {
         Ok(catalog)
     }
 
+    /// Opens the asset catalog without creating folders, assigning GUIDs, or writing metadata.
+    /// The checked-in index must exactly match the bounded scan of the project's Assets folder.
+    pub fn open_read_only(project_root: impl AsRef<Path>) -> Result<Self, AssetError> {
+        let project_root = project_root.as_ref().canonicalize()?;
+        let assets_path = project_root.join("Assets");
+        let assets_root = match fs::symlink_metadata(&assets_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(AssetError::Invalid(
+                    "Assets must be a regular project folder".into(),
+                ));
+            }
+            Ok(_) => {
+                let canonical = assets_path.canonicalize()?;
+                if !canonical.starts_with(&project_root) {
+                    return Err(AssetError::Invalid(
+                        "Assets directory resolves outside the project folder".into(),
+                    ));
+                }
+                canonical
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => assets_path,
+            Err(error) => return Err(AssetError::Io(error)),
+        };
+
+        let metadata_root = project_root.join(".forge");
+        let index_path = metadata_root.join("asset-index.json");
+        let mut records = BTreeMap::new();
+        match fs::symlink_metadata(&metadata_root) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(AssetError::Invalid(
+                    "asset metadata directory must be a regular project folder".into(),
+                ));
+            }
+            Ok(_) => {
+                let canonical_metadata = metadata_root.canonicalize()?;
+                if !canonical_metadata.starts_with(&project_root) {
+                    return Err(AssetError::Invalid(
+                        "asset metadata directory resolves outside the project folder".into(),
+                    ));
+                }
+                match fs::symlink_metadata(&index_path) {
+                    Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                        return Err(AssetError::Invalid(
+                            "asset index must be a regular file".into(),
+                        ));
+                    }
+                    Ok(metadata) => {
+                        if metadata.len() > MAX_METADATA_BYTES {
+                            return Err(AssetError::Invalid(format!(
+                                "asset index exceeds the {} MiB loading limit",
+                                MAX_METADATA_BYTES / (1024 * 1024)
+                            )));
+                        }
+                        let bytes = fs::read(&index_path)?;
+                        let document: AssetIndexDocument = serde_json::from_slice(&bytes)?;
+                        if document.schema_version != CURRENT_ASSET_INDEX_SCHEMA {
+                            return Err(AssetError::Invalid(format!(
+                                "asset index schema {} is unsupported; this build reads schema {}",
+                                document.schema_version, CURRENT_ASSET_INDEX_SCHEMA
+                            )));
+                        }
+                        let mut ids = BTreeSet::new();
+                        for record in document.entries {
+                            validate_relative_asset_path(&record.relative_path)?;
+                            if !ids.insert(record.guid)
+                                || records
+                                    .insert(record.relative_path.clone(), record)
+                                    .is_some()
+                            {
+                                return Err(AssetError::Invalid(
+                                    "asset index contains duplicate GUIDs or paths".into(),
+                                ));
+                            }
+                        }
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(AssetError::Io(error)),
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(AssetError::Io(error)),
+        }
+
+        let mut discovered = BTreeMap::<String, (AssetKind, u64, u64)>::new();
+        if assets_root.is_dir() {
+            scan_directory(
+                &project_root,
+                &assets_root,
+                &assets_root,
+                &mut discovered,
+            )?;
+        }
+
+        let mut problems = BTreeSet::new();
+        for (path, (kind, source_bytes, fingerprint)) in &discovered {
+            match records.get(path) {
+                None => {
+                    problems.insert(format!("asset index is missing entry for {path}"));
+                }
+                Some(record) => {
+                    if record.kind != *kind {
+                        problems.insert(format!("asset index kind is stale for {path}"));
+                    }
+                    if record.source_bytes != *source_bytes {
+                        problems.insert(format!("asset index byte count is stale for {path}"));
+                    }
+                    if record.fingerprint != *fingerprint {
+                        problems.insert(format!("asset index fingerprint is stale for {path}"));
+                    }
+                }
+            }
+        }
+        for path in records.keys() {
+            if !discovered.contains_key(path) {
+                problems.insert(format!("indexed asset is missing from Assets: {path}"));
+            }
+        }
+        if !problems.is_empty() {
+            return Err(AssetError::Invalid(
+                problems.into_iter().collect::<Vec<_>>().join("; "),
+            ));
+        }
+
+        let by_guid = records
+            .iter()
+            .map(|(path, record)| (record.guid, path.clone()))
+            .collect();
+        Ok(Self {
+            project_root,
+            assets_root,
+            index_path,
+            records,
+            by_guid,
+        })
+    }
+
     pub fn root(&self) -> &Path {
         &self.project_root
     }

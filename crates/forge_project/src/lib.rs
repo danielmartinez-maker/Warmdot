@@ -430,17 +430,27 @@ impl SceneCatalog {
                 )));
             }
             let bytes = fs::read(&path)?;
-            let declared_guid = serde_json::from_slice::<serde_json::Value>(&bytes)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("resource_guid")
-                        .and_then(serde_json::Value::as_str)
-                        .and_then(|value| value.parse::<Guid>().ok())
-                });
-            let Some(guid) = declared_guid else {
-                continue;
-            };
+            let relative_path = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let source = String::from_utf8(bytes).map_err(|error| {
+                ProjectError::Invalid(format!(
+                    "scene file {relative_path} is not UTF-8: {error}"
+                ))
+            })?;
+            let scene = SceneDocument::from_json(&source).map_err(|diagnostics| {
+                ProjectError::Invalid(format!(
+                    "scene file {relative_path} is invalid: {}",
+                    diagnostics
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ))
+            })?;
+            let guid = scene.resource_guid;
             if paths_by_guid.insert(guid, path).is_some() {
                 return Err(ProjectError::DuplicateSceneGuid(guid));
             }
@@ -450,6 +460,10 @@ impl SceneCatalog {
             scenes_root,
             paths_by_guid,
         })
+    }
+
+    pub fn scene_guids(&self) -> impl Iterator<Item = Guid> + '_ {
+        self.paths_by_guid.keys().copied()
     }
 
     pub fn load_scene(&self, scene_guid: Guid) -> Result<SceneDocument, ProjectError> {

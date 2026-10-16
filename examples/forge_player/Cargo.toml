@@ -16,6 +16,9 @@ forge_ui = { path = "../../crates/forge_ui" }
 forge_project = { path = "../../crates/forge_project" }
 forge_renderer = { path = "../../crates/forge_renderer" }
 forge_runtime = { path = "../../crates/forge_runtime" }
+forge_scripting = { path = "../../crates/forge_scripting" }
+serde.workspace = true
+serde_json.workspace = true
 winit = "=0.30.13"
 
 [lints]

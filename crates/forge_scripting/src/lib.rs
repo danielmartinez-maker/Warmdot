@@ -379,6 +379,24 @@ struct DeferredScriptReload {
     source: String,
 }
 
+/// Compiles Luau source without executing its top-level code.
+pub fn validate_source(source: &str) -> Result<(), String> {
+    if source.len() > MAX_SCRIPT_SOURCE_BYTES {
+        return Err(format!(
+            "script source is {} bytes; maximum supported size is {} bytes",
+            source.len(),
+            MAX_SCRIPT_SOURCE_BYTES
+        ));
+    }
+    let lua = Lua::new();
+    lua.set_memory_limit(MAX_VM_MEMORY_BYTES)
+        .map_err(|error| error.to_string())?;
+    lua.load(source)
+        .into_function()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 pub struct ScriptHost {
     instances: BTreeMap<Guid, ScriptInstance>,
     diagnostics: Vec<ScriptDiagnostic>,
