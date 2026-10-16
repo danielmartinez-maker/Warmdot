@@ -1427,5 +1427,4 @@ mod tests {
         assert!(host.take_audio_commands().is_empty());
         assert_eq!(host.take_diagnostics().len(), 1);
     }
-
 }
