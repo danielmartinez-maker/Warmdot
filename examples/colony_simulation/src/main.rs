@@ -734,3 +734,85 @@ impl Default for App {
         Self { state: None }
     }
 }
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::*;
+
+    #[test]
+    fn cell_mapping_rejects_non_finite_and_out_of_bounds_positions() {
+        let grid = NavigationGrid::new();
+        let cell = GridCell { x: 0, y: 0 };
+        assert_eq!(grid.cell_at(grid.cell_center(cell)), Some(cell));
+        assert_eq!(grid.cell_at([f32::NAN, -15.0]), None);
+        assert_eq!(
+            grid.cell_at([GRID_ORIGIN[0] - 0.01, GRID_ORIGIN[1]]),
+            None
+        );
+        assert_eq!(
+            grid.cell_at([
+                GRID_ORIGIN[0] + GRID_WIDTH as f32 * GRID_CELL_SIZE,
+                GRID_ORIGIN[1]
+            ]),
+            None
+        );
+    }
+
+    #[test]
+    fn pathfinding_avoids_blockers_and_is_deterministic() {
+        let mut grid = NavigationGrid::new();
+        let start = GridCell { x: 5, y: 5 };
+        let goal = GridCell { x: 8, y: 5 };
+        grid.blocked
+            .insert(GridCell { x: 6, y: 5 }, Guid::new());
+        grid.blocked
+            .insert(GridCell { x: 7, y: 5 }, Guid::new());
+
+        let path = grid.find_path(start, goal).expect("route around blockers");
+        assert_eq!(path.len(), 5);
+        assert_eq!(path, grid.find_path(start, goal).expect("same route"));
+        let mut previous = start;
+        for cell in path {
+            assert!(grid.is_walkable(cell));
+            assert_eq!(
+                (previous.x - cell.x).abs() + (previous.y - cell.y).abs(),
+                1,
+                "each route step must move to one neighboring tile"
+            );
+            previous = cell;
+        }
+        assert_eq!(previous, goal);
+    }
+
+    #[test]
+    fn pathfinding_rejects_blocked_and_out_of_bounds_endpoints() {
+        let mut grid = NavigationGrid::new();
+        let open = GridCell { x: 10, y: 8 };
+        let blocked = GridCell { x: 11, y: 8 };
+        let outside = GridCell {
+            x: GRID_WIDTH,
+            y: 8,
+        };
+        grid.blocked.insert(blocked, Guid::new());
+
+        assert_eq!(
+            grid.find_path(open, open),
+            Some(VecDeque::new()),
+            "an open cell can route to itself"
+        );
+        assert!(grid.find_path(blocked, open).is_none());
+        assert!(grid.find_path(open, blocked).is_none());
+        assert!(grid.find_path(blocked, blocked).is_none());
+        assert!(grid.find_path(outside, outside).is_none());
+    }
+
+    #[test]
+    fn home_and_resource_cells_are_protected() {
+        let grid = NavigationGrid::new();
+        assert!(grid.is_protected(grid.home_cell()));
+        for index in 0..RESOURCE_NODES.len() {
+            assert!(grid.is_protected(grid.resource_cell(index)));
+        }
+        assert!(!grid.is_protected(GridCell { x: 1, y: 1 }));
+    }
+}
