@@ -20,6 +20,7 @@ pub struct SpriteInstance {
     pub scale: [f32; 2],
     pub rotation_radians: f32,
     pub tint: [f32; 4],
+    pub uv_rect: [f32; 4],
 }
 
 impl From<ExtractedSprite> for SpriteInstance {
@@ -30,6 +31,7 @@ impl From<ExtractedSprite> for SpriteInstance {
             scale: sprite.scale,
             rotation_radians: sprite.rotation_radians,
             tint: sprite.tint,
+            uv_rect: sprite.uv_rect,
         }
     }
 }
@@ -321,7 +323,8 @@ impl GpuRenderer {
             1 => Float32x2,
             2 => Float32x2,
             3 => Float32,
-            4 => Float32x4
+            4 => Float32x4,
+            5 => Float32x4
         ];
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("forge2d-sprite-pipeline"),

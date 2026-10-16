@@ -450,6 +450,26 @@ impl SpriteSheetDocument {
         }
         Ok(())
     }
+
+    pub fn uv_rect_for_frame(
+        &self,
+        frame_name: &str,
+        texture_width: u32,
+        texture_height: u32,
+    ) -> Result<[f32; 4], AssetError> {
+        self.validate(texture_width, texture_height)?;
+        let frame = self
+            .frames
+            .iter()
+            .find(|frame| frame.name == frame_name)
+            .ok_or_else(|| AssetError::Invalid(format!("sprite frame {frame_name} does not exist")))?;
+        Ok([
+            frame.rect.x as f32 / texture_width as f32,
+            frame.rect.y as f32 / texture_height as f32,
+            frame.rect.width as f32 / texture_width as f32,
+            frame.rect.height as f32 / texture_height as f32,
+        ])
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -544,6 +564,19 @@ impl AnimationPlayer {
         clip.frames
             .get(self.frame_index)
             .map(|frame| frame.sprite_frame.as_str())
+    }
+
+    pub fn current_frame_uv_rect(
+        &self,
+        clip: &AnimationClipDocument,
+        sheet: &SpriteSheetDocument,
+        texture_width: u32,
+        texture_height: u32,
+    ) -> Result<[f32; 4], AssetError> {
+        let frame_name = self
+            .current_frame_name(clip)
+            .ok_or_else(|| AssetError::Invalid("animation clip contains no frames".into()))?;
+        sheet.uv_rect_for_frame(frame_name, texture_width, texture_height)
     }
 
     pub fn advance(

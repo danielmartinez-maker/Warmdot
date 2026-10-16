@@ -18,6 +18,7 @@ struct VertexInput {
     @location(2) scale: vec2<f32>,
     @location(3) rotation_radians: f32,
     @location(4) tint: vec4<f32>,
+    @location(5) uv_rect: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -62,7 +63,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(ndc, 0.0, 1.0);
     output.tint = input.tint;
-    output.uv = corner * 0.5 + vec2<f32>(0.5, 0.5);
+    let unit_uv = corner * 0.5 + vec2<f32>(0.5, 0.5);
+    output.uv = input.uv_rect.xy + unit_uv * input.uv_rect.zw;
     return output;
 }
 

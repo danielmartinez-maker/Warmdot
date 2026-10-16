@@ -191,6 +191,7 @@ fn make_sprites(
                 scale: [1.0, 1.0],
                 rotation_radians: (index % 16) as f32 * 0.0125,
                 tint,
+                uv_rect: [0.0, 0.0, 1.0, 1.0],
             }
         })
         .collect()

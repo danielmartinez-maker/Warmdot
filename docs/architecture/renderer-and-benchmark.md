@@ -1,6 +1,6 @@
 # Renderer and benchmark contract
 
-The graphics slice is a native wgpu surface renderer for the Forge runtime. Runtime sprite and active-camera snapshots are copied into Forge-owned render types and retain their stable asset GUIDs. PNGs decoded by the asset catalog can be uploaded through `GpuRenderer::register_texture`; the shader samples RGBA images with nearest filtering and sprite tint/alpha blending. The renderer preserves authored draw order and issues one instanced draw for each contiguous texture group. An untextured sprite uses an internal white fallback image. Sprite-sheet UV selection and automatic animation-player binding remain outstanding.
+The graphics slice is a native wgpu surface renderer for the Forge runtime. Runtime sprite and active-camera snapshots are copied into Forge-owned render types and retain their stable asset GUIDs. PNGs decoded by the asset catalog can be uploaded through `GpuRenderer::register_texture`; the shader samples RGBA images with nearest filtering and sprite tint/alpha blending. The renderer preserves authored draw order and issues one instanced draw for each contiguous texture group. An untextured sprite uses an internal white fallback image. Sprites carry a validated normalized UV rectangle, and sprite-sheet animation frames can resolve to that same runtime region. Automatic attachment of animation players to scene objects remains outstanding.
 
 ## Benchmark
 

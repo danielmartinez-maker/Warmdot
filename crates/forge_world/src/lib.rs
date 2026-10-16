@@ -34,6 +34,8 @@ pub struct Sprite {
     pub asset: Option<Guid>,
     pub size: [f32; 2],
     pub tint: [f32; 4],
+    /// Normalized image coordinates stored as [u, v, width, height].
+    pub uv_rect: [f32; 4],
     pub layer: i32,
     pub order: i32,
 }
@@ -44,10 +46,21 @@ impl Default for Sprite {
             asset: None,
             size: [1.0, 1.0],
             tint: [1.0; 4],
+            uv_rect: [0.0, 0.0, 1.0, 1.0],
             layer: 0,
             order: 0,
         }
     }
+}
+
+fn valid_uv_rect([u, v, width, height]: [f32; 4]) -> bool {
+    [u, v, width, height].iter().all(|value| value.is_finite())
+        && u >= 0.0
+        && v >= 0.0
+        && width > 0.0
+        && height > 0.0
+        && u + width <= 1.0
+        && v + height <= 1.0
 }
 
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
@@ -153,6 +166,7 @@ pub struct ExtractedSprite {
     pub scale: [f32; 2],
     pub size: [f32; 2],
     pub tint: [f32; 4],
+    pub uv_rect: [f32; 4],
     pub layer: i32,
     pub order: i32,
 }
@@ -179,6 +193,8 @@ pub struct PhysicsObjectSnapshot {
 pub enum WorldError {
     DuplicateGuid(Guid),
     StaleEntity,
+    MissingSprite,
+    InvalidSprite(&'static str),
     InvalidPhysicsConfiguration(&'static str),
 }
 
@@ -189,6 +205,8 @@ impl fmt::Display for WorldError {
                 write!(f, "object GUID {guid} already exists in this world")
             }
             Self::StaleEntity => f.write_str("runtime entity is no longer alive"),
+            Self::MissingSprite => f.write_str("runtime entity has no sprite component"),
+            Self::InvalidSprite(message) => f.write_str(message),
             Self::InvalidPhysicsConfiguration(message) => f.write_str(message),
         }
     }
@@ -257,6 +275,11 @@ impl RuntimeWorld {
         if self.by_guid.contains_key(&object_guid) {
             return Err(WorldError::DuplicateGuid(object_guid));
         }
+        if sprite.is_some_and(|sprite| !valid_uv_rect(sprite.uv_rect)) {
+            return Err(WorldError::InvalidSprite(
+                "sprite UV rectangle must be finite, positive, and inside the image",
+            ));
+        }
         let mut entity = self.ecs.spawn((AuthoredIdentity(object_guid), transform));
         if let Some(sprite) = sprite {
             entity.insert(sprite);
@@ -300,10 +323,36 @@ impl RuntimeWorld {
     }
 
     pub fn set_sprite(&mut self, entity: RuntimeEntity, sprite: Sprite) -> Result<(), WorldError> {
+        if !valid_uv_rect(sprite.uv_rect) {
+            return Err(WorldError::InvalidSprite(
+                "sprite UV rectangle must be finite, positive, and inside the image",
+            ));
+        }
         let Ok(mut current) = self.ecs.get_entity_mut(entity.0) else {
             return Err(WorldError::StaleEntity);
         };
         current.insert(sprite);
+        Ok(())
+    }
+
+    pub fn set_sprite_uv_rect(
+        &mut self,
+        entity: RuntimeEntity,
+        uv_rect: [f32; 4],
+    ) -> Result<(), WorldError> {
+        if !valid_uv_rect(uv_rect) {
+            return Err(WorldError::InvalidSprite(
+                "sprite UV rectangle must be finite, positive, and inside the image",
+            ));
+        }
+        let mut current = self
+            .ecs
+            .get_entity_mut(entity.0)
+            .map_err(|_| WorldError::StaleEntity)?;
+        let Some(mut sprite) = current.get_mut::<Sprite>() else {
+            return Err(WorldError::MissingSprite);
+        };
+        sprite.uv_rect = uv_rect;
         Ok(())
     }
 
@@ -454,6 +503,7 @@ impl RuntimeWorld {
                 scale: transform.scale,
                 size: sprite.size,
                 tint: sprite.tint,
+                uv_rect: sprite.uv_rect,
                 layer: sprite.layer,
                 order: sprite.order,
             })

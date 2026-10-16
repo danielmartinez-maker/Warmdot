@@ -70,6 +70,9 @@ pub struct AuthoredSprite {
     pub size: [f32; 2],
     #[serde(default = "white_tint")]
     pub tint: [f32; 4],
+    /// Normalized image coordinates stored as [u, v, width, height].
+    #[serde(default = "full_uv_rect")]
+    pub uv_rect: [f32; 4],
     #[serde(default)]
     pub layer: i32,
     #[serde(default)]
@@ -261,6 +264,13 @@ impl SceneDocument {
                     .iter()
                     .all(|value| value.is_finite() && *value > 0.0)
                     || !sprite.tint.iter().all(|value| value.is_finite())
+                    || !sprite.uv_rect.iter().all(|value| value.is_finite())
+                    || sprite.uv_rect[0] < 0.0
+                    || sprite.uv_rect[1] < 0.0
+                    || sprite.uv_rect[2] <= 0.0
+                    || sprite.uv_rect[3] <= 0.0
+                    || sprite.uv_rect[0] + sprite.uv_rect[2] > 1.0
+                    || sprite.uv_rect[1] + sprite.uv_rect[3] > 1.0
                 {
                     diagnostics.push(SceneDiagnostic::error(
                         "invalid_sprite",
@@ -358,6 +368,7 @@ impl SceneDocument {
                         asset: sprite.asset,
                         size: sprite.size,
                         tint: sprite.tint,
+                        uv_rect: sprite.uv_rect,
                         layer: sprite.layer,
                         order: sprite.order,
                     }),
@@ -474,6 +485,10 @@ const fn white_tint() -> [f32; 4] {
 
 const fn default_active() -> bool {
     true
+}
+
+const fn full_uv_rect() -> [f32; 4] {
+    [0.0, 0.0, 1.0, 1.0]
 }
 
 const fn default_friction() -> f32 {
