@@ -1366,7 +1366,10 @@ impl EditorApp {
             tilemap.erase_mode = false;
         }
         if tilemap.collision_only_mode {
-            ui.checkbox(&mut tilemap.collision_brush_solid, "Mark brushed cells as solid");
+            ui.checkbox(
+                &mut tilemap.collision_brush_solid,
+                "Mark brushed cells as solid",
+            );
             ui.label("Left drag changes collision on occupied cells. Right drag erases tiles.");
         } else {
             ui.checkbox(&mut tilemap.paint_solid, "New tiles are solid");
