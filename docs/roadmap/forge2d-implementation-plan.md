@@ -35,14 +35,14 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Snapshot commit `f87a9493dfe21cd57d8341fae1a0e1304da4fa42`.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Verified snapshot commit `6865d674ed5474246ae710493ce4fa76e146f4fe` (Windows run `38864521933` passed format, workspace type-check, and tests).
 
 ### Present in the branch
 
 - Rust workspace, GUIDs, fixed-step clock, input actions, validated project/scene data, Bevy ECS abstraction, Rapier physics, wgpu sprite renderer.
 - PNG, sprite-sheet, animation-clip, and bounded Luau script asset loading; fixed-tick sprite animation and scene-script lifecycle.
-- Native scene editor with hierarchy, transforms/components, undo/redo, dirty-state saving, project and multi-scene lifecycle.
-- Sparse 32x32 tilemaps, paint/erase, solidity metadata, bounded history, player sprite/collider import.
+- Native scene editor with hierarchy, transforms/components, undo/redo, dirty-state saving, project and multi-scene lifecycle; project settings can edit the project name and choose the current saved scene as startup scene.
+- Sparse 32x32 tilemaps with paint/erase, bounded undo/redo, connected fill capped at 65,536 cells, and a collision-only brush that preserves tile art and records strokes as one undo entry.
 - Player play/pause/step APIs, standalone project export and launchers.
 - Luau VM isolation with source and per-VM memory caps, a fixed-tick Forge transform/property/input API, runaway callback interruption, per-script diagnostics, transactional compile reloads, and last-good script retention on invalid replacements.
 - Editor inspector script attachment and boolean/number/string property editing; action-arena movement is authored in Luau in both the project asset and playable keyboard sample.
@@ -55,8 +55,10 @@ Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1
 
 - The editor now embeds play/pause/one-tick-step/stop and a script diagnostics console, with live compatible script-property, PNG texture, and Luau source updates. Script-line breakpoints and a full debugger remain absent.
 - The editor preview still needs a player-facing verification pass for input focus loss, pause/step, live changes, and last-good behavior.
+- Project settings currently cover the project name and startup scene; a full settings/import flow is still missing. The basic asset browser lists stable GUIDs and validates resources, but does not copy/import external files.
+- Viewport pan/zoom and selection are present; transform/anchor gizmos, snapping, and selectable/rendered layer controls are still incomplete at this verified snapshot.
 - No game audio runtime, retained game UI, in-game scene transition flow, profiler/logging overlay, or tutorial.
-- No prefab/instance/override authoring model, anchor/gizmo tooling, project settings, full asset browser, or tilemap fill tool.
+- No prefab/instance/override authoring model or parent-transform workflow; no full external asset-import UI; no anchor/rotation/scale gizmos or complete layer workflow.
 - Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; large-map incremental chunk rendering/collision and navigation are not implemented.
 - Samples are early gameplay slices, not the proposal's complete P0 vertical slices.
 
@@ -68,10 +70,10 @@ Work each group as a reviewable vertical slice; update this plan with exact comm
 
 ### P0.1 — Authoring model and editor workflow
 
-- [ ] Complete project settings and a navigable asset browser with import diagnostics and stable asset references.
+- [ ] Finish project settings and the asset import workflow. The project name/default-scene controls and basic stable-GUID browser/resource validation are implemented; importing files from outside the project and richer import diagnostics remain.
 - [ ] Add object hierarchy/parent transforms, reusable components, prefab assets, prefab instances, and stable component/property override identifiers.
-- [ ] Complete viewport pan/zoom, selection, transform/anchor gizmos, snapping, and selectable/rendered layers.
-- [ ] Add tilemap flood-fill/fill and make collision painting an explicit, undoable operation.
+- [ ] Complete viewport selection, transform/anchor gizmos, snapping, and selectable/rendered layers. Pan/zoom and selection are present; the remaining authoring tools are still open.
+- [x] Add bounded connected-region tile fill and an explicit collision-only brush. Each edit is recorded as an undoable stroke; Windows run `38864521933` passed formatting, workspace type-check, and tests on `6865d674`.
 - [ ] Keep all editor changes on the validated command/history model with save markers and error recovery.
 
 **Exit:** A user can create/open/save a project, import a sprite, compose and reuse a prefab, author a scene and tilemap through the editor, undo every operation, and reopen the same data without losing or mutating it.
@@ -161,4 +163,5 @@ Tests cover asset GUID stability/reload, old-scene compatibility and script roun
 - 2026-10-15: Created from the user-provided product proposal after the user authorized independent planning and milestone work. Verified the live branch head and PR #1 through GitHub; current checked head is `2a9ae3e`.
 - 2026-10-15: Read the proposal and compared its full P0/P1/P2 scope against the GitHub README and repository tree. P0 remains incomplete; the README's shorter remaining-work list is not the completion authority.
 - 2026-10-16: Added the native editor runtime preview, play/pause/step/stop controls, GUID-based runtime rendering and selection, a 256-entry Luau diagnostics console, live script-property edits that preserve the running VM, and hot reload for changed Luau/PNG assets. Added tests for compatible and rejected live property updates. Fixed the Action Arena player GUID lookup and nested collider shape JSON after Windows CI caught them. Formatting, type-checking, and workspace tests passed on commit f87a949 (run 38861032595).
-- Next: finish P0.2 script breakpoints, typed events, and state migration; continue P0.1 authoring gaps; then complete P0.4 audio, retained UI, and scene transitions.
+- 2026-10-16: Added a stable-GUID asset browser/resource validator, project name/default-scene settings, and explicit undoable collision-only tile painting; bounded connected fill and viewport pan/zoom are also complete. Windows formatting, workspace type-checking, and workspace tests passed on `6865d674` (run `38864521933`). The asset browser commit `89bd190` passed the same Windows checks on run `38863863484`.
+- Next: finish the remaining P0.1 hierarchy/prefab/import/gizmo workflow, then P0.2 breakpoints/events/state migration, P0.4 audio/UI/transitions, P0.5 shipping/diagnostics/tutorial, and both P0.6 sample exits. Keep the P0 gate closed until the preview and both samples receive player-facing acceptance.
