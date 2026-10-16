@@ -470,7 +470,11 @@ pub struct AnimationClipDocument {
 }
 
 impl AnimationClipDocument {
-    pub fn validate(&self, sheet_guid: Guid, sheet: &SpriteSheetDocument) -> Result<(), AssetError> {
+    pub fn validate(
+        &self,
+        sheet_guid: Guid,
+        sheet: &SpriteSheetDocument,
+    ) -> Result<(), AssetError> {
         if self.schema_version != CURRENT_ANIMATION_CLIP_SCHEMA {
             return Err(AssetError::Invalid(format!(
                 "animation-clip schema {} is unsupported",
