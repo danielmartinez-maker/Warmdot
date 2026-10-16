@@ -117,6 +117,7 @@ struct EditorApp {
     runtime: Option<GameRuntime>,
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
+    preview_actions: [f32; 2],
     script_diagnostics: Vec<ScriptDiagnostic>,
     hidden_layers: BTreeSet<i32>,
     canvas_offset: Vec2,
@@ -163,6 +164,7 @@ impl EditorApp {
             runtime: None,
             preview_last_frame: None,
             preview_tick: 0,
+            preview_actions: [0.0, 0.0],
             script_diagnostics: Vec::new(),
             hidden_layers: BTreeSet::new(),
             canvas_offset: Vec2::ZERO,
@@ -530,6 +532,7 @@ impl EditorApp {
                 self.runtime = Some(runtime);
                 self.preview_last_frame = Some(Instant::now());
                 self.preview_tick = 0;
+                self.preview_actions = [0.0, 0.0];
                 self.script_diagnostics.clear();
                 self.status = "Scene is running in the editor.".into();
             }
@@ -566,6 +569,7 @@ impl EditorApp {
         self.runtime = None;
         self.preview_last_frame = None;
         self.preview_tick = 0;
+        self.preview_actions = [0.0, 0.0];
         self.status = "Runtime stopped; authored scene is unchanged.".into();
     }
 
@@ -588,7 +592,11 @@ impl EditorApp {
         };
         let now = Instant::now();
         let previous = self.preview_last_frame.replace(now).unwrap_or(now);
-        let [move_x, move_y] = ctx.input(|input| {
+        let keyboard_captured = ctx.egui_wants_keyboard_input();
+        let movement = ctx.input(|input| {
+            if !input.raw.focused || keyboard_captured {
+                return [0.0, 0.0];
+            }
             let left = input.key_down(egui::Key::A) || input.key_down(egui::Key::ArrowLeft);
             let right = input.key_down(egui::Key::D) || input.key_down(egui::Key::ArrowRight);
             let down = input.key_down(egui::Key::S) || input.key_down(egui::Key::ArrowDown);
@@ -598,10 +606,15 @@ impl EditorApp {
                 (if up { 1.0 } else { 0.0 }) - (if down { 1.0 } else { 0.0 }),
             ]
         });
-        let at = runtime.simulation_time();
-        runtime.push_action(at, ActionId(1), move_x, move_x != 0.0);
-        runtime.push_action(at, ActionId(2), move_y, move_y != 0.0);
         if !runtime.is_paused() {
+            let at = runtime.simulation_time();
+            if movement[0] != self.preview_actions[0] {
+                runtime.push_action(at, ActionId(1), movement[0], movement[0] != 0.0);
+            }
+            if movement[1] != self.preview_actions[1] {
+                runtime.push_action(at, ActionId(2), movement[1], movement[1] != 0.0);
+            }
+            self.preview_actions = movement;
             let frame = runtime.advance_frame(now.saturating_duration_since(previous));
             self.preview_tick = frame
                 .first_tick
@@ -616,7 +629,6 @@ impl EditorApp {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
     }
-
     fn handle_asset_change(&mut self, change: AssetChange) {
         if self.runtime.is_none() {
             return;
