@@ -73,6 +73,8 @@ struct CanvasSprite {
 
 struct EditorApp {
     project: Project,
+    project_name_draft: String,
+    project_settings_open: bool,
     scene: SceneDocument,
     scene_path: String,
     history: SceneEditHistory,
@@ -96,6 +98,7 @@ struct EditorApp {
 
 impl EditorApp {
     fn new(project: Project) -> Self {
+        let project_name_draft = project.document().name.clone();
         let scene = project.default_scene().clone();
         let scene_path = project.document().default_scene.clone();
         let selected = scene.objects.first().map(|object| object.object_guid);
@@ -112,6 +115,8 @@ impl EditorApp {
         }
         Self {
             project,
+            project_name_draft,
+            project_settings_open: false,
             scene,
             scene_path,
             history: SceneEditHistory::new(256),
@@ -586,6 +591,43 @@ impl EditorApp {
                         }
                     });
             });
+        }
+    }
+
+    fn show_project_settings(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Project Settings");
+        ui.label(format!("Project folder: {}", self.project.root().display()));
+        ui.horizontal(|ui| {
+            ui.label("Name");
+            ui.text_edit_singleline(&mut self.project_name_draft);
+        });
+        if ui.button("Save project name").clicked() {
+            match self.project.update_name(self.project_name_draft.clone()) {
+                Ok(()) => {
+                    self.project_name_draft = self.project.document().name.clone();
+                    self.status = "Project settings saved.".into();
+                }
+                Err(error) => self.status = format!("Project settings failed: {error}"),
+            }
+        }
+        ui.separator();
+        ui.label("Default scene");
+        ui.label(&self.project.document().default_scene);
+        let can_change_default = !self.history.is_dirty();
+        if ui
+            .add_enabled(
+                can_change_default,
+                egui::Button::new("Set current scene as default"),
+            )
+            .clicked()
+        {
+            match self.project.set_default_scene(&self.scene_path) {
+                Ok(()) => self.status = "Default scene updated.".into(),
+                Err(error) => self.status = format!("Default scene update failed: {error}"),
+            }
+        }
+        if !can_change_default {
+            ui.weak("Save the current scene before changing the default scene.");
         }
     }
 
@@ -1942,6 +1984,12 @@ impl eframe::App for EditorApp {
                     ui.selectable_value(&mut self.tilemap_mode, false, "Scene");
                     ui.selectable_value(&mut self.tilemap_mode, true, "Tilemap");
                 });
+                if ui
+                    .add_enabled(can_edit_scene, egui::Button::new("Project Settings"))
+                    .clicked()
+                {
+                    self.project_settings_open = true;
+                }
                 ui.separator();
                 if !self.tilemap_mode {
                     let scene_paths = project_scene_paths(self.project.root());
@@ -2149,6 +2197,13 @@ impl eframe::App for EditorApp {
                 self.show_canvas(ui);
             }
         });
+        if self.project_settings_open {
+            let mut open = self.project_settings_open;
+            egui::Window::new("Project Settings")
+                .open(&mut open)
+                .show(ui, |ui| self.show_project_settings(ui));
+            self.project_settings_open = open;
+        }
     }
 }
 

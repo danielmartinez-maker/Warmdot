@@ -274,6 +274,39 @@ impl Project {
         Ok(())
     }
 
+    pub fn update_name(&mut self, name: impl Into<String>) -> Result<(), ProjectError> {
+        let name = name.into();
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(ProjectError::Invalid(
+                "project name must not be empty".into(),
+            ));
+        }
+        let mut document = self.document.clone();
+        document.name = name.to_owned();
+        self.write_document(document)
+    }
+
+    /// Makes an existing, validated project scene the startup scene.
+    pub fn set_default_scene(&mut self, relative_path: &str) -> Result<(), ProjectError> {
+        let scene = self.load_scene(relative_path)?;
+        let mut document = self.document.clone();
+        document.default_scene = relative_path.to_owned();
+        document.default_scene_guid = scene.resource_guid;
+        self.write_document(document)?;
+        self.default_scene = scene;
+        Ok(())
+    }
+
+    fn write_document(&mut self, document: ProjectDocument) -> Result<(), ProjectError> {
+        fs::write(
+            &self.manifest_path,
+            serde_json::to_vec_pretty(&document)?,
+        )?;
+        self.document = document;
+        Ok(())
+    }
+
     pub fn save(&self) -> Result<(), ProjectError> {
         fs::write(
             &self.manifest_path,
