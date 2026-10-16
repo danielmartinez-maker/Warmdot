@@ -25,11 +25,14 @@ The object API currently provides:
 - self:get(name) and self:set(name, value) for values declared on the scene component. Values must keep their authored type.
 - self:get_position(), self:set_position(x, y), and self:translate(dx, dy) for the object's 2D position.
 - Forge.Input.axis(action_id) and Forge.Input.is_pressed(action_id) for actions currently active on this tick. IDs are the numeric ActionId values configured by the project's input map.
+- Forge.Events.emit(name, value?) to queue a scalar event for the next fixed tick. Payloads can be nil, boolean, integer/number, or UTF-8 string. Names must contain non-whitespace text and be at most 128 bytes; string payloads are capped at 16 KiB. Each callback can emit up to 64 events and the shared queue holds up to 1,024. The function returns false for an invalid payload/name or when a bound is reached.
+
+A script can receive broadcasts with on_event(self, name, value, sender_guid, emitted_tick). Events are delivered to active scripts in stable object-GUID order, then emission order. Events emitted during delivery are deferred to a later fixed tick. Events staged by a callback are committed only when that callback succeeds and its transform applies.
 
 Each component gets its own Luau VM. Forge uses the safe Luau standard-library subset and Luau sandbox mode. File, network, and wall-clock APIs are not exposed. Script sources are capped at 1 MiB; each VM is capped at 4 MiB; scenes can attach up to 64 scripts; and each callback has a bounded interrupt-checkpoint budget. A script error disables only that component and adds a diagnostic. The standalone player writes diagnostics to its console.
 
-The player polls project assets while running. A syntactically invalid replacement script leaves the last working script installed and reports a diagnostic. A successful replacement creates a fresh script instance on the next fixed tick.
+The player polls project assets while running. A syntactically invalid replacement script leaves the last working script installed and reports a diagnostic. A successful replacement creates a fresh VM on the next fixed tick, copying same-name scalar state fields only when their types match and preserving whether on_start already ran. Removed or incompatible scalar fields reset with a diagnostic; a migration failure leaves the last-good VM installed.
 
-The current slice does not include breakpoints, named input action bindings, a debugger UI, or an editor play session. The existing editor inspector can select script assets and edit exposed properties; runtime diagnostics are available in the player console.
+Line breakpoints, named input action bindings, and a debugger UI are not implemented yet. The editor preview supports play, pause, single-step, and stop; the inspector can select script assets and edit exposed properties. Runtime diagnostics are available in the player console and editor preview.
 
 Forge.d.luau contains editor-facing API declarations. examples/playable_action_arena/Assets/PlayerController.luau demonstrates movement from numeric input actions, and examples/action_arena/Assets/PlayerController.luau is loaded through the project asset catalog.
