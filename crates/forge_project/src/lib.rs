@@ -213,6 +213,68 @@ impl Project {
         Ok(())
     }
 
+    /// Loads any scene resource whose path remains inside the project root.
+    pub fn load_scene(&self, relative_path: &str) -> Result<SceneDocument, ProjectError> {
+        let relative_scene = Path::new(relative_path);
+        validate_scene_relative_path(relative_scene)?;
+        let scene_path = self.root.join(relative_scene);
+        let metadata = fs::symlink_metadata(&scene_path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(ProjectError::Invalid(
+                "scene file must not be a symbolic link".into(),
+            ));
+        }
+        let canonical_scene = scene_path.canonicalize()?;
+        if !canonical_scene.starts_with(&self.root) {
+            return Err(ProjectError::Invalid(
+                "scene resolves outside the project folder".into(),
+            ));
+        }
+        SceneDocument::from_json(&fs::read_to_string(canonical_scene)?)
+            .map_err(ProjectError::Scene)
+    }
+
+    /// Saves a scene resource to a project-relative path, creating its parent folders as needed.
+    pub fn save_scene(
+        &self,
+        relative_path: &str,
+        scene: &SceneDocument,
+    ) -> Result<(), ProjectError> {
+        scene.validate().map_err(ProjectError::Scene)?;
+        let relative_scene = Path::new(relative_path);
+        validate_scene_relative_path(relative_scene)?;
+        let scene_path = self.root.join(relative_scene);
+        let parent = scene_path
+            .parent()
+            .ok_or_else(|| ProjectError::Invalid("scene path has no parent directory".into()))?;
+        fs::create_dir_all(parent)?;
+        let canonical_parent = parent.canonicalize()?;
+        if !canonical_parent.starts_with(&self.root) {
+            return Err(ProjectError::Invalid(
+                "scene directory resolves outside the project folder".into(),
+            ));
+        }
+        match fs::symlink_metadata(&scene_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ProjectError::Invalid(
+                    "scene file must not be a symbolic link".into(),
+                ));
+            }
+            Ok(_) => {
+                let canonical_scene = scene_path.canonicalize()?;
+                if !canonical_scene.starts_with(&self.root) {
+                    return Err(ProjectError::Invalid(
+                        "scene resolves outside the project folder".into(),
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ProjectError::Io(error)),
+        }
+        fs::write(scene_path, scene.to_canonical_json()?)?;
+        Ok(())
+    }
+
     pub fn save(&self) -> Result<(), ProjectError> {
         fs::write(
             &self.manifest_path,
@@ -232,4 +294,17 @@ impl Project {
     pub fn default_scene(&self) -> &SceneDocument {
         &self.default_scene
     }
+}
+
+
+fn validate_scene_relative_path(path: &Path) -> Result<(), ProjectError> {
+    if path.as_os_str().is_empty()
+        || path.is_absolute()
+        || path.components().any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err(ProjectError::Invalid(
+            "scene path must be a normalized project-relative path".into(),
+        ));
+    }
+    Ok(())
 }
