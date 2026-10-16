@@ -952,14 +952,14 @@ impl EditorApp {
                 let runtime =
                     GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets)
                         .map_err(|error| {
-                            (
-                                "editor.scene_transition_failed",
-                                format!(
-                                    "Scene transition to {} could not prepare: {error}",
-                                    scene.resource_guid
-                                ),
-                            )
-                        })?;
+                        (
+                            "editor.scene_transition_failed",
+                            format!(
+                                "Scene transition to {} could not prepare: {error}",
+                                scene.resource_guid
+                            ),
+                        )
+                    })?;
                 Ok::<_, (&str, String)>((scene, preview_ui, runtime))
             })();
             match attempt {
@@ -1954,7 +1954,9 @@ impl EditorApp {
             self.last_asset_scan = None;
             match self.history.replace_object(&mut self.scene, replacement) {
                 Ok(()) => self.status.clear(),
-                Err(error) => self.set_error_status("editor.object_replace_failed", error.to_string()),
+                Err(error) => {
+                    self.set_error_status("editor.object_replace_failed", error.to_string())
+                }
             }
         }
     }
@@ -3828,7 +3830,9 @@ impl eframe::App for EditorApp {
                     } else {
                         match self.history.undo(&mut self.scene) {
                             Ok(_) => self.status.clear(),
-                            Err(error) => self.set_error_status("editor.undo_failed", error.to_string()),
+                            Err(error) => {
+                                self.set_error_status("editor.undo_failed", error.to_string())
+                            }
                         }
                     }
                 }
@@ -3851,7 +3855,9 @@ impl eframe::App for EditorApp {
                     } else {
                         match self.history.redo(&mut self.scene) {
                             Ok(_) => self.status.clear(),
-                            Err(error) => self.set_error_status("editor.redo_failed", error.to_string()),
+                            Err(error) => {
+                                self.set_error_status("editor.redo_failed", error.to_string())
+                            }
                         }
                     }
                 }
