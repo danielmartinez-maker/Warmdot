@@ -57,7 +57,7 @@
           "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030011",
           "widget": {
             "type": "text",
-            "text": "ACTION ARENA - HP 3/3"
+            "text": "MOVE WASD | FIRE F / CLICK"
           },
           "layout": {
             "preferred_size": [
