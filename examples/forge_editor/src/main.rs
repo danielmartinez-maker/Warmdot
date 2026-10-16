@@ -1701,7 +1701,9 @@ impl EditorApp {
             self.move_gizmo_drag = target.map(|(object_guid, translation)| {
                 self.selected = Some(object_guid);
                 self.selected_asset = None;
-                let pointer_start = response.interact_pointer_pos().unwrap_or(origin_before_drag);
+                let pointer_start = response
+                    .interact_pointer_pos()
+                    .unwrap_or(origin_before_drag);
                 MoveGizmoDrag {
                     object_guid,
                     pointer_start,
