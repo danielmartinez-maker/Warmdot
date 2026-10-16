@@ -17,13 +17,13 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
 - The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
 - The animation player advances clip frames using fixed simulation delta and handles looping and completion without per-frame allocation; scene sprites can reference animation-clip assets, which the runtime validates, attaches, and applies as normalized sprite-sheet UV regions.
-- Luau scripts load as scene components with typed exposed properties, per-component memory limits, fixed-tick input/transform APIs, per-script error isolation, and last-good hot reload in the standalone player. The playable action-arena sample uses a Luau controller.
+- Luau scripts load as scene components with exposed properties, per-component memory limits, fixed-tick input/transform APIs, per-script error isolation, and last-good hot reload in the standalone player and editor preview. The playable action-arena sample uses a Luau controller.
 - Tilemaps use sparse 32x32 chunks with correct negative-coordinate mapping, deterministic serialization, batched paint edits, and bounded undo/redo history.
 - Scene authoring commands add, delete, and replace objects through a bounded undo/redo history with a saved-state marker.
 
 ## Remaining P0 work
 
-The native editor supports scene editing plus a tilemap workspace with PNG tileset selection, tile painting and erasing, solid-cell metadata, bounded undo/redo, and a saved-state marker. Tilemaps save to `Assets/Default.forgetilemap.json`; the player loads that map as textured runtime tiles and creates fixed colliders for solid cells. This branch is still short of the complete P0 alpha: a full asset browser, Luau scripting, audio, retained game UI, in-game scene transitions, chunk-aware tile rendering/collision optimization, and deeper colony-simulation features remain. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+The native editor supports scene and tilemap authoring, undo/redo, scene saving, and an embedded runtime preview with Play, Pause/Resume, one-tick Step, and Stop. During play it keeps GUID-based selection, shows script diagnostics, edits exposed properties live, reloads PNG textures, and transactionally recompiles changed Luau while retaining the last good VM after a compile failure. Remaining P0 work includes project settings, a full asset browser, prefab instances and overrides, viewport pan/zoom/gizmos, tilemap flood fill and explicit collision painting, script breakpoints/events/state migration, audio, retained game UI, scene transitions, profiler/logging, tutorial, and full action/colony vertical slices. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
@@ -41,7 +41,7 @@ The native editor supports scene editing plus a tilemap workspace with PNG tiles
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `examples/forge_player`: opens a `.forgeproj`, runs its default scene, authored animations, and saved tilemap with solid-cell colliders, refreshes project PNGs, and exports a portable player/project folder with a launcher
-- `examples/forge_editor`: creates or opens projects, creates and switches among Scenes resources, edits tilemaps, previews sprites and PNG tilesets, and saves with undo/redo
+- `examples/forge_editor`: creates or opens projects, authors scenes and tilemaps, provides a runtime preview with live script/PNG/property updates, and saves with undo/redo
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
@@ -67,4 +67,4 @@ Use stable Rust. On Windows, install the Visual C++ Build Tools workload and Win
     cargo run -p colony-simulation
     cargo run --release -p renderer-benchmark -- --sprites 10000 --warmup 120 --samples 600
 
-The Windows GitHub Actions workflow runs formatting and a workspace type-check. It does not run a test suite.
+The Windows GitHub Actions workflow checks formatting, type-checks the workspace, and runs all workspace tests.

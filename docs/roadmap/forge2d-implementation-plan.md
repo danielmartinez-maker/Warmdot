@@ -35,7 +35,7 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Snapshot commit `fc13eda7d084fe27a6522acf302cd52cf93bb24c`.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Snapshot commit `f87a9493dfe21cd57d8341fae1a0e1304da4fa42`.
 
 ### Present in the branch
 
@@ -46,14 +46,15 @@ Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1
 - Player play/pause/step APIs, standalone project export and launchers.
 - Luau VM isolation with source and per-VM memory caps, a fixed-tick Forge transform/property/input API, runaway callback interruption, per-script diagnostics, transactional compile reloads, and last-good script retention on invalid replacements.
 - Editor inspector script attachment and boolean/number/string property editing; action-arena movement is authored in Luau in both the project asset and playable keyboard sample.
+- Embedded editor runtime preview with Play/Pause/Resume/Step/Stop, GUID-based runtime rendering and selection, a capped script diagnostics console, live compatible script-property updates, PNG texture refresh, and transactional Luau hot reload.
 - Windows workflow checks formatting, type-checking, and workspace tests.
 - Playable keyboard/mouse action arena, colony simulation sample, renderer benchmark.
 - GitHub Actions checks Windows formatting, workspace type-checking, and workspace tests.
 
 ### Confirmed gaps or partial coverage
 
-- Luau editor diagnostics console, script breakpoints, and debugger controls are not implemented; standalone player errors currently go to its console.
-- The editor still has no embedded play/pause/step session or live property/asset/script update path.
+- The editor now embeds play/pause/one-tick-step/stop and a script diagnostics console, with live compatible script-property, PNG texture, and Luau source updates. Script-line breakpoints and a full debugger remain absent.
+- The editor preview still needs a player-facing verification pass for input focus loss, pause/step, live changes, and last-good behavior.
 - No game audio runtime, retained game UI, in-game scene transition flow, profiler/logging overlay, or tutorial.
 - No prefab/instance/override authoring model, anchor/gizmo tooling, project settings, full asset browser, or tilemap fill tool.
 - Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; large-map incremental chunk rendering/collision and navigation are not implemented.
@@ -81,18 +82,20 @@ Work each group as a reviewable vertical slice; update this plan with exact comm
 - [x] Add a sandboxed Luau host with on_start/on_fixed_update, authored boolean/number/string properties, numeric input actions, and position/translation APIs.
 - [x] Bound source size (1 MiB), VM memory (4 MiB), scene instances (64), and callback interrupt checkpoints (20,000); isolate errors with source path, object GUID, and tick.
 - [x] Support transactional source compilation reloads and retain the last working VM when replacement compilation fails.
-- [ ] Complete editor diagnostics console, script breakpoints/step controls, typed events, and compatible property/state migration behavior.
+- [x] Add an editor runtime script diagnostics console and fixed-tick pause/step controls.
+- [ ] Add script-line breakpoints, typed events, and compatible state migration behavior.
 
-Tests added for asset GUID stability/reload, old-scene compatibility and script round-tripping, property/input updates, runaway isolation, and last-good source reload. A Windows workspace-test run passed at commit 8253606; newer sample/editor integration changes are still awaiting full CI.
+Tests cover asset GUID stability/reload, old-scene compatibility and script round-tripping, property/input updates, runaway isolation, last-good source reload, and live property updates without VM recompilation. Windows formatting, workspace type-checking, and workspace tests passed on commit f87a949 (run 38861032595).
 
 **Exit:** The action sample's player behavior is authored in Luau, edits are reflected safely in play mode when compatible, and invalid/runaway scripts report diagnostics without terminating the editor or last-good game state.
 
 ### P0.3 — Play-in-editor and live updates
 
-- [ ] Embed a runtime preview in the editor with play, pause, one-step, and stop/reset controls.
-- [ ] Keep editor selection available while playing and map authoring GUIDs to runtime entities.
-- [ ] Apply supported property, asset, and script updates transactionally; reject incompatible changes with actionable last-good diagnostics.
-- [ ] Define input focus and runtime state reset behavior on pause, stop, reload, and scene changes.
+- [x] Embed a runtime preview in the editor with play, pause, one-step, and stop/reset controls.
+- [x] Keep editor selection available while playing and resolve rendered runtime sprites by stable authored GUID.
+- [x] Apply compatible script-property, PNG texture, and Luau source updates transactionally; incompatible property/source changes retain their prior working value/VM and report diagnostics.
+- [x] Define pause accumulator reset, stop/discard behavior, and prevent scene switching during a preview.
+- [ ] Verify input focus loss, pause/step, live updates, and last-good behavior in a player-facing editor session.
 
 **Exit:** A project can run inside the editor; compatible property/asset/script changes visibly update the live game, while rejected updates retain the last-good state.
 
@@ -157,5 +160,5 @@ Tests added for asset GUID stability/reload, old-scene compatibility and script 
 
 - 2026-10-15: Created from the user-provided product proposal after the user authorized independent planning and milestone work. Verified the live branch head and PR #1 through GitHub; current checked head is `2a9ae3e`.
 - 2026-10-15: Read the proposal and compared its full P0/P1/P2 scope against the GitHub README and repository tree. P0 remains incomplete; the README's shorter remaining-work list is not the completion authority.
-- 2026-10-15: Implemented P0.2's bounded Luau asset/runtime path, authored scene properties, editor inspector, standalone-player hot reload/diagnostics, and Luau-driven action samples. Windows tests passed on commit 8253606; CI for the later sample integration is pending. P0.2 still lacks editor diagnostics/debugging and state-contract migration.
-- Next: close the remaining P0.2 diagnostics/debugger contract, then implement editor play/pause/step and live updates before audio, transitions, UI, and the P0 exit gate.
+- 2026-10-16: Added the native editor runtime preview, play/pause/step/stop controls, GUID-based runtime rendering and selection, a 256-entry Luau diagnostics console, live script-property edits that preserve the running VM, and hot reload for changed Luau/PNG assets. Added tests for compatible and rejected live property updates. Fixed the Action Arena player GUID lookup and nested collider shape JSON after Windows CI caught them. Formatting, type-checking, and workspace tests passed on commit f87a949 (run 38861032595).
+- Next: finish P0.2 script breakpoints, typed events, and state migration; continue P0.1 authoring gaps; then complete P0.4 audio, retained UI, and scene transitions.
