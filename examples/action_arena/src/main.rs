@@ -58,6 +58,7 @@ mod tests {
     use std::time::Duration;
 
     use forge_core::ActionId;
+    use forge_runtime::ScriptAudioCommand;
 
     use super::*;
 
@@ -84,7 +85,9 @@ mod tests {
             .expect("player transform")
             .translation[0];
 
+        let _ = runtime.take_audio_commands();
         runtime.push_action(Duration::ZERO, ActionId(1), 1.0, true);
+        runtime.push_action(Duration::ZERO, ActionId(3), 1.0, true);
         runtime.advance_frame(Duration::from_millis(50));
 
         let after = runtime
@@ -94,5 +97,10 @@ mod tests {
             .translation[0];
         assert!(after > before, "Luau controller should move the player");
         assert!(runtime.take_script_diagnostics().is_empty());
+        let audio_commands = runtime.take_audio_commands();
+        assert!(audio_commands.iter().any(|command| matches!(
+            command,
+            ScriptAudioCommand::PlayEffect { bus, .. } if bus == "sfx"
+        )));
     }
 }
