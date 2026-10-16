@@ -158,6 +158,7 @@ impl EditorApp {
         let object = SceneObject {
             object_guid: Guid::new(),
             name: format!("Sprite {}", self.scene.objects.len() + 1),
+            parent_guid: None,
             prefab_instance: None,
             transform: AuthoredTransform::default(),
             sprite: Some(AuthoredSprite {

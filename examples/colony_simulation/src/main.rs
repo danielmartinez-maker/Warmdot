@@ -126,6 +126,7 @@ fn make_scene() -> (SceneDocument, Vec<WorkerState>) {
     objects.push(SceneObject {
         object_guid: Guid::new(),
         name: "Camera".into(),
+        parent_guid: None,
         prefab_instance: None,
         transform: AuthoredTransform::default(),
         sprite: None,
@@ -186,6 +187,7 @@ fn scene_sprite(
     SceneObject {
         object_guid: Guid::new(),
         name: name.into(),
+        parent_guid: None,
         prefab_instance: None,
         transform: AuthoredTransform {
             translation: position,

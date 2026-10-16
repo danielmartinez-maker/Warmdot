@@ -49,6 +49,8 @@ pub struct SceneObject {
     pub object_guid: Guid,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_guid: Option<Guid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prefab_instance: Option<PrefabInstance>,
     #[serde(default)]
     pub transform: AuthoredTransform,
@@ -284,9 +286,11 @@ impl SceneDocument {
         }
 
         let mut objects = BTreeSet::new();
+        let mut hierarchy_valid = true;
         for object in &self.objects {
             let guid = object.object_guid;
             if !objects.insert(guid) {
+                hierarchy_valid = false;
                 diagnostics.push(SceneDiagnostic::error(
                     "duplicate_object_guid",
                     format!("object GUID {guid} appears more than once"),
@@ -458,11 +462,104 @@ impl SceneDocument {
             }
         }
 
+        let mut parent_by_guid = BTreeMap::new();
+        for object in &self.objects {
+            let Some(parent_guid) = object.parent_guid else {
+                continue;
+            };
+            if parent_guid == object.object_guid {
+                hierarchy_valid = false;
+                diagnostics.push(SceneDiagnostic::error(
+                    "object_is_own_parent",
+                    "an object cannot be parented to itself",
+                    Some(object.object_guid),
+                ));
+            } else if !objects.contains(&parent_guid) {
+                hierarchy_valid = false;
+                diagnostics.push(SceneDiagnostic::error(
+                    "missing_parent_object",
+                    format!("parent object {parent_guid} does not exist in this scene"),
+                    Some(object.object_guid),
+                ));
+            } else {
+                parent_by_guid.insert(object.object_guid, parent_guid);
+            }
+        }
+
+        let mut reported_cycle_nodes = BTreeSet::new();
+        for object in &self.objects {
+            let mut visited = BTreeSet::new();
+            let mut cursor = Some(object.object_guid);
+            while let Some(current) = cursor {
+                if !visited.insert(current) {
+                    hierarchy_valid = false;
+                    if reported_cycle_nodes.insert(current) {
+                        diagnostics.push(SceneDiagnostic::error(
+                            "scene_hierarchy_cycle",
+                            "object parenting must not create a cycle",
+                            Some(current),
+                        ));
+                    }
+                    break;
+                }
+                cursor = parent_by_guid.get(&current).copied();
+            }
+        }
+
+        if hierarchy_valid {
+            for object in &self.objects {
+                if object.parent_guid.is_some() && self.world_transform(object.object_guid).is_none()
+                {
+                    hierarchy_valid = false;
+                    diagnostics.push(SceneDiagnostic::error(
+                        "unsupported_parent_transform",
+                        "parent transform composition would introduce shear; use uniform parent scale or align child rotation",
+                        Some(object.object_guid),
+                    ));
+                }
+            }
+        }
+
         if diagnostics.is_empty() {
             Ok(())
         } else {
             Err(diagnostics)
         }
+    }
+
+    /// Resolves an authored local transform through its parent chain.
+    pub fn world_transform(&self, object_guid: Guid) -> Option<AuthoredTransform> {
+        let mut resolved = BTreeMap::new();
+        let mut visiting = BTreeSet::new();
+        self.resolve_world_transform(object_guid, &mut resolved, &mut visiting)
+    }
+
+    fn resolve_world_transform(
+        &self,
+        object_guid: Guid,
+        resolved: &mut BTreeMap<Guid, AuthoredTransform>,
+        visiting: &mut BTreeSet<Guid>,
+    ) -> Option<AuthoredTransform> {
+        if let Some(transform) = resolved.get(&object_guid) {
+            return Some(*transform);
+        }
+        let object = self
+            .objects
+            .iter()
+            .find(|candidate| candidate.object_guid == object_guid)?;
+        if !visiting.insert(object_guid) {
+            return None;
+        }
+        let transform = match object.parent_guid {
+            Some(parent_guid) => {
+                let parent = self.resolve_world_transform(parent_guid, resolved, visiting)?;
+                compose_authored_transform(parent, object.transform)?
+            }
+            None => object.transform,
+        };
+        visiting.remove(&object_guid);
+        resolved.insert(object_guid, transform);
+        Some(transform)
     }
 
     pub fn instantiate(&self) -> Result<RuntimeWorld, Vec<SceneDiagnostic>> {
@@ -543,6 +640,62 @@ impl SceneDocument {
         canonical.objects.sort_by_key(|object| object.object_guid);
         serde_json::to_string_pretty(&canonical)
     }
+}
+
+fn compose_authored_transform(
+    parent: AuthoredTransform,
+    local: AuthoredTransform,
+) -> Option<AuthoredTransform> {
+    let (parent_sin, parent_cos) = parent.rotation_radians.sin_cos();
+    let (local_sin, local_cos) = local.rotation_radians.sin_cos();
+    let parent_x = [parent_cos * parent.scale[0], parent_sin * parent.scale[0]];
+    let parent_y = [-parent_sin * parent.scale[1], parent_cos * parent.scale[1]];
+    let local_x = [local_cos * local.scale[0], local_sin * local.scale[0]];
+    let local_y = [-local_sin * local.scale[1], local_cos * local.scale[1]];
+    let world_x = [
+        parent_x[0] * local_x[0] + parent_y[0] * local_x[1],
+        parent_x[1] * local_x[0] + parent_y[1] * local_x[1],
+    ];
+    let world_y = [
+        parent_x[0] * local_y[0] + parent_y[0] * local_y[1],
+        parent_x[1] * local_y[0] + parent_y[1] * local_y[1],
+    ];
+    let x_length = world_x[0].hypot(world_x[1]);
+    let y_length = world_y[0].hypot(world_y[1]);
+    let dot = world_x[0] * world_y[0] + world_x[1] * world_y[1];
+    if x_length > f32::EPSILON
+        && y_length > f32::EPSILON
+        && dot.abs() > 1.0e-4 * x_length * y_length
+    {
+        return None;
+    }
+    let determinant = world_x[0] * world_y[1] - world_x[1] * world_y[0];
+    let (rotation_radians, scale) = if x_length > f32::EPSILON {
+        (
+            world_x[1].atan2(world_x[0]),
+            [x_length, determinant / x_length],
+        )
+    } else if y_length > f32::EPSILON {
+        (
+            world_y[1].atan2(world_y[0]) - std::f32::consts::FRAC_PI_2,
+            [0.0, y_length],
+        )
+    } else {
+        (parent.rotation_radians + local.rotation_radians, [0.0, 0.0])
+    };
+    let translation = [
+        parent.translation[0] + parent_x[0] * local.translation[0] + parent_y[0] * local.translation[1],
+        parent.translation[1] + parent_x[1] * local.translation[0] + parent_y[1] * local.translation[1],
+    ];
+    let world = AuthoredTransform {
+        translation,
+        rotation_radians,
+        scale,
+    };
+    (world.translation.iter().all(|value| value.is_finite())
+        && world.scale.iter().all(|value| value.is_finite())
+        && world.rotation_radians.is_finite())
+    .then_some(world)
 }
 
 impl PrefabDocument {
@@ -680,6 +833,8 @@ mod script_authoring_tests {
             objects: vec![SceneObject {
                 object_guid: Guid::new(),
                 name: "Scripted object".into(),
+                parent_guid: None,
+                prefab_instance: None,
                 transform: AuthoredTransform::default(),
                 sprite: None,
                 camera: None,

@@ -274,6 +274,7 @@ fn append_tilemap_to_scene(
         scene.objects.push(SceneObject {
             object_guid,
             name: format!("Tile ({}, {})", coordinate.x, coordinate.y),
+            parent_guid: None,
             prefab_instance: None,
             transform,
             sprite: Some(sprite),

@@ -112,6 +112,7 @@ fn make_scene() -> SceneDocument {
     objects.push(SceneObject {
         object_guid: PLAYER_GUID,
         name: "Player".into(),
+        parent_guid: None,
         prefab_instance: None,
         transform: AuthoredTransform {
             translation: [0.0, 13.0],
@@ -135,6 +136,7 @@ fn make_scene() -> SceneDocument {
     objects.push(SceneObject {
         object_guid: Guid::new(),
         name: "Camera".into(),
+        parent_guid: None,
         prefab_instance: None,
         transform: AuthoredTransform::default(),
         sprite: None,
@@ -155,6 +157,7 @@ fn make_scene() -> SceneDocument {
         objects.push(SceneObject {
             object_guid: Guid::new(),
             name: format!("Star {index}"),
+            parent_guid: None,
             prefab_instance: None,
             transform: AuthoredTransform {
                 translation: [x, y],
