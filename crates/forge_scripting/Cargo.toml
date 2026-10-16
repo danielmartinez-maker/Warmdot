@@ -9,6 +9,7 @@ description = "Sandboxed Luau scripting host for Forge 2D"
 [dependencies]
 forge_assets = { path = "../forge_assets" }
 forge_core = { path = "../forge_core" }
+forge_luau_debug = { path = "../forge_luau_debug" }
 forge_scene = { path = "../forge_scene" }
 forge_world = { path = "../forge_world" }
 mlua = { version = "=0.12.2", features = ["luau"] }
