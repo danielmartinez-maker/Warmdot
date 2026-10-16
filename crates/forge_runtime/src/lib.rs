@@ -11,8 +11,8 @@ use forge_core::{
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument};
-pub use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptError};
 use forge_scripting::ScriptHost;
+pub use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptError};
 use forge_world::{RuntimeWorld, WorldError};
 
 #[derive(Debug)]
