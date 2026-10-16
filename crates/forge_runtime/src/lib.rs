@@ -502,7 +502,7 @@ impl GameRuntime {
         object_guid: Guid,
         line: u32,
         enabled: bool,
-    ) -> Result<bool, ScriptError> {
+    ) -> Result<Option<u32>, ScriptError> {
         self.script_host.set_breakpoint(object_guid, line, enabled)
     }
 
