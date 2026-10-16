@@ -279,7 +279,7 @@ impl EditorApp {
                 self.history.mark_saved();
                 self.status = "Saved".into();
             }
-            Err(error) => self.status = format!("Save failed: {error}"),
+            Err(error) => self.set_error_status("editor.save_failed", format!("Save failed: {error}")),
         }
     }
 
@@ -298,7 +298,7 @@ impl EditorApp {
                 self.history = SceneEditHistory::new(256);
                 self.status.clear();
             }
-            Err(error) => self.status = format!("Scene open failed: {error}"),
+            Err(error) => self.set_error_status("editor.scene_open_failed", format!("Scene open failed: {error}")),
         }
     }
 
@@ -331,7 +331,7 @@ impl EditorApp {
                 self.history = SceneEditHistory::new(256);
                 self.status = "New scene created.".into();
             }
-            Err(error) => self.status = format!("Scene create failed: {error}"),
+            Err(error) => self.set_error_status("editor.scene_create_failed", format!("Scene create failed: {error}")),
         }
     }
 
@@ -574,7 +574,10 @@ impl EditorApp {
 
     fn start_runtime(&mut self) {
         let Some(catalog) = self.catalog.as_ref() else {
-            self.status = "Runtime preview needs an available asset catalog.".into();
+            self.set_error_status(
+                "editor.preview_unavailable",
+                "Runtime preview needs an available asset catalog.".into(),
+            );
             return;
         };
         let audio_warning = if self.audio.is_none() {
@@ -608,6 +611,13 @@ impl EditorApp {
                 self.preview_tick = 0;
                 self.preview_actions = [0.0, 0.0];
                 self.profile_samples.clear();
+                if let Some(warning) = audio_warning.as_ref() {
+                    self.log_event(
+                        DiagnosticLevel::Warning,
+                        "editor.audio_unavailable",
+                        warning,
+                    );
+                }
                 self.status = audio_warning.map_or_else(
                     || "Scene is running in the editor.".into(),
                     |warning| format!("Scene is running in the editor without audio: {warning}"),
@@ -618,7 +628,7 @@ impl EditorApp {
                     self.status.clone(),
                 );
             }
-            Err(error) => self.status = format!("Play failed: {error}"),
+            Err(error) => self.set_error_status("editor.preview_start_failed", format!("Play failed: {error}")),
         }
     }
 
@@ -846,8 +856,15 @@ impl EditorApp {
             .as_mut()
             .map(GameRuntime::take_audio_commands)
             .unwrap_or_default();
-        if let Some(assets) = self.catalog.as_ref() {
-            process_audio_commands(self.audio.as_mut(), assets, commands);
+        let errors = self.catalog.as_ref().map_or_else(Vec::new, |assets| {
+            process_audio_commands(self.audio.as_mut(), assets, commands)
+        });
+        for error in errors {
+            self.log_event(
+                DiagnosticLevel::Error,
+                "audio.command_failed",
+                error,
+            );
         }
     }
 
@@ -868,19 +885,28 @@ impl EditorApp {
             }
         };
         let Some(assets) = self.catalog.as_ref() else {
-            self.status = "Scene transition failed: the asset catalog is unavailable.".into();
+            self.set_error_status(
+                "editor.scene_transition_failed",
+                "Scene transition failed: the asset catalog is unavailable.".into(),
+            );
             return;
         };
         for scene_guid in requests {
             let scene = match scene_catalog.load_scene(scene_guid) {
                 Ok(scene) => scene,
                 Err(error) => {
-                    self.status = format!("Scene transition to {scene_guid} was rejected: {error}");
+                    self.set_error_status(
+                        "editor.scene_transition_rejected",
+                        format!("Scene transition to {scene_guid} was rejected: {error}"),
+                    );
                     continue;
                 }
             };
             if let Err(error) = validate_scene_dependencies(&scene, assets) {
-                self.status = format!("Scene transition to {scene_guid} was rejected: {error}");
+                self.set_error_status(
+                    "editor.scene_transition_rejected",
+                    format!("Scene transition to {scene_guid} was rejected: {error}"),
+                );
                 continue;
             }
             let preview_ui = match load_preview_ui(&scene, assets) {
@@ -1123,7 +1149,7 @@ impl EditorApp {
                     self.project_name_draft = self.project.document().name.clone();
                     self.status = "Project settings saved.".into();
                 }
-                Err(error) => self.status = format!("Project settings failed: {error}"),
+                Err(error) => self.set_error_status("editor.project_settings_failed", format!("Project settings failed: {error}")),
             }
         }
         ui.separator();
@@ -1139,7 +1165,7 @@ impl EditorApp {
         {
             match self.project.set_default_scene(&self.scene_path) {
                 Ok(()) => self.status = "Default scene updated.".into(),
-                Err(error) => self.status = format!("Default scene update failed: {error}"),
+                Err(error) => self.set_error_status("editor.default_scene_update_failed", format!("Default scene update failed: {error}")),
             }
         }
         if !can_change_default {
@@ -2913,10 +2939,11 @@ fn process_audio_commands(
     audio: Option<&mut AudioEngine>,
     assets: &AssetCatalog,
     commands: Vec<ScriptAudioCommand>,
-) {
+) -> Vec<String> {
     let Some(audio) = audio else {
-        return;
+        return Vec::new();
     };
+    let mut errors = Vec::new();
     for command in commands {
         let result = match command {
             ScriptAudioCommand::PlayEffect { asset_guid, bus } => {
@@ -2931,9 +2958,10 @@ fn process_audio_commands(
             }
         };
         if let Err(error) = result {
-            eprintln!("audio command failed: {error}");
+            errors.push(error.to_string());
         }
     }
+    errors
 }
 
 fn validate_scene_dependencies(scene: &SceneDocument, assets: &AssetCatalog) -> Result<(), String> {
