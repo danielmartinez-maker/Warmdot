@@ -931,12 +931,12 @@ fn validate_project(path: &Path) -> ValidationReport {
                 AssetKind::Png => assets.load_png(record.guid).map(|_| ()),
                 AssetKind::SpriteSheet => assets.load_sprite_sheet(record.guid).map(|_| ()),
                 AssetKind::AnimationClip => assets.load_animation_clip(record.guid).map(|_| ()),
-                AssetKind::Script => assets.load_script(record.guid).map(|script| {
-                    forge_scripting::validate_source(&script.source)
-                        .map_err(|error| error)
-                }).and_then(|result| result.map_err(|message| {
-                    forge_assets::AssetError::Invalid(message)
-                })),
+                AssetKind::Script => assets
+                    .load_script(record.guid)
+                    .and_then(|script| {
+                        forge_scripting::validate_source(&script.source)
+                            .map_err(forge_assets::AssetError::Invalid)
+                    }),
                 AssetKind::Prefab => assets.load_prefab(record.guid).map(|_| ()),
                 AssetKind::Audio => assets.load_audio(record.guid).map(|_| ()),
                 AssetKind::Ui => assets.load_ui_source(record.guid).and_then(|source| {
