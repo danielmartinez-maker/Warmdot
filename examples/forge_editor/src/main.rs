@@ -12,9 +12,7 @@ use forge_assets::{AssetCatalog, AssetChange, AssetChangeKind, AssetKind};
 use forge_core::{ActionId, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
-use forge_runtime::{
-    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptDiagnostic,
-};
+use forge_runtime::{BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
