@@ -52,6 +52,8 @@ struct EditorApp {
     scene_path: String,
     history: SceneEditHistory,
     selected: Option<Guid>,
+    selected_asset: Option<Guid>,
+    asset_validation: Option<(Guid, Result<(), String>)>,
     status: String,
     catalog: Option<AssetCatalog>,
     textures: BTreeMap<Guid, egui::TextureHandle>,
@@ -89,6 +91,8 @@ impl EditorApp {
             scene_path,
             history: SceneEditHistory::new(256),
             selected,
+            selected_asset: None,
+            asset_validation: None,
             status,
             catalog,
             textures: BTreeMap::new(),
@@ -125,6 +129,7 @@ impl EditorApp {
             script: None,
         };
         self.selected = Some(object.object_guid);
+        self.selected_asset = None;
         match self.history.create_object(&mut self.scene, object, None) {
             Ok(()) => self.status.clear(),
             Err(error) => self.status = error.to_string(),
@@ -167,7 +172,9 @@ impl EditorApp {
         match self.project.load_scene(&relative_path) {
             Ok(scene) => {
                 self.selected = scene.objects.first().map(|object| object.object_guid);
+                self.selected_asset = None;
                 self.scene = scene;
+                self.selected_asset = None;
                 self.scene_path = relative_path;
                 self.history = SceneEditHistory::new(256);
                 self.status.clear();
@@ -300,6 +307,7 @@ impl EditorApp {
         };
         match GameRuntime::from_scene_with_assets(&self.scene, RuntimeConfig::default(), catalog) {
             Ok(runtime) => {
+                self.selected_asset = None;
                 self.runtime = Some(runtime);
                 self.preview_last_frame = Some(Instant::now());
                 self.preview_tick = 0;
@@ -448,6 +456,13 @@ impl EditorApp {
         for change in changes {
             self.textures.remove(&change.guid);
             self.texture_sizes.remove(&change.guid);
+            if self
+                .asset_validation
+                .as_ref()
+                .is_some_and(|(guid, _)| *guid == change.guid)
+            {
+                self.asset_validation = None;
+            }
             self.handle_asset_change(change);
         }
 
@@ -500,16 +515,106 @@ impl EditorApp {
         ui.heading("Scene");
         ui.label(&self.scene.name);
         ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for object in &self.scene.objects {
-                if ui
-                    .selectable_label(self.selected == Some(object.object_guid), &object.name)
-                    .clicked()
-                {
-                    self.selected = Some(object.object_guid);
+        egui::ScrollArea::vertical()
+            .max_height(360.0)
+            .show(ui, |ui| {
+                for object in &self.scene.objects {
+                    if ui
+                        .selectable_label(
+                            self.selected == Some(object.object_guid),
+                            &object.name,
+                        )
+                        .clicked()
+                    {
+                        self.selected = Some(object.object_guid);
+                        self.selected_asset = None;
+                    }
+                }
+            });
+        if self.runtime.is_none() {
+            let assets = self
+                .catalog
+                .as_ref()
+                .map(|catalog| {
+                    catalog
+                        .entries()
+                        .map(|record| (record.guid, record.relative_path.clone(), record.kind))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            ui.separator();
+            ui.collapsing(format!("Assets ({})", assets.len()), |ui| {
+                if assets.is_empty() {
+                    ui.weak("Add resources under Assets to browse them here.");
+                }
+                egui::ScrollArea::vertical().max_height(280.0).show(ui, |ui| {
+                    for (guid, path, kind) in &assets {
+                        if ui
+                            .selectable_label(self.selected_asset == Some(*guid), path)
+                            .clicked()
+                        {
+                            self.selected_asset = Some(*guid);
+                            self.selected = None;
+                        }
+                        ui.small(format!("{kind:?} • {guid}"));
+                    }
+                });
+            });
+        }
+    }
+
+    fn show_asset_inspector(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Asset Inspector");
+        let Some(guid) = self.selected_asset else {
+            ui.label("Select an asset from the browser.");
+            return;
+        };
+        let asset_info = self.catalog.as_ref().and_then(|catalog| {
+            catalog
+                .get(guid)
+                .map(|record| (record.relative_path.clone(), record.kind))
+        });
+        let Some((path, kind)) = asset_info else {
+            ui.colored_label(Color32::RED, "This asset is missing from the project catalog.");
+            ui.label(format!("GUID: {guid}"));
+            return;
+        };
+        ui.label(&path);
+        ui.label(format!("Type: {kind:?}"));
+        ui.label(format!("GUID: {guid}"));
+        if ui.button("Validate resource").clicked() {
+            let result = self.validate_asset(guid);
+            self.asset_validation = Some((guid, result));
+        }
+        if let Some((validated_guid, result)) = &self.asset_validation {
+            if *validated_guid == guid {
+                match result {
+                    Ok(()) => {
+                        ui.label("Resource loaded successfully.");
+                    }
+                    Err(error) => {
+                        ui.colored_label(Color32::RED, format!("Import diagnostic: {error}"));
+                    }
                 }
             }
-        });
+        }
+    }
+
+    fn validate_asset(&self, guid: Guid) -> Result<(), String> {
+        let catalog = self
+            .catalog
+            .as_ref()
+            .ok_or_else(|| "asset catalog is unavailable".to_owned())?;
+        let record = catalog
+            .get(guid)
+            .ok_or_else(|| format!("asset {guid} is missing from the project catalog"))?;
+        match record.kind {
+            AssetKind::Png => catalog.load_png(guid).map(|_| ()),
+            AssetKind::SpriteSheet => catalog.load_sprite_sheet(guid).map(|_| ()),
+            AssetKind::AnimationClip => catalog.load_animation_clip(guid).map(|_| ()),
+            AssetKind::Script => catalog.load_script(guid).map(|_| ()),
+        }
+        .map_err(|error| error.to_string())
     }
 
     fn show_inspector(&mut self, ui: &mut egui::Ui) {
@@ -1605,6 +1710,7 @@ impl EditorApp {
         );
 
         if response.clicked() {
+            self.selected_asset = None;
             if let Some(pointer) = response.interact_pointer_pos() {
                 self.selected = objects
                     .iter()
@@ -1976,6 +2082,8 @@ impl eframe::App for EditorApp {
                     self.show_runtime_inspector(ui);
                 } else if self.tilemap_mode {
                     self.show_tilemap_inspector(ui);
+                } else if self.selected_asset.is_some() {
+                    self.show_asset_inspector(ui);
                 } else {
                     self.show_inspector(ui);
                 }
