@@ -8,7 +8,11 @@
     "a1d999a0-d8d1-4a1e-a700-4c49ed030003",
     "a1d999a0-d8d1-4a1e-a700-4c49ed030004",
     "a1d999a0-d8d1-4a1e-a700-4c49ed030005",
-    "a1d999a0-d8d1-4a1e-a700-4c49ed030007"
+    "a1d999a0-d8d1-4a1e-a700-4c49ed030007",
+    "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+    "f2d2a001-240f-4bad-a341-d8cae3f0b117",
+    "f2d2a001-240f-4bad-a341-d8cae3f0b118",
+    "f2d2a001-240f-4bad-a341-d8cae3f0b119"
   ],
   "objects": [
     {
@@ -26,8 +30,8 @@
         ]
       },
       "sprite": {
-        "asset": null,
-        "animation_clip": null,
+        "asset": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+        "animation_clip": "f2d2a001-240f-4bad-a341-d8cae3f0b118",
         "size": [
           0.9,
           1.1
@@ -91,7 +95,9 @@
           "max_x": 28,
           "min_y": -16,
           "max_y": 16,
-          "was_firing": false
+          "was_firing": false,
+          "game_over": false,
+          "hit_cooldown": 0
         }
       }
     },
@@ -100,7 +106,9 @@
       "name": "UI Controller",
       "script": {
         "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030002",
-        "properties": {}
+        "properties": {
+          "hud": true
+        }
       }
     },
     {
@@ -150,8 +158,8 @@
         ]
       },
       "sprite": {
-        "asset": null,
-        "animation_clip": null,
+        "asset": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+        "animation_clip": "f2d2a001-240f-4bad-a341-d8cae3f0b119",
         "size": [
           1.2,
           1.2
@@ -217,7 +225,8 @@
           "min_y": -13,
           "max_y": 13,
           "base_y": -5,
-          "phase": 0
+          "phase": 0,
+          "defeated": false
         }
       }
     },
@@ -238,8 +247,8 @@
         ]
       },
       "sprite": {
-        "asset": null,
-        "animation_clip": null,
+        "asset": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+        "animation_clip": "f2d2a001-240f-4bad-a341-d8cae3f0b119",
         "size": [
           1.2,
           1.2
@@ -305,7 +314,8 @@
           "min_y": -13,
           "max_y": 13,
           "base_y": -8,
-          "phase": 0.7
+          "phase": 0.7,
+          "defeated": false
         }
       }
     },
@@ -326,8 +336,8 @@
         ]
       },
       "sprite": {
-        "asset": null,
-        "animation_clip": null,
+        "asset": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+        "animation_clip": "f2d2a001-240f-4bad-a341-d8cae3f0b119",
         "size": [
           1.2,
           1.2
@@ -393,7 +403,8 @@
           "min_y": -13,
           "max_y": 13,
           "base_y": -5,
-          "phase": 1.4
+          "phase": 1.4,
+          "defeated": false
         }
       }
     },
@@ -414,8 +425,8 @@
         ]
       },
       "sprite": {
-        "asset": null,
-        "animation_clip": null,
+        "asset": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+        "animation_clip": "f2d2a001-240f-4bad-a341-d8cae3f0b119",
         "size": [
           1.2,
           1.2
@@ -481,7 +492,89 @@
           "min_y": -13,
           "max_y": 13,
           "base_y": -8,
-          "phase": 2.0999999999999996
+          "phase": 2.0999999999999996,
+          "defeated": false
+        }
+      }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0015",
+      "name": "Pulse Shot",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          20
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          0.32,
+          0.58
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          0.84,
+          0.22,
+          1
+        ],
+        "layer": 1,
+        "order": 5,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": {
+        "kind": "dynamic",
+        "linear_velocity": [
+          0,
+          0
+        ],
+        "angular_velocity": 0,
+        "gravity_scale": 0,
+        "linear_damping": 0,
+        "angular_damping": 0,
+        "lock_rotation": true
+      },
+      "collider": {
+        "shape": {
+          "shape": "circle",
+          "radius": 0.18
+        },
+        "offset": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "density": 1,
+        "friction": 0,
+        "restitution": 0,
+        "sensor": true
+      },
+      "script": {
+        "asset": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+        "properties": {
+          "projectile": true,
+          "active": false,
+          "speed": 24,
+          "min_y": -18,
+          "launch_x": 0
         }
       }
     }

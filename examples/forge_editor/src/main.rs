@@ -136,6 +136,7 @@ struct EditorApp {
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
     preview_actions: [f32; 2],
+    preview_fire: bool,
     breakpoint_line: u32,
     logs: DiagnosticBuffer,
     profile_samples: VecDeque<PreviewProfileSample>,
@@ -203,6 +204,7 @@ impl EditorApp {
             preview_last_frame: None,
             preview_tick: 0,
             preview_actions: [0.0, 0.0],
+            preview_fire: false,
             breakpoint_line: 1,
             logs,
             profile_samples: VecDeque::with_capacity(180),
@@ -645,6 +647,7 @@ impl EditorApp {
                 self.preview_last_frame = Some(Instant::now());
                 self.preview_tick = 0;
                 self.preview_actions = [0.0, 0.0];
+                self.preview_fire = false;
                 self.profile_samples.clear();
                 if let Some(warning) = audio_warning.as_ref() {
                     self.log_event(
@@ -772,6 +775,7 @@ impl EditorApp {
         self.preview_last_frame = None;
         self.preview_tick = 0;
         self.preview_actions = [0.0, 0.0];
+        self.preview_fire = false;
         self.log_event(
             DiagnosticLevel::Info,
             "editor.preview_stopped",
@@ -813,18 +817,22 @@ impl EditorApp {
         let now = Instant::now();
         let previous = self.preview_last_frame.replace(now).unwrap_or(now);
         let keyboard_captured = ctx.egui_wants_keyboard_input();
-        let movement = ctx.input(|input| {
+        let (movement, firing) = ctx.input(|input| {
             if !input.raw.focused || keyboard_captured {
-                return [0.0, 0.0];
+                return ([0.0, 0.0], false);
             }
             let left = input.key_down(egui::Key::A) || input.key_down(egui::Key::ArrowLeft);
             let right = input.key_down(egui::Key::D) || input.key_down(egui::Key::ArrowRight);
             let down = input.key_down(egui::Key::S) || input.key_down(egui::Key::ArrowDown);
             let up = input.key_down(egui::Key::W) || input.key_down(egui::Key::ArrowUp);
-            [
-                (if right { 1.0 } else { 0.0 }) - (if left { 1.0 } else { 0.0 }),
-                (if down { 1.0 } else { 0.0 }) - (if up { 1.0 } else { 0.0 }),
-            ]
+            let firing = input.key_down(egui::Key::F);
+            (
+                [
+                    (if right { 1.0 } else { 0.0 }) - (if left { 1.0 } else { 0.0 }),
+                    (if down { 1.0 } else { 0.0 }) - (if up { 1.0 } else { 0.0 }),
+                ],
+                firing,
+            )
         });
         let frame_interval = now.saturating_duration_since(previous);
         let tilemap_chunks = self
@@ -842,7 +850,11 @@ impl EditorApp {
                 if movement[1] != self.preview_actions[1] {
                     runtime.push_action(at, ActionId(2), movement[1], movement[1] != 0.0);
                 }
+                if firing != self.preview_fire {
+                    runtime.push_action(at, ActionId(3), if firing { 1.0 } else { 0.0 }, firing);
+                }
                 self.preview_actions = movement;
+                self.preview_fire = firing;
                 let frame = runtime.advance_frame(frame_interval);
                 self.preview_tick = frame
                     .first_tick
@@ -1000,6 +1012,7 @@ impl EditorApp {
                     self.preview_ui = Some(preview_ui);
                     self.preview_tick = 0;
                     self.preview_actions = [0.0, 0.0];
+                    self.preview_fire = false;
                     self.preview_last_frame = Some(Instant::now());
                     self.selected = None;
                     self.status = format!("Editor preview entered scene {}.", scene.name);

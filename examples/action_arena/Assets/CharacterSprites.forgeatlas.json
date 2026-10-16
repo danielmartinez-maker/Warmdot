@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "texture": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+  "frames": [
+    {
+      "name": "player-1",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "player-2",
+      "rect": {
+        "x": 16,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "player-3",
+      "rect": {
+        "x": 32,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "player-4",
+      "rect": {
+        "x": 48,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "enemy-1",
+      "rect": {
+        "x": 0,
+        "y": 16,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "enemy-2",
+      "rect": {
+        "x": 16,
+        "y": 16,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "enemy-3",
+      "rect": {
+        "x": 32,
+        "y": 16,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "enemy-4",
+      "rect": {
+        "x": 48,
+        "y": 16,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    }
+  ]
+}

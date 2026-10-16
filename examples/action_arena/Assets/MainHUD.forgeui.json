@@ -82,6 +82,60 @@
           "children": []
         },
         {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030013",
+          "widget": {
+            "type": "text",
+            "text": "SCORE 0"
+          },
+          "layout": {
+            "preferred_size": [
+              140,
+              32
+            ],
+            "min_size": [
+              140,
+              28
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        },
+        {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030014",
+          "widget": {
+            "type": "text",
+            "text": "LIVES 3"
+          },
+          "layout": {
+            "preferred_size": [
+              120,
+              32
+            ],
+            "min_size": [
+              120,
+              28
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        },
+        {
           "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030012",
           "widget": {
             "type": "button",
