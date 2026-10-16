@@ -38,7 +38,7 @@ impl fmt::Display for ProjectError {
             Self::Json(error) => write!(f, "project JSON is invalid: {error}"),
             Self::Invalid(message) => f.write_str(message),
             Self::Scene(diagnostics) => {
-                write!(f, "default scene has {} diagnostic(s)", diagnostics.len())
+                write!(f, "scene has {} diagnostic(s)", diagnostics.len())
             }
         }
     }
