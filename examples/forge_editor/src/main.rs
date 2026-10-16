@@ -2124,10 +2124,16 @@ fn import_asset_file(project_root: &Path, source: &Path) -> Result<String, Strin
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("{} has an invalid filename", source.display()))?;
     let lower_name = file_name.to_ascii_lowercase();
-    let suffix = [".forgeprefab.json", ".forgeatlas.json", ".forgeanim.json", ".png", ".luau"]
-        .into_iter()
-        .find(|suffix| lower_name.ends_with(suffix))
-        .ok_or_else(|| format!("{} has an unsupported asset type", source.display()))?;
+    let suffix = [
+        ".forgeprefab.json",
+        ".forgeatlas.json",
+        ".forgeanim.json",
+        ".png",
+        ".luau",
+    ]
+    .into_iter()
+    .find(|suffix| lower_name.ends_with(suffix))
+    .ok_or_else(|| format!("{} has an unsupported asset type", source.display()))?;
     let size_limit = match suffix {
         ".png" => 128 * 1024 * 1024,
         ".luau" => 1024 * 1024,

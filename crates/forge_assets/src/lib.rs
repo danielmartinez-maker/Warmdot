@@ -737,7 +737,9 @@ fn scan_directory(
         validate_relative_asset_path(&relative_path)?;
         let byte_limit = match kind {
             AssetKind::Png => MAX_PNG_SOURCE_BYTES,
-            AssetKind::SpriteSheet | AssetKind::AnimationClip | AssetKind::Prefab => MAX_METADATA_BYTES,
+            AssetKind::SpriteSheet | AssetKind::AnimationClip | AssetKind::Prefab => {
+                MAX_METADATA_BYTES
+            }
             AssetKind::Script => MAX_SCRIPT_SOURCE_BYTES,
         };
         let bytes = read_limited(&canonical, byte_limit)?;
