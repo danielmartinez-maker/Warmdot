@@ -6,6 +6,11 @@ struct CameraUniform {
 @group(0) @binding(0)
 var<uniform> view: CameraUniform;
 
+@group(1) @binding(0)
+var sprite_texture: texture_2d<f32>;
+@group(1) @binding(1)
+var sprite_sampler: sampler;
+
 struct VertexInput {
     @builtin(vertex_index) vertex_index: u32,
     @location(0) position: vec2<f32>,
@@ -18,6 +23,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) tint: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 };
 
 @vertex
@@ -56,10 +62,11 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(ndc, 0.0, 1.0);
     output.tint = input.tint;
+    output.uv = corner * 0.5 + vec2<f32>(0.5, 0.5);
     return output;
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    return input.tint;
+    return textureSample(sprite_texture, sprite_sampler, input.uv) * input.tint;
 }

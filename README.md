@@ -14,7 +14,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The Rapier adapter supports fixed, dynamic, and position-based kinematic bodies; circle and box colliders; sensor/collision events; raycasts; and transform synchronization.
 - The headless action-arena sample runs a dynamic player against a fixed floor.
 - A windowed action-arena sample wires keyboard/mouse actions, fixed-step movement, spawning, collision gameplay, and the wgpu renderer together.
-- The native wgpu renderer draws ordered, tinted sprite instances in one instanced batch and can extract draw data from the runtime world.
+- The native wgpu renderer samples registered RGBA images, applies sprite tint and alpha blending, and draws contiguous image groups with instanced quads; world extraction resolves each sprite's stable asset GUID.
 - The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
 - The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
 - The animation player advances clip frames using simulation delta and handles looping and completion without per-frame allocation.
@@ -23,7 +23,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Not implemented yet
 
-This branch is the runtime kernel, not the complete P0 engine. The renderer currently handles solid tinted quads; its texture sampling path is still outstanding. The native editor UI, tilemap painting tools, Luau scripts, audio, retained game UI, standalone export, and the colony simulation remain ahead. The stress benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+This branch is the runtime kernel, not the complete P0 engine. The renderer samples explicitly registered image assets and keeps the benchmark on the one-batch solid-color path. Sprite-sheet frame selection and automatic animation-to-renderer binding are still outstanding. The native editor UI, tilemap painting tools, Luau scripts, audio, retained game UI, standalone export, and the colony simulation remain ahead. The stress benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
