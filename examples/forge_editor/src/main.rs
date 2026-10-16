@@ -1,6 +1,13 @@
-use std::{env, error::Error, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    error::Error,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
+use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_core::Guid;
 use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
@@ -12,18 +19,28 @@ struct EditorApp {
     history: SceneEditHistory,
     selected: Option<Guid>,
     status: String,
+    catalog: Option<AssetCatalog>,
+    textures: BTreeMap<Guid, egui::TextureHandle>,
+    last_asset_scan: Option<Instant>,
 }
 
 impl EditorApp {
     fn new(project: Project) -> Self {
         let scene = project.default_scene().clone();
         let selected = scene.objects.first().map(|object| object.object_guid);
+        let (catalog, status) = match AssetCatalog::open(project.root()) {
+            Ok(catalog) => (Some(catalog), String::new()),
+            Err(error) => (None, format!("Asset catalog unavailable: {error}")),
+        };
         Self {
             project,
             scene,
             history: SceneEditHistory::new(256),
             selected,
-            status: String::new(),
+            status,
+            catalog,
+            textures: BTreeMap::new(),
+            last_asset_scan: None,
         }
     }
 
@@ -74,6 +91,68 @@ impl EditorApp {
         }
     }
 
+    fn refresh_assets(&mut self, ctx: &egui::Context) {
+        if self
+            .last_asset_scan
+            .is_some_and(|last| last.elapsed() < Duration::from_millis(500))
+        {
+            return;
+        }
+        self.last_asset_scan = Some(Instant::now());
+
+        let Some(catalog) = self.catalog.as_mut() else {
+            return;
+        };
+        let changes = match catalog.refresh() {
+            Ok(changes) => changes,
+            Err(error) => {
+                self.status = format!("Asset scan failed: {error}");
+                return;
+            }
+        };
+        for change in changes {
+            self.textures.remove(&change.guid);
+        }
+
+        let required = self
+            .scene
+            .objects
+            .iter()
+            .filter_map(|object| object.sprite.and_then(|sprite| sprite.asset))
+            .collect::<BTreeSet<_>>();
+        let mut updates = Vec::new();
+        let mut errors = Vec::new();
+        if let Some(catalog) = self.catalog.as_ref() {
+            for guid in required {
+                if self.textures.contains_key(&guid) {
+                    continue;
+                }
+                let Some(record) = catalog.get(guid) else {
+                    continue;
+                };
+                if record.kind != AssetKind::Png {
+                    continue;
+                }
+                let name = record.relative_path.clone();
+                match catalog.load_png(guid) {
+                    Ok(texture) => updates.push((guid, name, texture)),
+                    Err(error) => errors.push(error.to_string()),
+                }
+            }
+        }
+        for (guid, name, decoded) in updates {
+            let image = egui::ColorImage::from_rgba_unmultiplied(
+                [decoded.width as usize, decoded.height as usize],
+                &decoded.rgba8,
+            );
+            let handle = ctx.load_texture(name, image, egui::TextureOptions::NEAREST);
+            self.textures.insert(guid, handle);
+        }
+        if let Some(error) = errors.into_iter().next() {
+            self.status = format!("Texture load failed: {error}");
+        }
+    }
+
     fn show_hierarchy(&mut self, ui: &mut egui::Ui) {
         ui.heading("Scene");
         ui.label(&self.scene.name);
@@ -108,6 +187,17 @@ impl EditorApp {
         };
 
         let mut replacement = self.scene.objects[index].clone();
+        let available_images = self
+            .catalog
+            .as_ref()
+            .map(|catalog| {
+                catalog
+                    .entries()
+                    .filter(|record| record.kind == AssetKind::Png)
+                    .map(|record| (record.guid, record.relative_path.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let mut changed = false;
         ui.small(guid.to_string());
         changed |= ui.text_edit_singleline(&mut replacement.name).changed();
@@ -162,6 +252,29 @@ impl EditorApp {
                         .changed();
                 });
                 ui.horizontal(|ui| {
+                    ui.label("Texture");
+                    let selected_name = sprite
+                        .asset
+                        .and_then(|asset| {
+                            available_images
+                                .iter()
+                                .find(|(guid, _)| *guid == asset)
+                                .map(|(_, path)| path.clone())
+                        })
+                        .unwrap_or_else(|| "None".into());
+                    changed |= egui::ComboBox::from_id_salt("sprite_texture")
+                        .selected_text(selected_name)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut sprite.asset, None, "None");
+                            for (asset, path) in &available_images {
+                                ui.selectable_value(&mut sprite.asset, Some(*asset), path);
+                            }
+                        })
+                        .response
+                        .changed();
+                });
+                ui.small("Place PNG images in the project Assets folder.");
+                ui.horizontal(|ui| {
                     ui.label("Tint");
                     for channel in &mut sprite.tint {
                         changed |= ui
@@ -185,6 +298,12 @@ impl EditorApp {
         }
 
         if changed {
+            if let Some(asset) = replacement.sprite.and_then(|sprite| sprite.asset) {
+                if !self.scene.dependencies.contains(&asset) {
+                    self.scene.dependencies.push(asset);
+                }
+            }
+            self.last_asset_scan = None;
             match self.history.replace_object(&mut self.scene, replacement) {
                 Ok(()) => self.status.clear(),
                 Err(error) => self.status = error.to_string(),
@@ -238,7 +357,17 @@ impl EditorApp {
             if self.selected == Some(object.object_guid) {
                 painter.rect_filled(object_rect.expand(4.0), 0.0, Color32::YELLOW);
             }
-            painter.rect_filled(object_rect, 0.0, tint_color(sprite.tint));
+            if let Some(texture) = sprite.asset.and_then(|asset| self.textures.get(&asset)) {
+                let [u, v, width, height] = sprite.uv_rect;
+                painter.image(
+                    texture.id(),
+                    object_rect,
+                    Rect::from_min_max(Pos2::new(u, v), Pos2::new(u + width, v + height)),
+                    tint_color(sprite.tint),
+                );
+            } else {
+                painter.rect_filled(object_rect, 0.0, tint_color(sprite.tint));
+            }
         }
         painter.text(
             rect.left_top() + Vec2::new(12.0, 12.0),
@@ -286,6 +415,7 @@ fn tint_color(tint: [f32; 4]) -> Color32 {
 
 impl eframe::App for EditorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.refresh_assets(ui.ctx());
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Add sprite").clicked() {
