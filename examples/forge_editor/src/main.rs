@@ -10,8 +10,8 @@ use std::{
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use forge_assets::{AssetCatalog, AssetKind};
 use forge_core::{ActionId, Guid};
-use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_editor_core::SceneEditHistory;
+use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_project::Project;
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
@@ -321,7 +321,9 @@ impl EditorApp {
             return;
         };
         if let Some(frame) = runtime.step_once() {
-            self.preview_tick = frame.first_tick.saturating_add(u64::from(frame.fixed_steps));
+            self.preview_tick = frame
+                .first_tick
+                .saturating_add(u64::from(frame.fixed_steps));
         }
         self.collect_script_diagnostics();
         self.preview_last_frame = Some(Instant::now());
@@ -371,7 +373,11 @@ impl EditorApp {
             self.preview_tick = frame.first_tick.saturating_add(u64::from(frame.fixed_steps));
         }
         self.collect_script_diagnostics();
-        if self.runtime.as_ref().is_some_and(|runtime| !runtime.is_paused()) {
+        if self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| !runtime.is_paused())
+        {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
     }
@@ -1641,11 +1647,13 @@ impl eframe::App for EditorApp {
                         }
                     } else {
                         if ui
-                            .button(if self.runtime.as_ref().is_some_and(GameRuntime::is_paused) {
-                                "Resume"
-                            } else {
-                                "Pause"
-                            })
+                            .button(
+                                if self.runtime.as_ref().is_some_and(GameRuntime::is_paused) {
+                                    "Resume"
+                                } else {
+                                    "Pause"
+                                },
+                            )
                             .clicked()
                         {
                             self.toggle_runtime_pause();
@@ -1665,7 +1673,8 @@ impl eframe::App for EditorApp {
                     }
                     ui.separator();
                 }
-                let can_undo = self.runtime.is_none() && if self.tilemap_mode {
+                let can_undo = self.runtime.is_none()
+                    && if self.tilemap_mode {
                     self.tilemap
                         .as_ref()
                         .is_some_and(|tilemap| tilemap.history.undo_depth() > 0)
@@ -1687,7 +1696,8 @@ impl eframe::App for EditorApp {
                         }
                     }
                 }
-                let can_redo = self.runtime.is_none() && if self.tilemap_mode {
+                let can_redo = self.runtime.is_none()
+                    && if self.tilemap_mode {
                     self.tilemap
                         .as_ref()
                         .is_some_and(|tilemap| tilemap.history.redo_depth() > 0)
@@ -1753,7 +1763,9 @@ impl eframe::App for EditorApp {
                     }
                     ui.label(format!("{} diagnostic(s)", self.script_diagnostics.len()));
                 });
-                egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(100.0)
+                    .show(ui, |ui| {
                     if self.script_diagnostics.is_empty() {
                         ui.weak("Play the scene to inspect Luau runtime diagnostics.");
                     } else {
@@ -1766,8 +1778,7 @@ impl eframe::App for EditorApp {
                                 diagnostic.message
                             ));
                         }
-                    }
-                });
+                    });
             });
         egui::CentralPanel::default().show(ui, |ui| {
             if self.tilemap_mode && self.runtime.is_none() {
