@@ -9,7 +9,7 @@ use forge_core::{
     ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
-use forge_scene::{AuthoredScript, SceneDiagnostic, SceneDocument};
+use forge_scene::{SceneDiagnostic, SceneDocument};
 use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptHost};
 use forge_world::{RuntimeWorld, WorldError};
 

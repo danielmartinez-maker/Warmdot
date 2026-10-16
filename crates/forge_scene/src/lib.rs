@@ -1,6 +1,6 @@
 //! Versioned, reviewable scene authoring data compiled into Forge runtime objects.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use forge_core::Guid;
 use forge_world::{
@@ -321,7 +321,10 @@ impl SceneDocument {
                 if !dependencies.contains(&script.asset) {
                     diagnostics.push(SceneDiagnostic::error(
                         "undeclared_script_dependency",
-                        format!("script asset {} is missing from scene dependencies", script.asset),
+                        format!(
+                            "script asset {} is missing from scene dependencies",
+                            script.asset
+                        ),
                         Some(guid),
                     ));
                 }
@@ -583,7 +586,9 @@ mod script_authoring_tests {
             },
             vec![asset],
         );
-        scene.validate().expect("valid script dependency and properties");
+        scene
+            .validate()
+            .expect("valid script dependency and properties");
         let json = serde_json::to_string(&scene).expect("serialize scene");
         let restored = SceneDocument::from_json(&json).expect("load scene");
         assert_eq!(restored.objects[0].script, scene.objects[0].script);
@@ -609,8 +614,18 @@ mod script_authoring_tests {
             },
             Vec::new(),
         );
-        let diagnostics = scene.validate().expect_err("invalid script data is rejected");
-        assert!(diagnostics.iter().any(|item| item.code == "undeclared_script_dependency"));
-        assert!(diagnostics.iter().any(|item| item.code == "invalid_script_property"));
+        let diagnostics = scene
+            .validate()
+            .expect_err("invalid script data is rejected");
+        assert!(
+            diagnostics
+                .iter()
+                .any(|item| item.code == "undeclared_script_dependency")
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|item| item.code == "invalid_script_property")
+        );
     }
 }

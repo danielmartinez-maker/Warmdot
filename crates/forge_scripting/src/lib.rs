@@ -49,9 +49,17 @@ impl fmt::Display for ScriptError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Lua(error) => write!(f, "Luau script failed: {error}"),
-            Self::MissingObject(guid) => write!(f, "script object {guid} is not in the runtime world"),
-            Self::TooManyInstances => write!(f, "the scene exceeds the {MAX_SCRIPT_INSTANCES}-script limit"),
-            Self::SourceTooLarge(size) => write!(f, "script source is {size} bytes; maximum is {MAX_SCRIPT_SOURCE_BYTES}"),
+            Self::MissingObject(guid) => {
+                write!(f, "script object {guid} is not in the runtime world")
+            }
+            Self::TooManyInstances => write!(
+                f,
+                "the scene exceeds the {MAX_SCRIPT_INSTANCES}-script limit"
+            ),
+            Self::SourceTooLarge(size) => write!(
+                f,
+                "script source is {size} bytes; maximum is {MAX_SCRIPT_SOURCE_BYTES}"
+            ),
         }
     }
 }
@@ -86,10 +94,7 @@ struct ScriptInstance {
 }
 
 impl ScriptInstance {
-    fn compile(
-        definition: ScriptDefinition,
-        context: SharedContext,
-    ) -> Result<Self, ScriptError> {
+    fn compile(definition: ScriptDefinition, context: SharedContext) -> Result<Self, ScriptError> {
         if definition.source.len() > MAX_SCRIPT_SOURCE_BYTES {
             return Err(ScriptError::SourceTooLarge(definition.source.len()));
         }
@@ -147,13 +152,15 @@ impl ScriptInstance {
         });
         self.interrupt_checkpoints.set(0);
         let result = callback.call::<()>((self.state.clone(), delta.as_secs_f64()));
-        let context = self.context.borrow_mut().take().unwrap_or_else(|| {
-            ScriptCallContext {
+        let context = self
+            .context
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| ScriptCallContext {
                 transform,
                 properties: self.definition.properties.clone(),
                 actions: actions.clone(),
-            }
-        });
+            });
         result?;
         Ok(context)
     }
@@ -348,11 +355,7 @@ fn install_forge_api(lua: &Lua, context: SharedContext) -> Result<(), LuaError> 
     Ok(())
 }
 
-fn install_object_api(
-    lua: &Lua,
-    state: &Table,
-    context: SharedContext,
-) -> Result<(), LuaError> {
+fn install_object_api(lua: &Lua, state: &Table, context: SharedContext) -> Result<(), LuaError> {
     let getter_context = context.clone();
     state.set(
         "get",
@@ -468,8 +471,14 @@ fn same_property_type(left: &ScriptPropertyValue, right: &ScriptPropertyValue) -
     matches!(
         (left, right),
         (ScriptPropertyValue::Bool(_), ScriptPropertyValue::Bool(_))
-            | (ScriptPropertyValue::Number(_), ScriptPropertyValue::Number(_))
-            | (ScriptPropertyValue::String(_), ScriptPropertyValue::String(_))
+            | (
+                ScriptPropertyValue::Number(_),
+                ScriptPropertyValue::Number(_)
+            )
+            | (
+                ScriptPropertyValue::String(_),
+                ScriptPropertyValue::String(_)
+            )
     )
 }
 

@@ -11,6 +11,7 @@ forge_assets = { path = "../forge_assets" }
 forge_core = { path = "../forge_core" }
 forge_physics = { path = "../forge_physics" }
 forge_scene = { path = "../forge_scene" }
+forge_scripting = { path = "../forge_scripting" }
 forge_world = { path = "../forge_world" }
 
 [lints]
