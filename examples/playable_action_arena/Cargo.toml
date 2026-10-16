@@ -13,7 +13,7 @@ forge_renderer = { path = "../../crates/forge_renderer" }
 forge_runtime = { path = "../../crates/forge_runtime" }
 forge_scene = { path = "../../crates/forge_scene" }
 forge_world = { path = "../../crates/forge_world" }
-winit = "=0.30.12"
+winit = "=0.30.13"
 uuid.workspace = true
 
 [lints]
