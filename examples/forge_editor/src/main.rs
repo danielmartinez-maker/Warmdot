@@ -1069,6 +1069,18 @@ impl EditorApp {
             });
         });
 
+        if replacement.sprite.is_none() && ui.button("Add Sprite component").clicked() {
+            replacement.sprite = Some(AuthoredSprite {
+                asset: None,
+                animation_clip: None,
+                size: [1.0, 1.0],
+                tint: [1.0; 4],
+                uv_rect: [0.0, 0.0, 1.0, 1.0],
+                layer: 0,
+                order: 0,
+            });
+            changed = true;
+        }
         if let Some(sprite) = replacement.sprite.as_mut() {
             ui.collapsing("Sprite", |ui| {
                 ui.horizontal(|ui| {
