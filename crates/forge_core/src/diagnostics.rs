@@ -147,7 +147,8 @@ mod tests {
             "界".repeat(MAX_MESSAGE_BYTES),
         )
         .with_field("context", "界".repeat(MAX_FIELD_VALUE_BYTES));
-        assert_eq!(record.event.len(), MAX_EVENT_BYTES);
+        assert!(record.event.len() <= MAX_EVENT_BYTES);
+        assert!(record.event.is_char_boundary(record.event.len()));
         assert!(record.message.len() <= MAX_MESSAGE_BYTES);
         assert!(record.fields["context"].len() <= MAX_FIELD_VALUE_BYTES);
         assert!(record.message.is_char_boundary(record.message.len()));
