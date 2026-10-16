@@ -246,7 +246,7 @@ impl Project {
         let parent = scene_path
             .parent()
             .ok_or_else(|| ProjectError::Invalid("scene path has no parent directory".into()))?;
-        fs::create_dir_all(parent)?;
+        create_confined_scene_parent(&self.root, parent)?;
         let canonical_parent = parent.canonicalize()?;
         if !canonical_parent.starts_with(&self.root) {
             return Err(ProjectError::Invalid(
@@ -293,6 +293,49 @@ impl Project {
     pub fn default_scene(&self) -> &SceneDocument {
         &self.default_scene
     }
+}
+
+fn create_confined_scene_parent(root: &Path, parent: &Path) -> Result<(), ProjectError> {
+    let relative_parent = parent
+        .strip_prefix(root)
+        .map_err(|_| ProjectError::Invalid("scene parent is outside the project".into()))?;
+    let mut current = root.to_path_buf();
+    for component in relative_parent.components() {
+        let Component::Normal(name) = component else {
+            return Err(ProjectError::Invalid(
+                "scene parent must be a normalized project-relative directory".into(),
+            ));
+        };
+        current.push(name);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ProjectError::Invalid(
+                    "scene parent folders must not be symbolic links".into(),
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(ProjectError::Invalid(
+                    "scene parent path contains a non-directory".into(),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if let Err(error) = fs::create_dir(&current) {
+                    if error.kind() != std::io::ErrorKind::AlreadyExists {
+                        return Err(ProjectError::Io(error));
+                    }
+                }
+            }
+            Err(error) => return Err(ProjectError::Io(error)),
+        }
+        let canonical_current = current.canonicalize()?;
+        if !canonical_current.starts_with(root) {
+            return Err(ProjectError::Invalid(
+                "scene parent resolves outside the project folder".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_scene_relative_path(path: &Path) -> Result<(), ProjectError> {
