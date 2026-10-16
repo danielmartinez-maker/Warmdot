@@ -10,6 +10,7 @@ members = [
     "crates/forge_renderer",
     "crates/forge_assets",
     "crates/forge_tilemap",
+    "crates/forge_input",
     "examples/action_arena",
     "examples/renderer_benchmark",
 ]

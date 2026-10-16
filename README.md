@@ -10,7 +10,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - Scene JSON is schema-versioned, validated, and compiled into a Forge-owned world API.
 - Project manifests resolve a default scene and reject path traversal or symlink escape.
 - The fixed-step clock caps frame time and simulation catch-up and reports dropped time; the runtime supports play, pause, one-tick stepping, and scene replacement with clock/input/physics reset.
-- Timestamped input actions are delivered in stable queue order.
+- Timestamped input actions are delivered in stable queue order; keyboard and mouse bindings aggregate multiple held sources and release cleanly when focus is lost.
 - The Rapier adapter supports fixed, dynamic, and position-based kinematic bodies; circle and box colliders; sensor/collision events; raycasts; and transform synchronization.
 - The headless action-arena sample runs a dynamic player against a fixed floor.
 - The native wgpu renderer draws ordered, tinted sprite instances in one instanced batch and can extract draw data from the runtime world.
@@ -34,6 +34,7 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer curr
 - `crates/forge_renderer`: native wgpu surface, camera projection, sprite batching, and runtime-world extraction
 - `crates/forge_assets`: safe project asset catalog, PNG decode, sprite-sheet/clip validation, and animation playback
 - `crates/forge_tilemap`: sparse chunk storage, versioned tilemap documents, paint edits, and bounded undo/redo
+- `crates/forge_input`: winit keyboard/mouse bindings translated into timestamped game actions
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
@@ -41,6 +42,7 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer curr
 - `docs/architecture/assets-and-animation.md`: asset scan, stable identity, and animation data contract
 - `docs/architecture/tilemaps-and-edit-history.md`: chunk layout, coordinate mapping, and editor history contract
 - `docs/architecture/runtime-controls.md`: pause, stepping, and scene replacement behavior
+- `docs/architecture/input-bindings.md`: key/mouse action mapping and focus-loss semantics
 
 ## Build
 
