@@ -11,7 +11,8 @@ use forge_core::{
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument};
-use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptHost};
+pub use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptError};
+use forge_scripting::ScriptHost;
 use forge_world::{RuntimeWorld, WorldError};
 
 #[derive(Debug)]
@@ -413,6 +414,10 @@ impl GameRuntime {
             simulation_time: self.simulation_time,
             physics_events: frame_physics_events,
         }
+    }
+
+    pub fn attach_script(&mut self, definition: ScriptDefinition) -> Result<(), ScriptError> {
+        self.script_host.attach(definition, &mut self.world)
     }
 
     pub fn reload_script_asset(&mut self, asset: &LoadedScriptAsset) {

@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     error::Error,
     sync::{
         Arc,
@@ -10,8 +11,11 @@ use std::{
 use forge_core::{ActionId, Guid};
 use forge_input::InputMap;
 use forge_renderer::GpuRenderer;
-use forge_runtime::{GameRuntime, RuntimeConfig};
-use forge_scene::{AuthoredCamera, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject};
+use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDefinition};
+use forge_scene::{
+    AuthoredCamera, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
+    ScriptPropertyValue,
+};
 use forge_world::{Sprite, Transform2D};
 use winit::{
     application::ApplicationHandler,
@@ -41,6 +45,19 @@ impl GameState {
     fn new(window: Arc<Window>, renderer: GpuRenderer) -> Result<Self, Box<dyn Error>> {
         let scene = make_scene();
         let mut runtime = GameRuntime::from_scene(&scene, RuntimeConfig::default())?;
+        runtime.attach_script(ScriptDefinition {
+            object_guid: PLAYER_GUID,
+            asset_guid: Guid::new(),
+            source_path: "Assets/PlayerController.luau".into(),
+            source: include_str!("../Assets/PlayerController.luau").into(),
+            properties: BTreeMap::from([
+                ("speed".into(), ScriptPropertyValue::Number(16.0)),
+                ("min_x".into(), ScriptPropertyValue::Number(-28.0)),
+                ("max_x".into(), ScriptPropertyValue::Number(28.0)),
+                ("min_y".into(), ScriptPropertyValue::Number(8.0)),
+                ("max_y".into(), ScriptPropertyValue::Number(16.0)),
+            ]),
+        })?;
         let score = Arc::new(AtomicU32::new(0));
         runtime.add_fixed_system(make_game_system(score.clone()));
 
@@ -173,22 +190,6 @@ fn make_game_system(
     let mut enemies = Vec::<Guid>::new();
     move |world, context| {
         let delta = context.delta.as_secs_f32();
-        let mut move_x = context.action(MOVE_X).map_or(0.0, |state| state.value);
-        let mut move_y = context.action(MOVE_Y).map_or(0.0, |state| state.value);
-        let length = (move_x * move_x + move_y * move_y).sqrt().max(1.0);
-        move_x /= length;
-        move_y /= length;
-
-        if let Some(player) = world.entity_for_guid(PLAYER_GUID) {
-            if let Some(mut transform) = world.transform(player) {
-                transform.translation[0] =
-                    (transform.translation[0] + move_x * 16.0 * delta).clamp(-28.0, 28.0);
-                transform.translation[1] =
-                    (transform.translation[1] + move_y * 16.0 * delta).clamp(8.0, 16.0);
-                let _ = world.set_transform(player, transform);
-            }
-        }
-
         if context
             .input_events
             .iter()
