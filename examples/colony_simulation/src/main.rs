@@ -290,7 +290,9 @@ fn make_colony_system(
             let _ = world.set_sprite(
                 entity,
                 Sprite {
+                    size: [0.72, 0.72],
                     tint,
+                    layer: 3,
                     ..Sprite::default()
                 },
             );
