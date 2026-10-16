@@ -249,7 +249,7 @@ impl EditorApp {
         self.selected_asset = None;
         match self.history.create_object(&mut self.scene, object, None) {
             Ok(()) => self.status.clear(),
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.set_error_status("editor.object_create_failed", error.to_string()),
         }
     }
 
@@ -262,7 +262,7 @@ impl EditorApp {
                 self.selected = None;
                 self.status.clear();
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.set_error_status("editor.object_delete_failed", error.to_string()),
         }
     }
 
@@ -757,7 +757,10 @@ impl EditorApp {
             Ok(None) => {
                 self.status = format!("No breakpoint was found for line {}.", self.breakpoint_line);
             }
-            Err(error) => self.status = format!("Breakpoint update failed: {error}"),
+            Err(error) => self.set_error_status(
+                "editor.breakpoint_update_failed",
+                format!("Breakpoint update failed: {error}"),
+            ),
         }
     }
 
@@ -1951,7 +1954,7 @@ impl EditorApp {
             self.last_asset_scan = None;
             match self.history.replace_object(&mut self.scene, replacement) {
                 Ok(()) => self.status.clear(),
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.set_error_status("editor.object_replace_failed", error.to_string()),
             }
         }
     }
@@ -2026,7 +2029,7 @@ impl EditorApp {
                     None => self.status = "Runtime stopped before the property update.".into(),
                 }
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.set_error_status("editor.property_edit_failed", error.to_string()),
         }
     }
 
@@ -2916,7 +2919,10 @@ impl EditorApp {
         if let Some((event_name, source_id)) = activated_ui_event {
             if let Some(runtime) = self.runtime.as_mut() {
                 if !runtime.emit_ui_event(event_name, source_id) {
-                    self.status = "Game UI event was rejected by the script queue.".into();
+                    self.set_error_status(
+                        "editor.game_ui_event_rejected",
+                        "Game UI event was rejected by the script queue.".into(),
+                    );
                 }
             }
         }
@@ -3822,7 +3828,7 @@ impl eframe::App for EditorApp {
                     } else {
                         match self.history.undo(&mut self.scene) {
                             Ok(_) => self.status.clear(),
-                            Err(error) => self.status = error.to_string(),
+                            Err(error) => self.set_error_status("editor.undo_failed", error.to_string()),
                         }
                     }
                 }
@@ -3845,7 +3851,7 @@ impl eframe::App for EditorApp {
                     } else {
                         match self.history.redo(&mut self.scene) {
                             Ok(_) => self.status.clear(),
-                            Err(error) => self.status = error.to_string(),
+                            Err(error) => self.set_error_status("editor.redo_failed", error.to_string()),
                         }
                     }
                 }
