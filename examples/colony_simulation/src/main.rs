@@ -820,8 +820,8 @@ mod navigation_tests {
         use forge_project::Project;
         use forge_runtime::ScriptUiCommand;
 
-        let project_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../colony_project");
+        let project_path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../colony_project");
         let project = Project::open(project_path).expect("open editor-authored colony project");
         let assets = AssetCatalog::open(project.root()).expect("open colony assets");
         let mut runtime = GameRuntime::from_scene_with_assets(
@@ -873,10 +873,7 @@ mod navigation_tests {
             let entity = runtime
                 .entity_for_guid(worker_guid)
                 .expect("authored worker should remain in the scene");
-            let transform = runtime
-                .world()
-                .transform(entity)
-                .expect("worker transform");
+            let transform = runtime.world().transform(entity).expect("worker transform");
             let cell = grid
                 .cell_at(transform.translation)
                 .expect("worker stays within the navigable grid");
