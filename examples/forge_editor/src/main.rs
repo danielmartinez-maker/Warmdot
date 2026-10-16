@@ -15,6 +15,7 @@ use forge_project::Project;
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
+    CURRENT_SCENE_SCHEMA,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
 
@@ -33,6 +34,7 @@ struct EditorTileMap {
 struct EditorApp {
     project: Project,
     scene: SceneDocument,
+    scene_path: String,
     history: SceneEditHistory,
     selected: Option<Guid>,
     status: String,
@@ -47,6 +49,7 @@ struct EditorApp {
 impl EditorApp {
     fn new(project: Project) -> Self {
         let scene = project.default_scene().clone();
+        let scene_path = project.document().default_scene.clone();
         let selected = scene.objects.first().map(|object| object.object_guid);
         let (catalog, mut status) = match AssetCatalog::open(project.root()) {
             Ok(catalog) => (Some(catalog), String::new()),
@@ -62,6 +65,7 @@ impl EditorApp {
         Self {
             project,
             scene,
+            scene_path,
             history: SceneEditHistory::new(256),
             selected,
             status,
@@ -113,12 +117,66 @@ impl EditorApp {
     }
 
     fn save(&mut self) {
-        match self.project.save_default_scene(&self.scene) {
+        let result = if self.scene_path == self.project.document().default_scene {
+            self.project.save_default_scene(&self.scene)
+        } else {
+            self.project.save_scene(&self.scene_path, &self.scene)
+        };
+        match result {
             Ok(()) => {
                 self.history.mark_saved();
                 self.status = "Saved".into();
             }
             Err(error) => self.status = format!("Save failed: {error}"),
+        }
+    }
+
+    fn open_scene(&mut self, relative_path: String) {
+        if self.history.is_dirty() {
+            self.status = "Save the current scene before opening another.".into();
+            return;
+        }
+        match self.project.load_scene(&relative_path) {
+            Ok(scene) => {
+                self.selected = scene.objects.first().map(|object| object.object_guid);
+                self.scene = scene;
+                self.scene_path = relative_path;
+                self.history = SceneEditHistory::new(256);
+                self.status.clear();
+            }
+            Err(error) => self.status = format!("Scene open failed: {error}"),
+        }
+    }
+
+    fn create_scene(&mut self) {
+        if self.history.is_dirty() {
+            self.status = "Save the current scene before creating another.".into();
+            return;
+        }
+        let mut index = 2;
+        let (relative_path, name) = loop {
+            let path = format!("Scenes/Scene-{index}.forgescene");
+            if !self.project.root().join(&path).exists() {
+                break (path, format!("Scene {index}"));
+            }
+            index += 1;
+        };
+        let scene = SceneDocument {
+            schema_version: CURRENT_SCENE_SCHEMA,
+            resource_guid: Guid::new(),
+            name,
+            dependencies: Vec::new(),
+            objects: Vec::new(),
+        };
+        match self.project.save_scene(&relative_path, &scene) {
+            Ok(()) => {
+                self.scene = scene;
+                self.scene_path = relative_path;
+                self.selected = None;
+                self.history = SceneEditHistory::new(256);
+                self.status = "New scene created.".into();
+            }
+            Err(error) => self.status = format!("Scene create failed: {error}"),
         }
     }
 
