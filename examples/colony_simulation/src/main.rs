@@ -27,12 +27,7 @@ const MAX_WORKERS: usize = 256;
 const WORKER_SPEED: f32 = 3.2;
 const ARRIVAL_RADIUS: f32 = 0.8;
 const HOME: [f32; 2] = [0.0, 0.0];
-const RESOURCE_NODES: [[f32; 2]; 4] = [
-    [-22.0, -11.0],
-    [22.0, -11.0],
-    [-22.0, 11.0],
-    [22.0, 11.0],
-];
+const RESOURCE_NODES: [[f32; 2]; 4] = [[-22.0, -11.0], [22.0, -11.0], [-22.0, 11.0], [22.0, 11.0]];
 
 #[derive(Clone, Copy)]
 struct WorkerState {
@@ -66,16 +61,8 @@ impl GameState {
         ));
 
         let mut input = InputMap::new();
-        input.bind_key(
-            PhysicalKey::Code(KeyCode::Space),
-            BUILD_WORKER,
-            1.0,
-        )?;
-        input.bind_key(
-            PhysicalKey::Code(KeyCode::KeyB),
-            BUILD_WORKER,
-            1.0,
-        )?;
+        input.bind_key(PhysicalKey::Code(KeyCode::Space), BUILD_WORKER, 1.0)?;
+        input.bind_key(PhysicalKey::Code(KeyCode::KeyB), BUILD_WORKER, 1.0)?;
 
         Ok(Self {
             window,
@@ -114,8 +101,7 @@ impl GameState {
 
     fn handle_input(&mut self, event: &WindowEvent) {
         let at = self.runtime.simulation_time();
-        self.input
-            .handle_window_event(event, at, &mut self.runtime);
+        self.input.handle_window_event(event, at, &mut self.runtime);
     }
 }
 
@@ -170,7 +156,10 @@ fn make_scene() -> (SceneDocument, Vec<WorkerState>) {
             node: index % RESOURCE_NODES.len(),
             carrying: false,
         });
-        objects.last_mut().expect("worker sprite was just appended").object_guid = guid;
+        objects
+            .last_mut()
+            .expect("worker sprite was just appended")
+            .object_guid = guid;
     }
 
     (
