@@ -41,7 +41,7 @@ The first native scene editor is now available, but this branch is not the compl
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `examples/forge_player`: opens a `.forgeproj`, runs its default scene, uploads project PNGs, and refreshes changed images while the player is open
-- `examples/forge_editor`: creates or opens projects, edits a scene tree and sprite properties, previews tinted or textured objects, and saves with undo/redo
+- `examples/forge_editor`: creates or opens projects, edits a scene tree plus sprite, camera, rigid-body, and collider properties, previews tinted or textured objects, and saves with undo/redo
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
