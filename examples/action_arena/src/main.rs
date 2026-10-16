@@ -32,7 +32,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .objects
         .iter_mut()
         .find(|object| object.object_guid == player_guid)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "sample Player object is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "sample Player object is missing")
+        })?;
     player.script = Some(AuthoredScript {
         asset: script.guid,
         properties: BTreeMap::from([
@@ -43,11 +45,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !scene.dependencies.contains(&script.guid) {
         scene.dependencies.push(script.guid);
     }
-    let mut runtime = GameRuntime::from_scene_with_assets(
-        &scene,
-        RuntimeConfig::default(),
-        &assets,
-    )?;
+    let mut runtime =
+        GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), &assets)?;
 
     let mut frames = 0_u64;
     for _ in 0..120 {
