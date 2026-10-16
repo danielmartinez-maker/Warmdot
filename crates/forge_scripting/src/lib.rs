@@ -308,12 +308,8 @@ impl ScriptHost {
             match ScriptInstance::compile(definition.clone(), context) {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
-                        migrate_compatible_state(
-                            &previous.state,
-                            &instance.state,
-                            &instance._lua,
-                        )
-                        .map(|warnings| (previous.start_pending, warnings))
+                        migrate_compatible_state(&previous.state, &instance.state, &instance._lua)
+                            .map(|warnings| (previous.start_pending, warnings))
                     });
                     match migration {
                         Some(Ok((start_pending, warnings))) => {
@@ -466,9 +462,7 @@ fn migrate_compatible_state(
         let name = key.to_string_lossy();
         let replacement_value: LuaValue = replacement.get(name.as_str())?;
         let migrated_value = match (&previous_value, &replacement_value) {
-            (LuaValue::Boolean(value), LuaValue::Boolean(_)) => {
-                Some(LuaValue::Boolean(*value))
-            }
+            (LuaValue::Boolean(value), LuaValue::Boolean(_)) => Some(LuaValue::Boolean(*value)),
             (LuaValue::Integer(value), LuaValue::Integer(_)) => Some(LuaValue::Integer(*value)),
             (LuaValue::Number(value), LuaValue::Number(_)) => Some(LuaValue::Number(*value)),
             (LuaValue::String(value), LuaValue::String(_)) => Some(LuaValue::String(
