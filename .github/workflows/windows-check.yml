@@ -115,3 +115,21 @@ jobs:
           name: forge2d-colony-windows
           path: artifacts/colony-windows
           if-no-files-found: error
+      - name: Download uploaded Action Arena player package
+        uses: actions/download-artifact@v4
+        with:
+          name: forge2d-action-arena-windows
+          path: artifacts/downloaded/action-arena
+      - name: Validate downloaded Action Arena player package
+        shell: pwsh
+        run: |
+          & 'artifacts/downloaded/action-arena/Forge2DPlayer.exe' --validate 'artifacts/downloaded/action-arena/Game/project.forgeproj'
+      - name: Download uploaded colony player package
+        uses: actions/download-artifact@v4
+        with:
+          name: forge2d-colony-windows
+          path: artifacts/downloaded/colony
+      - name: Validate downloaded colony player package
+        shell: pwsh
+        run: |
+          & 'artifacts/downloaded/colony/Forge2DPlayer.exe' --validate 'artifacts/downloaded/colony/Game/project.forgeproj'
