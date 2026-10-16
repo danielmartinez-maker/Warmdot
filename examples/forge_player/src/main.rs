@@ -9,7 +9,7 @@ use std::{
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_core::Guid;
-use forge_project::Project;
+use forge_project::{Project, PROJECT_FILE_NAME};
 use forge_renderer::{GpuRenderer, RenderOutcome};
 use forge_runtime::{GameRuntime, RuntimeConfig};
 use forge_scene::{
@@ -304,6 +304,120 @@ fn tile_uv_rect(
     ])
 }
 
+fn copy_tree_without_symlinks(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
+    fs::create_dir_all(destination)?;
+    let mut entries = fs::read_dir(source)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            copy_tree_without_symlinks(&source_path, &destination_path)?;
+        } else if file_type.is_file() {
+            fs::copy(source_path, destination_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_regular_file(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "export source files must be regular files, not symbolic links",
+        )
+        .into());
+    }
+    let canonical = source.canonicalize()?;
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(canonical, destination)?;
+    Ok(())
+}
+
+fn export_project(project_path: PathBuf, output_path: PathBuf) -> Result<(), Box<dyn Error>> {
+    let manifest_source = if project_path.is_dir() {
+        project_path.join(PROJECT_FILE_NAME)
+    } else {
+        project_path.clone()
+    };
+    let manifest_source = manifest_source.canonicalize()?;
+    let project = Project::open(manifest_source.clone())?;
+    let project_root = project.root().to_path_buf();
+    let output_path = if output_path.is_absolute() {
+        output_path
+    } else {
+        env::current_dir()?.join(output_path)
+    };
+    fs::create_dir_all(&output_path)?;
+    let output_root = output_path.canonicalize()?;
+    if output_root.starts_with(&project_root) || project_root.starts_with(&output_root) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "export folder and source project must not contain one another",
+        )
+        .into());
+    }
+
+    let game_root = output_root.join("Game");
+    fs::create_dir_all(&game_root)?;
+    copy_regular_file(&manifest_source, &game_root.join(PROJECT_FILE_NAME))?;
+
+    let scene_relative = Path::new(&project.document().default_scene);
+    let scene_source = project_root.join(scene_relative);
+    let scene_source = scene_source.canonicalize()?;
+    if !scene_source.starts_with(&project_root) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "default scene resolves outside the source project",
+        )
+        .into());
+    }
+    let scene_target = game_root.join(scene_relative);
+    copy_regular_file(&scene_source, &scene_target)?;
+
+    let assets_source = project_root.join("Assets");
+    if assets_source.exists() {
+        let canonical_assets = assets_source.canonicalize()?;
+        if !canonical_assets.starts_with(&project_root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Assets folder resolves outside the source project",
+            )
+            .into());
+        }
+        copy_tree_without_symlinks(&canonical_assets, &game_root.join("Assets"))?;
+    }
+    let asset_index = project_root.join(".forge").join("asset-index.json");
+    if asset_index.exists() {
+        copy_regular_file(
+            &asset_index,
+            &game_root.join(".forge").join("asset-index.json"),
+        )?;
+    }
+
+    let executable_name = if cfg!(windows) {
+        "Forge2DPlayer.exe"
+    } else {
+        "Forge2DPlayer"
+    };
+    fs::copy(env::current_exe()?, output_root.join(executable_name))?;
+    let launcher = if cfg!(windows) {
+        "@echo off\r\n\"%~dp0Forge2DPlayer.exe\" \"%~dp0Game\\project.forgeproj\" %*\r\n"
+    } else {
+        "#!/bin/sh\nDIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n\"$DIR/Forge2DPlayer\" \"$DIR/Game/project.forgeproj\" \"$@\"\n"
+    };
+    let launcher_name = if cfg!(windows) { "run-game.bat" } else { "run-game.sh" };
+    fs::write(output_root.join(launcher_name), launcher)?;
+    Ok(())
+}
+
 fn load_project_textures(
     assets: &AssetCatalog,
     renderer: &mut GpuRenderer,
@@ -349,15 +463,23 @@ fn refresh_project_textures(
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args().skip(1);
-    let Some(project_path) = args.next() else {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    if args.first().is_some_and(|argument| argument == "--export") {
+        if args.len() != 3 {
+            return Err(
+                "usage: forge-player --export <project directory or .forgeproj path> <output folder>"
+                    .into(),
+            );
+        }
+        export_project(PathBuf::from(&args[1]), PathBuf::from(&args[2]))?;
+        println!("Standalone project exported successfully.");
+        return Ok(());
+    }
+    if args.len() != 1 {
         return Err("usage: forge-player <project directory or .forgeproj path>".into());
-    };
-    if args.next().is_some() {
-        return Err("forge-player accepts one project path".into());
     }
 
-    let project = Project::open(PathBuf::from(project_path))?;
+    let project = Project::open(PathBuf::from(&args[0]))?;
     let project_name = project.document().name.clone();
     let project_root = project.root().to_path_buf();
     let assets = AssetCatalog::open(project_root.clone())?;
