@@ -157,7 +157,11 @@ impl AssetCatalog {
             let mut ids = BTreeSet::new();
             for record in document.entries {
                 validate_relative_asset_path(&record.relative_path)?;
-                if !ids.insert(record.guid) || records.insert(record.relative_path.clone(), record).is_some() {
+                if !ids.insert(record.guid)
+                    || records
+                        .insert(record.relative_path.clone(), record)
+                        .is_some()
+                {
                     return Err(AssetError::Invalid(
                         "asset index contains duplicate GUIDs or paths".into(),
                     ));
@@ -230,9 +234,7 @@ impl AssetCatalog {
                     guid,
                     relative_path: path.clone(),
                 }),
-                Some(previous)
-                    if previous.fingerprint != fingerprint || previous.kind != kind =>
-                {
+                Some(previous) if previous.fingerprint != fingerprint || previous.kind != kind => {
                     changes.push(AssetChange {
                         kind: AssetChangeKind::Modified,
                         guid,
@@ -315,11 +317,7 @@ impl AssetCatalog {
         Ok(clip)
     }
 
-    fn record_of_kind(
-        &self,
-        guid: Guid,
-        expected: AssetKind,
-    ) -> Result<&AssetRecord, AssetError> {
+    fn record_of_kind(&self, guid: Guid, expected: AssetKind) -> Result<&AssetRecord, AssetError> {
         let record = self.get(guid).ok_or(AssetError::UnknownGuid(guid))?;
         if record.kind != expected {
             return Err(AssetError::WrongKind { guid, expected });
@@ -352,7 +350,9 @@ impl AssetCatalog {
             .ok_or_else(|| AssetError::Invalid("asset index has no parent directory".into()))?;
         let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
         temporary.write_all(&bytes)?;
-        temporary.persist(&self.index_path).map_err(|error| AssetError::Io(error.error))?;
+        temporary
+            .persist(&self.index_path)
+            .map_err(|error| AssetError::Io(error.error))?;
         Ok(())
     }
 }
@@ -425,8 +425,16 @@ impl SpriteSheetDocument {
             }
             if frame.rect.width == 0
                 || frame.rect.height == 0
-                || frame.rect.x.checked_add(frame.rect.width).is_none_or(|right| right > texture_width)
-                || frame.rect.y.checked_add(frame.rect.height).is_none_or(|bottom| bottom > texture_height)
+                || frame
+                    .rect
+                    .x
+                    .checked_add(frame.rect.width)
+                    .is_none_or(|right| right > texture_width)
+                || frame
+                    .rect
+                    .y
+                    .checked_add(frame.rect.height)
+                    .is_none_or(|bottom| bottom > texture_height)
             {
                 return Err(AssetError::Invalid(format!(
                     "sprite frame {} has a rectangle outside the texture",
@@ -662,9 +670,10 @@ fn validate_relative_asset_path(path: &str) -> Result<(), AssetError> {
             "asset path must be a normalized project-relative path".into(),
         ));
     }
-    if Path::new(path).components().any(|component| {
-        !matches!(component, Component::Normal(_))
-    }) {
+    if Path::new(path)
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
         return Err(AssetError::Invalid(
             "asset path must not contain traversal or root components".into(),
         ));
