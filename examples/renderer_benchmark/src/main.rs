@@ -1,9 +1,4 @@
-use std::{
-    env,
-    error::Error,
-    sync::Arc,
-    time::Instant,
-};
+use std::{env, error::Error, sync::Arc, time::Instant};
 
 use forge_renderer::{Camera, GpuRenderer, RenderOutcome, SpriteInstance};
 use winit::{
@@ -102,9 +97,9 @@ impl BenchmarkState {
 
     fn draw_frame(&mut self) -> Result<Option<String>, Box<dyn Error>> {
         let started = Instant::now();
-        let outcome = self
-            .renderer
-            .render(&self.sprites, self.camera, [0.025, 0.035, 0.055, 1.0])?;
+        let outcome =
+            self.renderer
+                .render(&self.sprites, self.camera, [0.025, 0.035, 0.055, 1.0])?;
         let frame_time_ms = started.elapsed().as_secs_f64() * 1000.0;
         if outcome == RenderOutcome::Skipped {
             return Ok(None);

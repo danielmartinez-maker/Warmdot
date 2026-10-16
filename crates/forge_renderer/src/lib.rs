@@ -84,7 +84,9 @@ impl fmt::Display for RendererError {
             Self::Surface(message) => write!(f, "renderer surface error: {message}"),
             Self::Adapter(message) => write!(f, "no compatible graphics adapter: {message}"),
             Self::Device(message) => write!(f, "graphics device request failed: {message}"),
-            Self::TooManySprites => f.write_str("sprite batch exceeds the supported instance count"),
+            Self::TooManySprites => {
+                f.write_str("sprite batch exceeds the supported instance count")
+            }
         }
     }
 }
@@ -123,35 +125,28 @@ pub struct GpuRenderer {
 }
 
 impl GpuRenderer {
-    pub fn new(
-        display: OwnedDisplayHandle,
-        window: Arc<Window>,
-    ) -> Result<Self, RendererError> {
+    pub fn new(display: OwnedDisplayHandle, window: Arc<Window>) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
             Box::new(display),
         ));
         let surface = instance
             .create_surface(window.clone())
             .map_err(|error| RendererError::Surface(error.to_string()))?;
-        let adapter = pollster::block_on(instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            },
-        ))
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        }))
         .map_err(|error| RendererError::Adapter(error.to_string()))?;
         let adapter_info = adapter.get_info();
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor::default(),
-        ))
-        .map_err(|error| RendererError::Device(error.to_string()))?;
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+                .map_err(|error| RendererError::Device(error.to_string()))?;
         let capabilities = surface.get_capabilities(&adapter);
-        let format = capabilities
-            .formats
-            .first()
-            .copied()
-            .ok_or_else(|| RendererError::Surface("surface reports no supported formats".into()))?;
+        let format =
+            capabilities.formats.first().copied().ok_or_else(|| {
+                RendererError::Surface("surface reports no supported formats".into())
+            })?;
         let present_mode = capabilities
             .present_modes
             .first()
@@ -177,7 +172,12 @@ impl GpuRenderer {
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("forge2d-camera-uniform"),
             contents: bytemuck::bytes_of(&CameraUniform {
-                viewport: [configuration.width as f32, configuration.height as f32, 1.0, 1.0],
+                viewport: [
+                    configuration.width as f32,
+                    configuration.height as f32,
+                    1.0,
+                    1.0,
+                ],
                 camera: [0.0, 0.0, 0.0, 1.0],
             }),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -334,11 +334,8 @@ impl GpuRenderer {
             self.instance_capacity = capacity;
         }
         if required_bytes != 0 {
-            self.queue.write_buffer(
-                &self.instance_buffer,
-                0,
-                bytemuck::cast_slice(sprites),
-            );
+            self.queue
+                .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(sprites));
         }
         let uniform = CameraUniform {
             viewport: [
