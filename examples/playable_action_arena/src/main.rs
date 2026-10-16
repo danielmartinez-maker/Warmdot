@@ -102,6 +102,7 @@ fn make_scene() -> SceneDocument {
         },
         sprite: Some(AuthoredSprite {
             asset: None,
+            animation_clip: None,
             size: [1.4, 1.4],
             tint: [0.18, 0.88, 0.80, 1.0],
             layer: 1,
@@ -140,6 +141,7 @@ fn make_scene() -> SceneDocument {
             },
             sprite: Some(AuthoredSprite {
                 asset: None,
+            animation_clip: None,
                 size: [0.16, 0.16],
                 tint: [0.30, 0.48, 0.65, 1.0],
                 layer: 0,
