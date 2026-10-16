@@ -13,7 +13,6 @@ use forge_audio::{AudioBus, AudioEngine};
 use forge_core::{ActionId, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::{Project, SceneCatalog};
-use forge_ui::{UiDocument, UiKey, UiRuntime};
 use forge_runtime::{
     BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand, ScriptDiagnostic,
 };
@@ -24,6 +23,7 @@ use forge_scene::{
     SceneObject, ScriptPropertyValue,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
+use forge_ui::{UiDocument, UiKey, UiRuntime};
 
 struct EditorTileMap {
     document: TileMapDocument,
@@ -792,8 +792,10 @@ impl EditorApp {
             let preview_ui = match load_preview_ui(&scene, assets) {
                 Ok(ui) => ui,
                 Err(error) => {
-                    self.status =
-                        format!("Scene transition to {} has invalid game UI: {error}", scene.resource_guid);
+                    self.status = format!(
+                        "Scene transition to {} has invalid game UI: {error}",
+                        scene.resource_guid
+                    );
                     continue;
                 }
             };
@@ -809,8 +811,10 @@ impl EditorApp {
                     return;
                 }
                 Err(error) => {
-                    self.status =
-                        format!("Scene transition to {} could not prepare: {error}", scene.resource_guid);
+                    self.status = format!(
+                        "Scene transition to {} could not prepare: {error}",
+                        scene.resource_guid
+                    );
                 }
             }
         }
@@ -2634,19 +2638,27 @@ impl EditorApp {
 
         let viewport_width = rect.width().ceil().max(1.0) as u32;
         let viewport_height = rect.height().ceil().max(1.0) as u32;
-        let (pointer_position, primary_pressed, primary_released, window_focused, tab_pressed, enter_pressed, space_pressed, shift_pressed) =
-            ui.input(|input| {
-                (
-                    input.pointer.hover_pos(),
-                    input.pointer.button_pressed(egui::PointerButton::Primary),
-                    input.pointer.button_released(egui::PointerButton::Primary),
-                    input.raw.focused,
-                    input.key_pressed(egui::Key::Tab),
-                    input.key_pressed(egui::Key::Enter),
-                    input.key_pressed(egui::Key::Space),
-                    input.modifiers.shift,
-                )
-            });
+        let (
+            pointer_position,
+            primary_pressed,
+            primary_released,
+            window_focused,
+            tab_pressed,
+            enter_pressed,
+            space_pressed,
+            shift_pressed,
+        ) = ui.input(|input| {
+            (
+                input.pointer.hover_pos(),
+                input.pointer.button_pressed(egui::PointerButton::Primary),
+                input.pointer.button_released(egui::PointerButton::Primary),
+                input.raw.focused,
+                input.key_pressed(egui::Key::Tab),
+                input.key_pressed(egui::Key::Enter),
+                input.key_pressed(egui::Key::Space),
+                input.modifiers.shift,
+            )
+        });
         let mut ui_input_consumed = false;
         let mut activated_ui_event = None;
         let mut ui_error = None;
@@ -2827,14 +2839,11 @@ fn process_audio_commands(
     }
 }
 
-fn validate_scene_dependencies(
-    scene: &SceneDocument,
-    assets: &AssetCatalog,
-) -> Result<(), String> {
+fn validate_scene_dependencies(scene: &SceneDocument, assets: &AssetCatalog) -> Result<(), String> {
     for guid in scene.dependencies.iter().copied() {
-        let record = assets
-            .get(guid)
-            .ok_or_else(|| format!("scene dependency {guid} is not in the project asset catalog"))?;
+        let record = assets.get(guid).ok_or_else(|| {
+            format!("scene dependency {guid} is not in the project asset catalog")
+        })?;
         let result = match record.kind {
             AssetKind::Png => assets.load_png(guid).map(|_| ()),
             AssetKind::SpriteSheet => assets.load_sprite_sheet(guid).map(|_| ()),
@@ -2849,18 +2858,14 @@ fn validate_scene_dependencies(
     Ok(())
 }
 
-fn load_preview_ui(
-    scene: &SceneDocument,
-    assets: &AssetCatalog,
-) -> Result<UiRuntime, String> {
+fn load_preview_ui(scene: &SceneDocument, assets: &AssetCatalog) -> Result<UiRuntime, String> {
     let Some(guid) = scene.ui_document else {
         return Ok(UiRuntime::empty());
     };
     let source = assets
         .load_ui_source(guid)
         .map_err(|error| error.to_string())?;
-    let document =
-        UiDocument::from_json(&source.source).map_err(|error| error.to_string())?;
+    let document = UiDocument::from_json(&source.source).map_err(|error| error.to_string())?;
     let ui = UiRuntime::new(document).map_err(|error| error.to_string())?;
     ui.validate_assets(assets)
         .map_err(|error| error.to_string())?;
