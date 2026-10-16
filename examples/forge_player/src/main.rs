@@ -221,7 +221,8 @@ impl ApplicationHandler for PlayerApp {
                     );
                 }
                 let window_size = state.window.inner_size();
-                let ui_sprites = match self.ui.draw_commands(window_size.width, window_size.height) {
+                let ui_sprites = match self.ui.draw_commands(window_size.width, window_size.height)
+                {
                     Ok(commands) => ui_commands_to_sprites(commands),
                     Err(error) => {
                         eprintln!("game UI draw extraction failed: {error}");

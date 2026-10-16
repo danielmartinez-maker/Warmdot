@@ -779,7 +779,7 @@ impl GpuRenderer {
                             .get(&guid)
                             .expect("texture assets were validated before rendering")
                             .bind_group
-                    },
+                    }
                     None => &self.white_bind_group,
                 };
                 pass.set_bind_group(1, bind_group, &[]);
@@ -807,7 +807,7 @@ impl GpuRenderer {
                                 .get(&guid)
                                 .expect("UI textures were validated before rendering")
                                 .bind_group
-                        },
+                        }
                         None => &self.white_bind_group,
                     };
                     pass.set_bind_group(1, bind_group, &[]);
