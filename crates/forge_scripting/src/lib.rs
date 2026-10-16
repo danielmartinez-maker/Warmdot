@@ -308,11 +308,7 @@ impl ScriptInstance {
         }
     }
 
-    fn set_breakpoint(
-        &mut self,
-        line: u32,
-        enabled: bool,
-    ) -> Result<Option<u32>, LuaError> {
+    fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<Option<u32>, LuaError> {
         let accepted_line =
             luau_debug::set_breakpoint(&self._lua, &self.source_function, line, enabled)?;
         if enabled && accepted_line.is_some() {
