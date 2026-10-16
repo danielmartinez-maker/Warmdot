@@ -17,7 +17,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The native wgpu renderer samples registered RGBA images, applies sprite tint and alpha blending, and draws contiguous image groups with instanced quads; world extraction resolves each sprite's stable asset GUID.
 - The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
 - The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
-- The animation player advances clip frames using simulation delta and handles looping and completion without per-frame allocation; clips resolve to normalized sprite-sheet UV rectangles, and runtime sprites can update their region through the world API.
+- The animation player advances clip frames using fixed simulation delta and handles looping and completion without per-frame allocation; scene sprites can reference animation-clip assets, which the runtime validates, attaches, and applies as normalized sprite-sheet UV regions.
 - Tilemaps use sparse 32x32 chunks with correct negative-coordinate mapping, deterministic serialization, batched paint edits, and bounded undo/redo history.
 - Scene authoring commands add, delete, and replace objects through a bounded undo/redo history with a saved-state marker.
 
