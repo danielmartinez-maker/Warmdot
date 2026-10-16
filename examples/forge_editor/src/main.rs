@@ -52,7 +52,9 @@ impl EditorApp {
     }
 
     fn delete_selected(&mut self) {
-        let Some(guid) = self.selected else { return };
+        let Some(guid) = self.selected else {
+            return;
+        };
         match self.history.delete_object(&mut self.scene, guid) {
             Ok(()) => {
                 self.selected = None;
@@ -94,7 +96,11 @@ impl EditorApp {
             ui.label("Select an object to edit it.");
             return;
         };
-        let Some(index) = self.scene.objects.iter().position(|object| object.object_guid == guid)
+        let Some(index) = self
+            .scene
+            .objects
+            .iter()
+            .position(|object| object.object_guid == guid)
         else {
             self.selected = None;
             ui.label("The selected object was removed.");
@@ -109,17 +115,30 @@ impl EditorApp {
         ui.collapsing("Transform", |ui| {
             ui.horizontal(|ui| {
                 ui.label("Position");
-                changed |= ui.add(egui::DragValue::new(&mut replacement.transform.translation[0]).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut replacement.transform.translation[1]).speed(0.1)).changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut replacement.transform.translation[0]).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut replacement.transform.translation[1]).speed(0.1))
+                    .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Rotation");
-                changed |= ui.add(egui::DragValue::new(&mut replacement.transform.rotation_radians).speed(0.02)).changed();
+                changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut replacement.transform.rotation_radians)
+                            .speed(0.02),
+                    )
+                    .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Scale");
-                changed |= ui.add(egui::DragValue::new(&mut replacement.transform.scale[0]).speed(0.05)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut replacement.transform.scale[1]).speed(0.05)).changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut replacement.transform.scale[0]).speed(0.05))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut replacement.transform.scale[1]).speed(0.05))
+                    .changed();
             });
         });
 
@@ -127,19 +146,39 @@ impl EditorApp {
             ui.collapsing("Sprite", |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Size");
-                    changed |= ui.add(egui::DragValue::new(&mut sprite.size[0]).speed(0.05).range(0.01..=10000.0)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut sprite.size[1]).speed(0.05).range(0.01..=10000.0)).changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut sprite.size[0])
+                                .speed(0.05)
+                                .range(0.01..=10000.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut sprite.size[1])
+                                .speed(0.05)
+                                .range(0.01..=10000.0),
+                        )
+                        .changed();
                 });
                 ui.horizontal(|ui| {
                     ui.label("Tint");
                     for channel in &mut sprite.tint {
-                        changed |= ui.add(egui::DragValue::new(channel).speed(0.01).range(0.0..=1.0)).changed();
+                        changed |= ui
+                            .add(egui::DragValue::new(channel).speed(0.01).range(0.0..=1.0))
+                            .changed();
                     }
                 });
                 ui.horizontal(|ui| {
                     ui.label("UV");
                     for coordinate in &mut sprite.uv_rect {
-                        changed |= ui.add(egui::DragValue::new(coordinate).speed(0.01).range(0.0..=1.0)).changed();
+                        changed |= ui
+                            .add(
+                                egui::DragValue::new(coordinate)
+                                    .speed(0.01)
+                                    .range(0.0..=1.0),
+                            )
+                            .changed();
                     }
                 });
             });
@@ -158,31 +197,43 @@ impl EditorApp {
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, Color32::from_rgb(20, 24, 31));
         painter.line_segment(
-            [Pos2::new(rect.center().x, rect.top()), Pos2::new(rect.center().x, rect.bottom())],
+            [
+                Pos2::new(rect.center().x, rect.top()),
+                Pos2::new(rect.center().x, rect.bottom()),
+            ],
             Stroke::new(1.0, Color32::from_gray(55)),
         );
         painter.line_segment(
-            [Pos2::new(rect.left(), rect.center().y), Pos2::new(rect.right(), rect.center().y)],
+            [
+                Pos2::new(rect.left(), rect.center().y),
+                Pos2::new(rect.right(), rect.center().y),
+            ],
             Stroke::new(1.0, Color32::from_gray(55)),
         );
 
         let mut objects = self.scene.objects.iter().collect::<Vec<_>>();
-        objects.sort_by_key(|object| (
-            object.sprite.map_or(0, |sprite| sprite.layer),
-            object.sprite.map_or(0, |sprite| sprite.order),
-            object.object_guid,
-        ));
+        objects.sort_by_key(|object| {
+            (
+                object.sprite.map_or(0, |sprite| sprite.layer),
+                object.sprite.map_or(0, |sprite| sprite.order),
+                object.object_guid,
+            )
+        });
         let pixels_per_unit = 24.0;
         for object in &objects {
-            let Some(sprite) = object.sprite else { continue };
-            let center = rect.center() + Vec2::new(
-                object.transform.translation[0] * pixels_per_unit,
-                -object.transform.translation[1] * pixels_per_unit,
-            );
+            let Some(sprite) = object.sprite else {
+                continue;
+            };
+            let center = rect.center()
+                + Vec2::new(
+                    object.transform.translation[0] * pixels_per_unit,
+                    -object.transform.translation[1] * pixels_per_unit,
+                );
             let extent = Vec2::new(
                 (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
                 (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
-            ).max(Vec2::splat(2.0));
+            )
+            .max(Vec2::splat(2.0));
             let object_rect = Rect::from_center_size(center, extent);
             if self.selected == Some(object.object_guid) {
                 painter.rect_filled(object_rect.expand(4.0), 0.0, Color32::YELLOW);
@@ -199,18 +250,26 @@ impl EditorApp {
 
         if response.clicked() {
             if let Some(pointer) = response.interact_pointer_pos() {
-                self.selected = objects.iter().rev().find(|object| {
-                    let Some(sprite) = object.sprite else { return false };
-                    let center = rect.center() + Vec2::new(
-                        object.transform.translation[0] * pixels_per_unit,
-                        -object.transform.translation[1] * pixels_per_unit,
-                    );
-                    let extent = Vec2::new(
-                        (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
-                        (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
-                    ).max(Vec2::splat(2.0));
-                    Rect::from_center_size(center, extent).contains(pointer)
-                }).map(|object| object.object_guid);
+                self.selected = objects
+                    .iter()
+                    .rev()
+                    .find(|object| {
+                        let Some(sprite) = object.sprite else {
+                            return false;
+                        };
+                        let center = rect.center()
+                            + Vec2::new(
+                                object.transform.translation[0] * pixels_per_unit,
+                                -object.transform.translation[1] * pixels_per_unit,
+                            );
+                        let extent = Vec2::new(
+                            (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
+                            (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
+                        )
+                        .max(Vec2::splat(2.0));
+                        Rect::from_center_size(center, extent).contains(pointer)
+                    })
+                    .map(|object| object.object_guid);
             }
         }
     }
@@ -230,32 +289,52 @@ impl eframe::App for EditorApp {
         let context = ui.ctx().clone();
         egui::TopBottomPanel::top("toolbar").show(&context, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("Add sprite").clicked() { self.add_sprite(); }
-                if ui.button("Delete").clicked() { self.delete_selected(); }
+                if ui.button("Add sprite").clicked() {
+                    self.add_sprite();
+                }
+                if ui.button("Delete").clicked() {
+                    self.delete_selected();
+                }
                 ui.separator();
-                if ui.add_enabled(self.history.undo_depth() > 0, egui::Button::new("Undo")).clicked() {
+                if ui
+                    .add_enabled(self.history.undo_depth() > 0, egui::Button::new("Undo"))
+                    .clicked()
+                {
                     match self.history.undo(&mut self.scene) {
                         Ok(_) => self.status.clear(),
                         Err(error) => self.status = error.to_string(),
                     }
                 }
-                if ui.add_enabled(self.history.redo_depth() > 0, egui::Button::new("Redo")).clicked() {
+                if ui
+                    .add_enabled(self.history.redo_depth() > 0, egui::Button::new("Redo"))
+                    .clicked()
+                {
                     match self.history.redo(&mut self.scene) {
                         Ok(_) => self.status.clear(),
                         Err(error) => self.status = error.to_string(),
                     }
                 }
                 ui.separator();
-                if ui.button("Save").clicked() { self.save(); }
-                ui.label(if self.history.is_dirty() { "Unsaved changes" } else { "Saved" });
+                if ui.button("Save").clicked() {
+                    self.save();
+                }
+                ui.label(if self.history.is_dirty() {
+                    "Unsaved changes"
+                } else {
+                    "Saved"
+                });
                 if !self.status.is_empty() {
                     ui.separator();
                     ui.label(&self.status);
                 }
             });
         });
-        egui::SidePanel::left("hierarchy").default_width(220.0).show(&context, |ui| self.show_hierarchy(ui));
-        egui::SidePanel::right("inspector").default_width(320.0).show(&context, |ui| self.show_inspector(ui));
+        egui::SidePanel::left("hierarchy")
+            .default_width(220.0)
+            .show(&context, |ui| self.show_hierarchy(ui));
+        egui::SidePanel::right("inspector")
+            .default_width(320.0)
+            .show(&context, |ui| self.show_inspector(ui));
         egui::CentralPanel::default().show(&context, |ui| self.show_canvas(ui));
     }
 }
@@ -264,8 +343,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     let project = match args.as_slice() {
         [path] => Project::open(PathBuf::from(path.as_str()))?,
-        [flag, path, name] if flag == "--new" => Project::create(PathBuf::from(path.as_str()), name.as_str())?,
-        _ => return Err("usage: forge-editor <project directory or .forgeproj path> | --new <directory> <name>".into()),
+        [flag, path, name] if flag == "--new" => {
+            Project::create(PathBuf::from(path.as_str()), name.as_str())?
+        }
+        _ => return Err(
+            "usage: forge-editor <project directory or .forgeproj path> | --new <directory> <name>"
+                .into(),
+        ),
     };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1440.0, 900.0]),
