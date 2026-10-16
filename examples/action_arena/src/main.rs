@@ -57,6 +57,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use std::time::Duration;
 
+    use forge_core::ActionId;
+
     use super::*;
 
     #[test]
@@ -82,6 +84,7 @@ mod tests {
             .expect("player transform")
             .translation[0];
 
+        runtime.push_action(Duration::ZERO, ActionId(1), 1.0, true);
         runtime.advance_frame(Duration::from_millis(50));
 
         let after = runtime

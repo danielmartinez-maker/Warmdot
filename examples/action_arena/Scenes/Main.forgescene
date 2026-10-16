@@ -55,8 +55,8 @@
       "rigid_body": {
         "kind": "dynamic",
         "linear_velocity": [
-          1.5,
-          -2
+          0,
+          0
         ],
         "angular_velocity": 0,
         "gravity_scale": 0,
@@ -90,7 +90,8 @@
           "min_x": -28,
           "max_x": 28,
           "min_y": -16,
-          "max_y": 16
+          "max_y": 16,
+          "was_firing": false
         }
       }
     },
