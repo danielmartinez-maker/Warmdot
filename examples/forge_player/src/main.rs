@@ -9,7 +9,7 @@ use std::{
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_core::Guid;
-use forge_project::{Project, PROJECT_FILE_NAME};
+use forge_project::{PROJECT_FILE_NAME, Project};
 use forge_renderer::{GpuRenderer, RenderOutcome};
 use forge_runtime::{GameRuntime, RuntimeConfig};
 use forge_scene::{
