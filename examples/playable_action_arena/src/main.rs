@@ -3,7 +3,7 @@ use std::{
     error::Error,
     sync::{
         Arc,
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
     },
     time::Instant,
 };
@@ -29,6 +29,7 @@ use winit::{
 const MOVE_X: ActionId = ActionId(1);
 const MOVE_Y: ActionId = ActionId(2);
 const FIRE: ActionId = ActionId(3);
+const RESTART: ActionId = ActionId(4);
 const PLAYER_GUID: Guid = Guid::from_uuid(uuid::uuid!("8d80f6af-a189-4f23-ae03-972341119bee"));
 
 struct GameState {
@@ -37,7 +38,11 @@ struct GameState {
     runtime: GameRuntime,
     input: InputMap,
     score: Arc<AtomicU32>,
+    lives: Arc<AtomicU32>,
+    game_over: Arc<AtomicBool>,
     shown_score: u32,
+    shown_lives: u32,
+    shown_game_over: bool,
     last_frame: Instant,
 }
 
@@ -59,7 +64,13 @@ impl GameState {
             ]),
         })?;
         let score = Arc::new(AtomicU32::new(0));
-        runtime.add_fixed_system(make_game_system(score.clone()));
+        let lives = Arc::new(AtomicU32::new(3));
+        let game_over = Arc::new(AtomicBool::new(false));
+        runtime.add_fixed_system(make_game_system(
+            score.clone(),
+            lives.clone(),
+            game_over.clone(),
+        ));
 
         let mut input = InputMap::new();
         input.bind_key(PhysicalKey::Code(KeyCode::KeyA), MOVE_X, -1.0)?;
@@ -72,6 +83,7 @@ impl GameState {
         input.bind_key(PhysicalKey::Code(KeyCode::ArrowDown), MOVE_Y, 1.0)?;
         input.bind_key(PhysicalKey::Code(KeyCode::Space), FIRE, 1.0)?;
         input.bind_mouse(MouseButton::Left, FIRE, 1.0)?;
+        input.bind_key(PhysicalKey::Code(KeyCode::KeyR), RESTART, 1.0)?;
 
         Ok(Self {
             window,
@@ -79,7 +91,11 @@ impl GameState {
             runtime,
             input,
             score,
+            lives,
+            game_over,
             shown_score: 0,
+            shown_lives: 3,
+            shown_game_over: false,
             last_frame: Instant::now(),
         })
     }
@@ -90,10 +106,15 @@ impl GameState {
         self.last_frame = now;
         self.runtime.advance_frame(frame_delta);
         let score = self.score.load(Ordering::Relaxed);
-        if score != self.shown_score {
+        let lives = self.lives.load(Ordering::Relaxed);
+        let game_over = self.game_over.load(Ordering::Relaxed);
+        if score != self.shown_score || lives != self.shown_lives || game_over != self.shown_game_over {
             self.shown_score = score;
+            self.shown_lives = lives;
+            self.shown_game_over = game_over;
+            let state = if game_over { "GAME OVER | R restarts" } else { "WASD move | Space/click fire | R restart" };
             self.window
-                .set_title(&format!("Forge 2D Action Arena | Score {score}"));
+                .set_title(&format!("Forge 2D Action Arena | Score {score} | Lives {lives} | {state}"));
         }
         self.renderer
             .render_world(self.runtime.world_mut(), [0.018, 0.028, 0.050, 1.0])?;
@@ -109,6 +130,23 @@ impl GameState {
 
 fn make_scene() -> SceneDocument {
     let mut objects = Vec::new();
+    for row in 0..8 {
+        for column in 0..14 {
+            let tint = if (row + column) % 2 == 0 {
+                [0.035, 0.055, 0.085, 1.0]
+            } else {
+                [0.045, 0.065, 0.095, 1.0]
+            };
+            objects.push(authored_sprite(
+                format!("Arena tile {column},{row}"),
+                [(column as f32 - 6.5) * 4.0, (row as f32 - 3.5) * 4.0],
+                [3.92, 3.92],
+                tint,
+                -1,
+                row * 14 + column,
+            ));
+        }
+    }
     objects.push(SceneObject {
         object_guid: PLAYER_GUID,
         name: "Player".into(),
@@ -151,6 +189,21 @@ fn make_scene() -> SceneDocument {
         collider: None,
         script: None,
     });
+    for (name, position, size) in [
+        ("North wall", [0.0, 16.5], [60.0, 1.0]),
+        ("South wall", [0.0, -16.5], [60.0, 1.0]),
+        ("East wall", [29.5, 0.0], [1.0, 34.0]),
+        ("West wall", [-29.5, 0.0], [1.0, 34.0]),
+    ] {
+        objects.push(authored_sprite(
+            name,
+            position,
+            size,
+            [0.12, 0.24, 0.34, 1.0],
+            0,
+            1000,
+        ));
+    }
     for index in 0..48 {
         let seed = index as u32 * 747_796_405 + 2_891_336_453;
         let x = (seed % 560) as f32 / 10.0 - 28.0;
@@ -193,11 +246,56 @@ fn make_scene() -> SceneDocument {
 
 fn make_game_system(
     score: Arc<AtomicU32>,
+    lives: Arc<AtomicU32>,
+    game_over: Arc<AtomicBool>,
 ) -> impl for<'a> FnMut(&mut forge_world::RuntimeWorld, &forge_runtime::FixedUpdateContext<'a>) + Send
 {
     let mut bullets = Vec::<Guid>::new();
     let mut enemies = Vec::<Guid>::new();
+    let mut invulnerable_until = 0;
+    let mut player_flashing = false;
     move |world, context| {
+        let restart = context
+            .input_events
+            .iter()
+            .any(|event| event.action == RESTART && event.pressed);
+        if restart {
+            let old_bullets = std::mem::take(&mut bullets);
+            let old_enemies = std::mem::take(&mut enemies);
+            for guid in old_bullets.into_iter().chain(old_enemies) {
+                if let Some(entity) = world.entity_for_guid(guid) {
+                    let _ = world.despawn(entity);
+                }
+            }
+            if let Some(player) = world.entity_for_guid(PLAYER_GUID) {
+                let _ = world.set_transform(
+                    player,
+                    Transform2D {
+                        translation: [0.0, 13.0],
+                        ..Transform2D::default()
+                    },
+                );
+                let _ = world.set_sprite(
+                    player,
+                    Sprite {
+                        size: [1.4, 1.4],
+                        tint: [0.18, 0.88, 0.80, 1.0],
+                        layer: 1,
+                        ..Sprite::default()
+                    },
+                );
+            }
+            score.store(0, Ordering::Relaxed);
+            lives.store(3, Ordering::Relaxed);
+            game_over.store(false, Ordering::Relaxed);
+            invulnerable_until = 0;
+            player_flashing = false;
+            return;
+        }
+        if game_over.load(Ordering::Relaxed) {
+            return;
+        }
+
         let delta = context.delta.as_secs_f32();
         if context
             .input_events
@@ -224,7 +322,7 @@ fn make_game_system(
             }
         }
 
-        if context.tick % 90 == 0 {
+        if context.tick % 90 == 0 && enemies.len() < 16 {
             let lane = ((context.tick.wrapping_mul(37) % 520) as f32 / 10.0) - 26.0;
             let guid = Guid::new();
             let transform = Transform2D {
@@ -264,12 +362,23 @@ fn make_game_system(
             let Some(mut transform) = world.transform(entity) else {
                 return false;
             };
+            transform.translation[0] += (context.tick as f32 * 0.035).sin() * 0.18 * delta;
             transform.translation[1] += 2.8 * delta;
             if transform.translation[1] > 19.0 {
                 let _ = world.despawn(entity);
                 return false;
             }
             let _ = world.set_transform(entity, transform);
+            let pulse = 0.9 + ((context.tick as f32 * 0.16).sin() + 1.0) * 0.05;
+            let _ = world.set_sprite(
+                entity,
+                Sprite {
+                    size: [pulse, pulse],
+                    tint: [0.96, 0.30, 0.42, 1.0],
+                    layer: 1,
+                    ..Sprite::default()
+                },
+            );
             true
         });
 
@@ -317,6 +426,108 @@ fn make_game_system(
             bullets.retain(|guid| !hit_bullets.contains(guid));
             enemies.retain(|guid| !hit_enemies.contains(guid));
         }
+
+        let mut player_hit = None;
+        if context.tick >= invulnerable_until {
+            if let (Some(player), Some(player_transform)) = (
+                world.entity_for_guid(PLAYER_GUID),
+                world
+                    .entity_for_guid(PLAYER_GUID)
+                    .and_then(|entity| world.transform(entity)),
+            ) {
+                for enemy_guid in &enemies {
+                    let Some(enemy_entity) = world.entity_for_guid(*enemy_guid) else {
+                        continue;
+                    };
+                    let Some(enemy_transform) = world.transform(enemy_entity) else {
+                        continue;
+                    };
+                    let dx = player_transform.translation[0] - enemy_transform.translation[0];
+                    let dy = player_transform.translation[1] - enemy_transform.translation[1];
+                    if dx * dx + dy * dy < 1.6 {
+                        player_hit = Some(*enemy_guid);
+                        let _ = world.set_transform(
+                            player,
+                            Transform2D {
+                                translation: [0.0, 13.0],
+                                ..Transform2D::default()
+                            },
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(enemy_guid) = player_hit {
+            if let Some(entity) = world.entity_for_guid(enemy_guid) {
+                let _ = world.despawn(entity);
+            }
+            enemies.retain(|guid| *guid != enemy_guid);
+            let current_lives = lives.load(Ordering::Relaxed);
+            if current_lives > 0 {
+                let remaining = lives.fetch_sub(1, Ordering::Relaxed) - 1;
+                if remaining == 0 {
+                    game_over.store(true, Ordering::Relaxed);
+                }
+            }
+            invulnerable_until = context.tick.saturating_add(90);
+        }
+
+        let is_invulnerable = context.tick < invulnerable_until;
+        if is_invulnerable != player_flashing {
+            player_flashing = is_invulnerable;
+            if let Some(player) = world.entity_for_guid(PLAYER_GUID) {
+                let tint = if player_flashing {
+                    [1.0, 0.88, 0.42, 1.0]
+                } else {
+                    [0.18, 0.88, 0.80, 1.0]
+                };
+                let _ = world.set_sprite(
+                    player,
+                    Sprite {
+                        size: [1.4, 1.4],
+                        tint,
+                        layer: 1,
+                        ..Sprite::default()
+                    },
+                );
+            }
+        }
+    }
+}
+
+fn authored_sprite(
+    name: impl Into<String>,
+    position: [f32; 2],
+    size: [f32; 2],
+    tint: [f32; 4],
+    layer: i32,
+    order: i32,
+) -> SceneObject {
+    SceneObject {
+        object_guid: Guid::new(),
+        name: name.into(),
+        parent_guid: None,
+        prefab_instance: None,
+        transform: AuthoredTransform {
+            translation: position,
+            rotation_radians: 0.0,
+            scale: [1.0, 1.0],
+        },
+        sprite: Some(AuthoredSprite {
+            asset: None,
+            animation_clip: None,
+            size,
+            anchor: [0.5, 0.5],
+            tint,
+            layer,
+            order,
+            uv_rect: [0.0, 0.0, 1.0, 1.0],
+        }),
+        camera: None,
+        rigid_body: None,
+        collider: None,
+        script: None,
     }
 }
 
