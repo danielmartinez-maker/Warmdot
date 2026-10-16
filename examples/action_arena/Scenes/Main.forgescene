@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "resource_guid": "529bb9ad-47b8-4992-874e-055c7fbf0002",
+  "name": "Main",
+  "dependencies": [],
+  "objects": [
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0003",
+      "name": "Player",
+      "transform": {
+        "translation": [0.0, 1.5],
+        "rotation_radians": 0.0,
+        "scale": [1.0, 1.0]
+      },
+      "sprite": null,
+      "camera": null,
+      "rigid_body": {
+        "kind": "dynamic",
+        "linear_velocity": [1.5, -2.0],
+        "angular_velocity": 0.0,
+        "gravity_scale": 1.0,
+        "linear_damping": 0.2,
+        "angular_damping": 0.5,
+        "lock_rotation": true
+      },
+      "collider": {
+        "shape": "box",
+        "half_extents": [0.35, 0.45],
+        "offset": [0.0, 0.0],
+        "rotation_radians": 0.0,
+        "density": 1.0,
+        "friction": 0.3,
+        "restitution": 0.05,
+        "sensor": false
+      }
+    },
+    {
+      "object_guid": "529bb9ad-47b8-4992-874e-055c7fbf0004",
+      "name": "Floor",
+      "transform": {
+        "translation": [0.0, 4.0],
+        "rotation_radians": 0.0,
+        "scale": [1.0, 1.0]
+      },
+      "sprite": null,
+      "camera": null,
+      "rigid_body": {
+        "kind": "fixed"
+      },
+      "collider": {
+        "shape": "box",
+        "half_extents": [8.0, 0.5],
+        "density": 1.0,
+        "friction": 0.8
+      }
+    }
+  ]
+}

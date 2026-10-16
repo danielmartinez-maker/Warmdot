@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/forge_core",
+    "crates/forge_world",
+    "crates/forge_scene",
+    "crates/forge_physics",
+    "crates/forge_project",
+    "crates/forge_runtime",
+    "examples/action_arena",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+
+[workspace.dependencies]
+bevy_ecs = { version = "0.18.1", default-features = false, features = ["std"] }
+rapier2d = { version = "=0.36.1", default-features = false, features = ["dim2", "f32", "std", "block-solver"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"

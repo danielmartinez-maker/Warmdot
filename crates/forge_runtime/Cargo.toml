@@ -1,0 +1,16 @@
+[package]
+name = "forge_runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Headless fixed-step runtime and ordered update barriers"
+
+[dependencies]
+forge_core = { path = "../forge_core" }
+forge_physics = { path = "../forge_physics" }
+forge_scene = { path = "../forge_scene" }
+forge_world = { path = "../forge_world" }
+
+[lints]
+workspace = true

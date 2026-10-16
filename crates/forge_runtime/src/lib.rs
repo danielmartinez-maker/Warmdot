@@ -1,0 +1,193 @@
+//! Headless-capable runtime kernel with fixed-step input and physics barriers.
+
+use std::{error::Error, fmt, time::Duration};
+
+use forge_core::{
+    ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
+};
+use forge_physics::{CollisionEvent2D, PhysicsSimulation};
+use forge_scene::{SceneDiagnostic, SceneDocument};
+use forge_world::RuntimeWorld;
+
+#[derive(Clone, Copy, Debug)]
+pub struct RuntimeConfig {
+    pub fixed_step: Duration,
+    pub max_frame_delta: Duration,
+    pub max_steps_per_frame: u32,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            fixed_step: Duration::from_nanos(16_666_667),
+            max_frame_delta: Duration::from_millis(250),
+            max_steps_per_frame: 8,
+        }
+    }
+}
+
+pub struct FixedUpdateContext<'a> {
+    pub tick: u64,
+    pub delta: Duration,
+    pub simulation_time: Duration,
+    pub input_events: &'a [ActionEvent],
+    pub physics_events: &'a [CollisionEvent2D],
+    input: &'a InputTimeline,
+}
+
+impl FixedUpdateContext<'_> {
+    pub fn action(&self, action: ActionId) -> Option<ActionState> {
+        self.input.state(action)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuntimeFrame {
+    pub first_tick: u64,
+    pub fixed_steps: u32,
+    pub interpolation_alpha: f64,
+    pub accepted_frame_time: Duration,
+    pub dropped_time: Duration,
+    pub simulation_time: Duration,
+    pub physics_events: Vec<CollisionEvent2D>,
+}
+
+#[derive(Debug)]
+pub enum RuntimeError {
+    InvalidClockConfiguration(&'static str),
+    Scene(Vec<SceneDiagnostic>),
+}
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidClockConfiguration(message) => f.write_str(message),
+            Self::Scene(diagnostics) => write!(f, "scene has {} diagnostic(s)", diagnostics.len()),
+        }
+    }
+}
+
+impl Error for RuntimeError {}
+
+type FixedSystem = Box<dyn for<'a> FnMut(&mut RuntimeWorld, &FixedUpdateContext<'a>) + Send>;
+
+pub struct GameRuntime {
+    world: RuntimeWorld,
+    clock: FixedStepClock,
+    input: InputTimeline,
+    fixed_systems: Vec<FixedSystem>,
+    simulation_time: Duration,
+    physics: PhysicsSimulation,
+    pending_physics_events: Vec<CollisionEvent2D>,
+}
+
+impl GameRuntime {
+    pub fn new(world: RuntimeWorld, config: RuntimeConfig) -> Result<Self, RuntimeError> {
+        let clock = FixedStepClock::new(
+            config.fixed_step,
+            config.max_frame_delta,
+            config.max_steps_per_frame,
+        )
+        .map_err(RuntimeError::InvalidClockConfiguration)?;
+        Ok(Self {
+            world,
+            clock,
+            input: InputTimeline::new(),
+            fixed_systems: Vec::new(),
+            simulation_time: Duration::ZERO,
+            physics: PhysicsSimulation::new(),
+            pending_physics_events: Vec::new(),
+        })
+    }
+
+    pub fn from_scene(scene: &SceneDocument, config: RuntimeConfig) -> Result<Self, RuntimeError> {
+        let world = scene.instantiate().map_err(RuntimeError::Scene)?;
+        Self::new(world, config)
+    }
+
+    pub fn from_scene_json(source: &str, config: RuntimeConfig) -> Result<Self, RuntimeError> {
+        let scene = SceneDocument::from_json(source).map_err(RuntimeError::Scene)?;
+        Self::from_scene(&scene, config)
+    }
+
+    /// Registers one fixed update system. Insertion order is the execution order.
+    pub fn add_fixed_system(
+        &mut self,
+        system: impl for<'a> FnMut(&mut RuntimeWorld, &FixedUpdateContext<'a>) + Send + 'static,
+    ) {
+        self.fixed_systems.push(Box::new(system));
+    }
+
+    /// Queues an action transition with a timestamp on the simulation timeline.
+    pub fn push_action(&mut self, at: Duration, action: ActionId, value: f32, pressed: bool) {
+        self.input.push(at, action, value, pressed);
+    }
+
+    /// Advances bounded fixed steps. Systems run before physics; collision events produced by
+    /// physics are delivered to systems at the next fixed-tick barrier.
+    pub fn advance_frame(&mut self, frame_delta: Duration) -> RuntimeFrame {
+        let plan: FramePlan = self.clock.advance(frame_delta);
+        let mut frame_physics_events = Vec::new();
+        for offset in 0..plan.fixed_steps {
+            self.simulation_time = self.simulation_time.saturating_add(self.clock.step());
+            let input_events = self.input.drain_through(self.simulation_time);
+            let context = FixedUpdateContext {
+                tick: plan.first_tick.saturating_add(offset as u64),
+                delta: self.clock.step(),
+                simulation_time: self.simulation_time,
+                input_events: &input_events,
+                physics_events: &self.pending_physics_events,
+                input: &self.input,
+            };
+            for system in &mut self.fixed_systems {
+                system(&mut self.world, &context);
+            }
+            self.pending_physics_events =
+                self.physics
+                    .step(&mut self.world, self.clock.step().as_secs_f32());
+            frame_physics_events.extend(self.pending_physics_events.iter().copied());
+        }
+
+        RuntimeFrame {
+            first_tick: plan.first_tick,
+            fixed_steps: plan.fixed_steps,
+            interpolation_alpha: plan.interpolation_alpha,
+            accepted_frame_time: plan.accepted_frame_time,
+            dropped_time: plan.dropped_time,
+            simulation_time: self.simulation_time,
+            physics_events: frame_physics_events,
+        }
+    }
+
+    pub fn world(&self) -> &RuntimeWorld {
+        &self.world
+    }
+
+    pub fn world_mut(&mut self) -> &mut RuntimeWorld {
+        &mut self.world
+    }
+
+    pub fn physics(&self) -> &PhysicsSimulation {
+        &self.physics
+    }
+
+    pub fn physics_mut(&mut self) -> &mut PhysicsSimulation {
+        &mut self.physics
+    }
+
+    pub fn input_state(&self, action: ActionId) -> Option<ActionState> {
+        self.input.state(action)
+    }
+
+    pub fn simulation_time(&self) -> Duration {
+        self.simulation_time
+    }
+
+    pub fn total_dropped_time(&self) -> Duration {
+        self.clock.total_dropped_time()
+    }
+
+    pub fn entity_for_guid(&self, guid: Guid) -> Option<forge_world::RuntimeEntity> {
+        self.world.entity_for_guid(guid)
+    }
+}
