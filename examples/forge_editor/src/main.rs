@@ -4226,6 +4226,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use eframe::egui;
     use super::{ChunkedTileMap, TileCell, TileCoord, TileMapHistory, connected_tile_fill};
 
     #[test]
