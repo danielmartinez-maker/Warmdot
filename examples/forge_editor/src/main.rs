@@ -2234,8 +2234,10 @@ impl EditorApp {
                     sprite.translation[0] * pixels_per_unit,
                     sprite.translation[1] * pixels_per_unit,
                 );
-            let sprite_center = (corners[0] + corners[1] + corners[2] + corners[3].to_vec2())
-                / 4.0;
+            let sprite_center = Pos2::new(
+                corners.iter().map(|point| point.x).sum::<f32>() / 4.0,
+                corners.iter().map(|point| point.y).sum::<f32>() / 4.0,
+            );
             if self.selected == Some(sprite.object_guid) {
                 for index in 0..4 {
                     painter.line_segment(
