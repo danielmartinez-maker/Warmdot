@@ -64,6 +64,10 @@ impl InputTimeline {
         self.next_sequence = 0;
     }
 
+    pub fn states(&self) -> &BTreeMap<ActionId, ActionState> {
+        &self.states
+    }
+
     pub fn state(&self, action: ActionId) -> Option<ActionState> {
         self.states.get(&action).copied()
     }

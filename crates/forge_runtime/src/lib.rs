@@ -9,7 +9,8 @@ use forge_core::{
     ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
-use forge_scene::{SceneDiagnostic, SceneDocument};
+use forge_scene::{AuthoredScript, SceneDiagnostic, SceneDocument};
+use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptHost};
 use forge_world::{RuntimeWorld, WorldError};
 
 #[derive(Debug)]
@@ -132,6 +133,7 @@ pub struct GameRuntime {
     pending_physics_events: Vec<CollisionEvent2D>,
     paused: bool,
     sprite_animations: BTreeMap<Guid, RuntimeSpriteAnimation>,
+    script_host: ScriptHost,
 }
 
 impl GameRuntime {
@@ -152,6 +154,7 @@ impl GameRuntime {
             pending_physics_events: Vec::new(),
             paused: false,
             sprite_animations: BTreeMap::new(),
+            script_host: ScriptHost::new(),
         })
     }
 
@@ -172,6 +175,7 @@ impl GameRuntime {
     ) -> Result<Self, RuntimeError> {
         let mut runtime = Self::from_scene(scene, config)?;
         runtime.attach_scene_animations(scene, assets)?;
+        runtime.attach_scene_scripts(scene, assets);
         Ok(runtime)
     }
 
@@ -213,6 +217,7 @@ impl GameRuntime {
     pub fn replace_scene(&mut self, scene: &SceneDocument) -> Result<(), RuntimeError> {
         self.world = scene.instantiate().map_err(RuntimeError::Scene)?;
         self.sprite_animations.clear();
+        self.script_host = ScriptHost::new();
         self.clock.reset();
         self.input.clear();
         self.simulation_time = Duration::ZERO;
@@ -228,6 +233,7 @@ impl GameRuntime {
     ) -> Result<(), RuntimeError> {
         self.replace_scene(scene)?;
         self.attach_scene_animations(scene, assets)?;
+        self.attach_scene_scripts(scene, assets);
         Ok(())
     }
 
@@ -243,6 +249,41 @@ impl GameRuntime {
             }
         }
         Ok(())
+    }
+
+    fn attach_scene_scripts(&mut self, scene: &SceneDocument, assets: &AssetCatalog) {
+        for object in &scene.objects {
+            let Some(authored) = object.script.as_ref() else {
+                continue;
+            };
+            match assets.load_script(authored.asset) {
+                Ok(asset) => {
+                    let definition = ScriptDefinition {
+                        object_guid: object.object_guid,
+                        asset_guid: authored.asset,
+                        source_path: asset.relative_path,
+                        source: asset.source,
+                        properties: authored.properties.clone(),
+                    };
+                    if let Err(error) = self.script_host.attach(definition, &mut self.world) {
+                        self.script_host.record_diagnostic(
+                            object.object_guid,
+                            authored.asset,
+                            "script",
+                            0,
+                            error.to_string(),
+                        );
+                    }
+                }
+                Err(error) => self.script_host.record_diagnostic(
+                    object.object_guid,
+                    authored.asset,
+                    "script",
+                    0,
+                    error.to_string(),
+                ),
+            }
+        }
     }
 
     pub fn attach_sprite_animation(
@@ -349,6 +390,12 @@ impl GameRuntime {
             for system in &mut self.fixed_systems {
                 system(&mut self.world, &context);
             }
+            self.script_host.update(
+                &mut self.world,
+                self.input.states(),
+                self.clock.step(),
+                context.tick,
+            );
             self.advance_sprite_animations(self.clock.step());
             self.pending_physics_events = self
                 .physics
@@ -365,6 +412,10 @@ impl GameRuntime {
             simulation_time: self.simulation_time,
             physics_events: frame_physics_events,
         }
+    }
+
+    pub fn take_script_diagnostics(&mut self) -> Vec<ScriptDiagnostic> {
+        self.script_host.take_diagnostics()
     }
 
     pub fn world(&self) -> &RuntimeWorld {

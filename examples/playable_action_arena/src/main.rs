@@ -113,8 +113,6 @@ fn make_scene() -> SceneDocument {
         rigid_body: None,
         collider: None,
         script: None,
-        collider: None,
-        script: None,
     });
     objects.push(SceneObject {
         object_guid: Guid::new(),
@@ -128,8 +126,6 @@ fn make_scene() -> SceneDocument {
             active: true,
         }),
         rigid_body: None,
-        collider: None,
-        script: None,
         collider: None,
         script: None,
     });
@@ -156,8 +152,6 @@ fn make_scene() -> SceneDocument {
             }),
             camera: None,
             rigid_body: None,
-            collider: None,
-            script: None,
             collider: None,
             script: None,
         });

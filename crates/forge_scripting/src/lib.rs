@@ -74,7 +74,7 @@ struct ScriptCallContext {
 type SharedContext = Rc<RefCell<Option<ScriptCallContext>>>;
 
 struct ScriptInstance {
-    lua: Lua,
+    _lua: Lua,
     state: Table,
     on_start: Option<Function>,
     on_fixed_update: Option<Function>,
@@ -121,7 +121,7 @@ impl ScriptInstance {
         let on_fixed_update: Option<Function> = state.get("on_fixed_update")?;
 
         Ok(Self {
-            lua,
+            _lua: lua,
             state,
             on_start,
             on_fixed_update,
@@ -208,37 +208,32 @@ impl ScriptHost {
             if instance.disabled {
                 continue;
             }
-            let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
-                continue;
-            };
-            let Some(transform) = world.transform(entity) else {
-                continue;
-            };
 
-            let (callback, callback_delta) = if instance.start_pending {
+            if instance.start_pending {
                 instance.start_pending = false;
-                (instance.on_start.clone(), Duration::ZERO)
-            } else {
-                (instance.on_fixed_update.clone(), delta)
-            };
-            let Some(callback) = callback else {
-                continue;
-            };
-
-            match instance.invoke(&callback, transform, actions, callback_delta) {
-                Ok(context) => {
-                    if !transform_is_finite(context.transform) {
-                        disable_with_diagnostic(instance, tick, "script produced a non-finite transform".into(), &mut self.diagnostics);
-                        continue;
-                    }
-                    if let Err(error) = world.set_transform(entity, context.transform) {
-                        disable_with_diagnostic(instance, tick, error.to_string(), &mut self.diagnostics);
-                        continue;
-                    }
-                    instance.definition.properties = context.properties;
+                if let Some(callback) = instance.on_start.clone() {
+                    run_callback(
+                        instance,
+                        &callback,
+                        world,
+                        actions,
+                        Duration::ZERO,
+                        tick,
+                        &mut self.diagnostics,
+                    );
                 }
-                Err(error) => {
-                    disable_with_diagnostic(instance, tick, error.to_string(), &mut self.diagnostics);
+            }
+            if !instance.disabled {
+                if let Some(callback) = instance.on_fixed_update.clone() {
+                    run_callback(
+                        instance,
+                        &callback,
+                        world,
+                        actions,
+                        delta,
+                        tick,
+                        &mut self.diagnostics,
+                    );
                 }
             }
         }
@@ -263,6 +258,45 @@ impl ScriptHost {
             tick,
             message: message.into(),
         });
+    }
+}
+
+fn run_callback(
+    instance: &mut ScriptInstance,
+    callback: &Function,
+    world: &mut RuntimeWorld,
+    actions: &BTreeMap<ActionId, ActionState>,
+    delta: Duration,
+    tick: u64,
+    diagnostics: &mut Vec<ScriptDiagnostic>,
+) {
+    let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
+        return;
+    };
+    let Some(transform) = world.transform(entity) else {
+        return;
+    };
+
+    match instance.invoke(callback, transform, actions, delta) {
+        Ok(context) => {
+            if !transform_is_finite(context.transform) {
+                disable_with_diagnostic(
+                    instance,
+                    tick,
+                    "script produced a non-finite transform".into(),
+                    diagnostics,
+                );
+                return;
+            }
+            if let Err(error) = world.set_transform(entity, context.transform) {
+                disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
+                return;
+            }
+            instance.definition.properties = context.properties;
+        }
+        Err(error) => {
+            disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
+        }
     }
 }
 

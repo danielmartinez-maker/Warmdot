@@ -137,8 +137,6 @@ fn make_scene() -> (SceneDocument, Vec<WorkerState>) {
         rigid_body: None,
         collider: None,
         script: None,
-        collider: None,
-        script: None,
     });
 
     let mut workers = Vec::new();
@@ -203,8 +201,6 @@ fn scene_sprite(
         }),
         camera: None,
         rigid_body: None,
-        collider: None,
-        script: None,
         collider: None,
         script: None,
     }
