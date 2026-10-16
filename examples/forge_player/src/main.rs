@@ -1,8 +1,7 @@
 use std::{
     env,
     error::Error,
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -10,14 +9,14 @@ use std::{
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_core::Guid;
+use forge_project::Project;
+use forge_renderer::{GpuRenderer, RenderOutcome};
+use forge_runtime::{GameRuntime, RuntimeConfig};
 use forge_scene::{
     AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
 };
 use forge_tilemap::{TileCell, TileMapDocument};
-use forge_project::Project;
-use forge_renderer::{GpuRenderer, RenderOutcome};
-use forge_runtime::{GameRuntime, RuntimeConfig};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -195,18 +194,28 @@ fn append_tilemap_to_scene(
     let texture_tile_size = document.texture_tile_size;
     let columns = texture.width / texture_tile_size[0];
     let rows = texture.height / texture_tile_size[1];
-    let tile_count = columns.checked_mul(rows).filter(|count| *count > 0).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "tilemap tileset has no complete tiles at its configured pixel size",
-        )
-    })?;
+    let tile_count = columns
+        .checked_mul(rows)
+        .filter(|count| *count > 0)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "tilemap tileset has no complete tiles at its configured pixel size",
+            )
+        })?;
     if !scene.dependencies.contains(&document.tileset_guid) {
         scene.dependencies.push(document.tileset_guid);
     }
 
     for (coordinate, cell) in map.iter() {
-        let uv_rect = tile_uv_rect(cell, columns, tile_count, texture.width, texture.height, texture_tile_size)?;
+        let uv_rect = tile_uv_rect(
+            cell,
+            columns,
+            tile_count,
+            texture.width,
+            texture.height,
+            texture_tile_size,
+        )?;
         let object_guid = Guid::new();
         let transform = AuthoredTransform {
             translation: [
@@ -233,10 +242,7 @@ fn append_tilemap_to_scene(
                 }),
                 Some(AuthoredCollider {
                     shape: AuthoredColliderShape::Box {
-                        half_extents: [
-                            document.tile_size[0] * 0.5,
-                            document.tile_size[1] * 0.5,
-                        ],
+                        half_extents: [document.tile_size[0] * 0.5, document.tile_size[1] * 0.5],
                     },
                     offset: [0.0, 0.0],
                     rotation_radians: 0.0,
@@ -273,7 +279,10 @@ fn tile_uv_rect(
     if cell.tile_index >= tile_count {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("tile index {} is outside the configured tileset grid", cell.tile_index),
+            format!(
+                "tile index {} is outside the configured tileset grid",
+                cell.tile_index
+            ),
         )
         .into());
     }
@@ -348,11 +357,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(tilemap) = load_project_tilemap(&project_root)? {
         append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
     }
-    let runtime = GameRuntime::from_scene_with_assets(
-        &scene,
-        RuntimeConfig::default(),
-        &assets,
-    )?;
+    let runtime = GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), &assets)?;
 
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
