@@ -1,0 +1,17 @@
+[package]
+name = "forge_scripting"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Sandboxed Luau scripting host for Forge 2D"
+
+[dependencies]
+forge_assets = { path = "../forge_assets" }
+forge_core = { path = "../forge_core" }
+forge_scene = { path = "../forge_scene" }
+forge_world = { path = "../forge_world" }
+mlua = { version = "=0.12.2", features = ["luau"] }
+
+[lints]
+workspace = true

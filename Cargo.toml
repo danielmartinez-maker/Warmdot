@@ -9,6 +9,7 @@ members = [
     "crates/forge_runtime",
     "crates/forge_renderer",
     "crates/forge_assets",
+    "crates/forge_scripting",
     "crates/forge_tilemap",
     "crates/forge_input",
     "crates/forge_editor_core",
