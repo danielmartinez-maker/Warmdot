@@ -603,6 +603,23 @@ impl EditorApp {
         self.status = "Tilemap saved.".into();
     }
 
+    fn build_preview_scene(
+        &self,
+        authored_scene: &SceneDocument,
+    ) -> Result<SceneDocument, String> {
+        let mut scene = authored_scene.clone();
+        if scene.resource_guid == self.project.document().default_scene_guid {
+            if let Some(tilemap) = self.tilemap.as_ref() {
+                let catalog = self
+                    .catalog
+                    .as_ref()
+                    .ok_or_else(|| "Runtime preview needs an available asset catalog.".to_owned())?;
+                append_tilemap_to_scene(&mut scene, tilemap, catalog)?;
+            }
+        }
+        Ok(scene)
+    }
+
     fn start_runtime(&mut self) {
         let Some(catalog) = self.catalog.as_ref() else {
             self.set_error_status(
@@ -610,6 +627,16 @@ impl EditorApp {
                 "Runtime preview needs an available asset catalog.".into(),
             );
             return;
+        };
+        let runtime_scene = match self.build_preview_scene(&self.scene) {
+            Ok(scene) => scene,
+            Err(error) => {
+                self.set_error_status(
+                    "editor.preview_start_failed",
+                    format!("Play failed: project tilemap could not load: {error}"),
+                );
+                return;
+            }
         };
         let audio_warning = if self.audio.is_none() {
             match AudioEngine::new() {
@@ -622,14 +649,14 @@ impl EditorApp {
         } else {
             None
         };
-        if let Err(error) = validate_scene_dependencies(&self.scene, catalog) {
+        if let Err(error) = validate_scene_dependencies(&runtime_scene, catalog) {
             self.set_error_status(
                 "editor.preview_start_failed",
                 format!("Play failed: {error}"),
             );
             return;
         }
-        let preview_ui = match load_preview_ui(&self.scene, catalog) {
+        let preview_ui = match load_preview_ui(&runtime_scene, catalog) {
             Ok(ui) => ui,
             Err(error) => {
                 self.set_error_status(
@@ -639,7 +666,7 @@ impl EditorApp {
                 return;
             }
         };
-        match GameRuntime::from_scene_with_assets(&self.scene, RuntimeConfig::default(), catalog) {
+        match GameRuntime::from_scene_with_assets(&runtime_scene, RuntimeConfig::default(), catalog) {
             Ok(runtime) => {
                 self.selected_asset = None;
                 self.runtime = Some(runtime);
@@ -968,10 +995,18 @@ impl EditorApp {
         };
         for scene_guid in requests {
             let attempt = (|| {
-                let scene = scene_catalog.load_scene(scene_guid).map_err(|error| {
+                let authored_scene = scene_catalog.load_scene(scene_guid).map_err(|error| {
                     (
                         "editor.scene_transition_rejected",
                         format!("Scene transition to {scene_guid} was rejected: {error}"),
+                    )
+                })?;
+                let scene = self.build_preview_scene(&authored_scene).map_err(|error| {
+                    (
+                        "editor.scene_transition_rejected",
+                        format!(
+                            "Scene transition to {scene_guid} could not restore the project tilemap: {error}"
+                        ),
                     )
                 })?;
                 let assets = self.catalog.as_ref().ok_or((
@@ -3701,6 +3736,128 @@ fn load_saved_tilemap(project_root: &Path) -> Result<Option<EditorTileMap>, Stri
         resource_unsaved: false,
         pending_stroke: BTreeMap::new(),
     }))
+}
+
+fn append_tilemap_to_scene(
+    scene: &mut SceneDocument,
+    tilemap: &EditorTileMap,
+    catalog: &AssetCatalog,
+) -> Result<(), String> {
+    let document = &tilemap.document;
+    document
+        .validate()
+        .map_err(|error| format!("Tilemap is invalid: {error}"))?;
+    let texture = catalog
+        .load_png(document.tileset_guid)
+        .map_err(|error| format!("Tilemap tileset could not load: {error}"))?;
+    let texture_tile_size = document.texture_tile_size;
+    let columns = texture.width / texture_tile_size[0];
+    let rows = texture.height / texture_tile_size[1];
+    let tile_count = columns
+        .checked_mul(rows)
+        .filter(|count| *count > 0)
+        .ok_or_else(|| {
+            "Tilemap tileset has no complete tiles at its configured pixel size.".to_owned()
+        })?;
+    if !scene.dependencies.contains(&document.tileset_guid) {
+        scene.dependencies.push(document.tileset_guid);
+    }
+
+    for (coordinate, cell) in tilemap.map.iter() {
+        let uv_rect = tile_uv_rect(
+            cell,
+            columns,
+            tile_count,
+            texture.width,
+            texture.height,
+            texture_tile_size,
+        )?;
+        let rotated_size = if cell.rotation_quarters % 2 == 0 {
+            document.tile_size
+        } else {
+            [document.tile_size[1], document.tile_size[0]]
+        };
+        let transform = AuthoredTransform {
+            translation: [
+                (coordinate.x as f32 + 0.5) * document.tile_size[0],
+                (coordinate.y as f32 + 0.5) * document.tile_size[1],
+            ],
+            rotation_radians: f32::from(cell.rotation_quarters)
+                * std::f32::consts::FRAC_PI_2,
+            scale: [
+                if cell.flip_x { -1.0 } else { 1.0 },
+                if cell.flip_y { -1.0 } else { 1.0 },
+            ],
+        };
+        let sprite = AuthoredSprite {
+            asset: Some(document.tileset_guid),
+            animation_clip: None,
+            size: rotated_size,
+            anchor: [0.5, 0.5],
+            tint: [1.0; 4],
+            uv_rect,
+            layer: i32::MIN,
+            order: 0,
+        };
+        let (rigid_body, collider) = if cell.solid {
+            (
+                Some(AuthoredRigidBody {
+                    kind: AuthoredRigidBodyKind::Fixed,
+                    ..AuthoredRigidBody::default()
+                }),
+                Some(AuthoredCollider {
+                    shape: AuthoredColliderShape::Box {
+                        half_extents: [rotated_size[0] * 0.5, rotated_size[1] * 0.5],
+                    },
+                    offset: [0.0, 0.0],
+                    rotation_radians: 0.0,
+                    density: 1.0,
+                    friction: 0.5,
+                    restitution: 0.0,
+                    sensor: false,
+                }),
+            )
+        } else {
+            (None, None)
+        };
+        scene.objects.push(SceneObject {
+            object_guid: Guid::new(),
+            name: format!("Tile ({}, {})", coordinate.x, coordinate.y),
+            parent_guid: None,
+            prefab_instance: None,
+            transform,
+            sprite: Some(sprite),
+            camera: None,
+            rigid_body,
+            collider,
+            script: None,
+        });
+    }
+    Ok(())
+}
+
+fn tile_uv_rect(
+    cell: TileCell,
+    columns: u32,
+    tile_count: u32,
+    texture_width: u32,
+    texture_height: u32,
+    texture_tile_size: [u32; 2],
+) -> Result<[f32; 4], String> {
+    if cell.tile_index >= tile_count {
+        return Err(format!(
+            "Tile index {} is outside the configured tileset grid.",
+            cell.tile_index
+        ));
+    }
+    let column = cell.tile_index % columns;
+    let row = cell.tile_index / columns;
+    Ok([
+        (column * texture_tile_size[0]) as f32 / texture_width as f32,
+        (row * texture_tile_size[1]) as f32 / texture_height as f32,
+        texture_tile_size[0] as f32 / texture_width as f32,
+        texture_tile_size[1] as f32 / texture_height as f32,
+    ])
 }
 
 fn tint_color(tint: [f32; 4]) -> Color32 {
