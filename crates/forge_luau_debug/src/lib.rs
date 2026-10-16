@@ -1,5 +1,7 @@
 //! Narrow bridge to Luau's first-class line-breakpoint and resumable-break APIs.
 
+#[allow(unsafe_code)]
+mod raw_ffi_boundary {
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -89,7 +91,7 @@ pub fn set_breakpoint(
         lua.exec_raw::<i32>(function.clone(), |state| {
             let top = unsafe { ffi::lua_gettop(state) };
             let placed = unsafe {
-                ffi::lua_breakpoint(state, -1, line, i32::from(enabled))
+                ffi::lua_breakpoint(state, -1, line, if enabled { 1 } else { 0 })
             };
             unsafe {
                 ffi::lua_settop(state, top - 1);
@@ -230,5 +232,6 @@ unsafe fn lua_error_text(state: *mut ffi::lua_State) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-#[allow(unsafe_code)]
-mod raw_ffi_boundary {}
+}
+
+pub use raw_ffi_boundary::{install, resume, set_breakpoint, BreakpointContext, BreakpointHit, ResumeResult};
