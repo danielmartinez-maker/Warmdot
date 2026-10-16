@@ -12,7 +12,9 @@ use forge_core::{
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument, ScriptPropertyValue};
 use forge_scripting::ScriptHost;
-pub use forge_scripting::{ScriptDefinition, ScriptDiagnostic, ScriptError};
+pub use forge_scripting::{
+    ScriptBreakpointHit, ScriptDefinition, ScriptDiagnostic, ScriptError,
+};
 use forge_world::{RuntimeWorld, WorldError};
 
 #[derive(Debug)]
@@ -104,6 +106,26 @@ pub struct RuntimeFrame {
     pub physics_events: Vec<CollisionEvent2D>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum BreakpointContinueResult {
+    Hit(ScriptBreakpointHit),
+    FrameComplete(RuntimeFrame),
+    NotPaused,
+}
+
+#[derive(Clone)]
+struct PendingRuntimeFrame {
+    first_tick: u64,
+    next_tick: u64,
+    remaining_steps: u32,
+    completed_steps: u32,
+    interpolation_alpha: f64,
+    accepted_frame_time: Duration,
+    dropped_time: Duration,
+    physics_events: Vec<CollisionEvent2D>,
+    current_tick_started: bool,
+}
+
 #[derive(Debug)]
 pub enum RuntimeError {
     InvalidClockConfiguration(&'static str),
@@ -134,6 +156,8 @@ pub struct GameRuntime {
     physics: PhysicsSimulation,
     pending_physics_events: Vec<CollisionEvent2D>,
     paused: bool,
+    debugger_paused: bool,
+    pending_debug_frame: Option<PendingRuntimeFrame>,
     sprite_animations: BTreeMap<Guid, RuntimeSpriteAnimation>,
     script_host: ScriptHost,
 }
@@ -155,6 +179,8 @@ impl GameRuntime {
             physics: PhysicsSimulation::new(),
             pending_physics_events: Vec::new(),
             paused: false,
+            debugger_paused: false,
+            pending_debug_frame: None,
             sprite_animations: BTreeMap::new(),
             script_host: ScriptHost::new(),
         })
@@ -220,6 +246,8 @@ impl GameRuntime {
         self.world = scene.instantiate().map_err(RuntimeError::Scene)?;
         self.sprite_animations.clear();
         self.script_host = ScriptHost::new();
+        self.debugger_paused = false;
+        self.pending_debug_frame = None;
         self.clock.reset();
         self.input.clear();
         self.simulation_time = Duration::ZERO;
@@ -368,6 +396,18 @@ impl GameRuntime {
     /// Advances bounded fixed steps. Systems run before physics; collision events produced by
     /// physics are delivered to systems at the next fixed-tick barrier. Paused time is ignored.
     pub fn advance_frame(&mut self, frame_delta: Duration) -> RuntimeFrame {
+        if self.debugger_paused {
+            let plan = self.clock.advance(Duration::ZERO);
+            return RuntimeFrame {
+                first_tick: plan.first_tick,
+                fixed_steps: 0,
+                interpolation_alpha: plan.interpolation_alpha,
+                accepted_frame_time: Duration::ZERO,
+                dropped_time: Duration::ZERO,
+                simulation_time: self.simulation_time,
+                physics_events: Vec::new(),
+            };
+        }
         let plan = if self.paused {
             self.clock.advance(Duration::ZERO)
         } else {
@@ -377,12 +417,39 @@ impl GameRuntime {
     }
 
     fn execute_plan(&mut self, plan: FramePlan) -> RuntimeFrame {
-        let mut frame_physics_events = Vec::new();
-        for offset in 0..plan.fixed_steps {
+        let mut pending = PendingRuntimeFrame {
+            first_tick: plan.first_tick,
+            next_tick: plan.first_tick,
+            remaining_steps: plan.fixed_steps,
+            completed_steps: 0,
+            interpolation_alpha: plan.interpolation_alpha,
+            accepted_frame_time: plan.accepted_frame_time,
+            dropped_time: plan.dropped_time,
+            physics_events: Vec::new(),
+            current_tick_started: false,
+        };
+        if self.process_pending_frame(&mut pending) {
+            self.debugger_paused = true;
+            self.pending_debug_frame = Some(pending.clone());
+        }
+        self.frame_from_pending(&pending)
+    }
+
+    fn process_pending_frame(&mut self, pending: &mut PendingRuntimeFrame) -> bool {
+        while pending.remaining_steps > 0 {
+            if pending.current_tick_started {
+                self.finish_script_tick(&mut pending.physics_events);
+                pending.current_tick_started = false;
+                pending.completed_steps = pending.completed_steps.saturating_add(1);
+                pending.remaining_steps = pending.remaining_steps.saturating_sub(1);
+                pending.next_tick = pending.next_tick.saturating_add(1);
+                continue;
+            }
+
             self.simulation_time = self.simulation_time.saturating_add(self.clock.step());
             let input_events = self.input.drain_through(self.simulation_time);
             let context = FixedUpdateContext {
-                tick: plan.first_tick.saturating_add(offset as u64),
+                tick: pending.next_tick,
                 delta: self.clock.step(),
                 simulation_time: self.simulation_time,
                 input_events: &input_events,
@@ -392,28 +459,82 @@ impl GameRuntime {
             for system in &mut self.fixed_systems {
                 system(&mut self.world, &context);
             }
-            self.script_host.update(
+            let hit = self.script_host.update_with_breakpoints(
                 &mut self.world,
                 self.input.states(),
                 self.clock.step(),
                 context.tick,
             );
-            self.advance_sprite_animations(self.clock.step());
-            self.pending_physics_events = self
-                .physics
-                .step(&mut self.world, self.clock.step().as_secs_f32());
-            frame_physics_events.extend(self.pending_physics_events.iter().copied());
-        }
+            if hit.is_some() {
+                pending.current_tick_started = true;
+                return true;
+            }
 
-        RuntimeFrame {
-            first_tick: plan.first_tick,
-            fixed_steps: plan.fixed_steps,
-            interpolation_alpha: plan.interpolation_alpha,
-            accepted_frame_time: plan.accepted_frame_time,
-            dropped_time: plan.dropped_time,
-            simulation_time: self.simulation_time,
-            physics_events: frame_physics_events,
+            self.finish_script_tick(&mut pending.physics_events);
+            pending.completed_steps = pending.completed_steps.saturating_add(1);
+            pending.remaining_steps = pending.remaining_steps.saturating_sub(1);
+            pending.next_tick = pending.next_tick.saturating_add(1);
         }
+        false
+    }
+
+    fn finish_script_tick(&mut self, frame_physics_events: &mut Vec<CollisionEvent2D>) {
+        self.advance_sprite_animations(self.clock.step());
+        self.pending_physics_events = self
+            .physics
+            .step(&mut self.world, self.clock.step().as_secs_f32());
+        frame_physics_events.extend(self.pending_physics_events.iter().copied());
+    }
+
+    fn frame_from_pending(&self, pending: &PendingRuntimeFrame) -> RuntimeFrame {
+        RuntimeFrame {
+            first_tick: pending.first_tick,
+            fixed_steps: pending.completed_steps,
+            interpolation_alpha: pending.interpolation_alpha,
+            accepted_frame_time: pending.accepted_frame_time,
+            dropped_time: pending.dropped_time,
+            simulation_time: self.simulation_time,
+            physics_events: pending.physics_events.clone(),
+        }
+    }
+
+    pub fn set_script_breakpoint(
+        &mut self,
+        object_guid: Guid,
+        line: u32,
+        enabled: bool,
+    ) -> Result<bool, ScriptError> {
+        self.script_host.set_breakpoint(object_guid, line, enabled)
+    }
+
+    pub fn current_script_breakpoint(&self) -> Option<ScriptBreakpointHit> {
+        self.script_host.current_breakpoint()
+    }
+
+    /// Resumes a suspended callback and completes its original fixed tick before advancing the
+    /// remaining steps from the frame that reached the breakpoint.
+    pub fn continue_script_breakpoint(&mut self) -> BreakpointContinueResult {
+        if !self.debugger_paused {
+            return BreakpointContinueResult::NotPaused;
+        }
+        let Some(mut pending) = self.pending_debug_frame.take() else {
+            self.debugger_paused = false;
+            return BreakpointContinueResult::NotPaused;
+        };
+        if let Some(hit) = self.script_host.continue_breakpoint(&mut self.world) {
+            self.pending_debug_frame = Some(pending);
+            return BreakpointContinueResult::Hit(hit);
+        }
+        if self.process_pending_frame(&mut pending) {
+            let hit = self
+                .script_host
+                .current_breakpoint()
+                .expect("script host paused while processing a pending fixed tick");
+            self.pending_debug_frame = Some(pending);
+            return BreakpointContinueResult::Hit(hit);
+        }
+        self.debugger_paused = false;
+        BreakpointContinueResult::FrameComplete(self.frame_from_pending(&pending))
     }
 
     pub fn attach_script(&mut self, definition: ScriptDefinition) -> Result<(), ScriptError> {
