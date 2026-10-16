@@ -109,12 +109,14 @@ jobs:
           name: forge2d-action-arena-windows
           path: artifacts/action-arena-windows
           if-no-files-found: error
+          include-hidden-files: true
       - name: Upload standalone colony player package
         uses: actions/upload-artifact@v4
         with:
           name: forge2d-colony-windows
           path: artifacts/colony-windows
           if-no-files-found: error
+          include-hidden-files: true
       - name: Download uploaded Action Arena player package
         uses: actions/download-artifact@v4
         with:
