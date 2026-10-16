@@ -283,10 +283,7 @@ impl EditorApp {
             dependencies: object_asset_dependencies(&object),
             object,
         };
-        let relative_path = format!(
-            "Assets/Prefabs/{}.forgeprefab.json",
-            prefab.resource_guid
-        );
+        let relative_path = format!("Assets/Prefabs/{}.forgeprefab.json", prefab.resource_guid);
         if let Err(error) = self.project.save_prefab(&relative_path, &prefab) {
             self.status = format!("Prefab save failed: {error}");
             return;
@@ -321,8 +318,11 @@ impl EditorApp {
             .catalog
             .as_ref()
             .ok_or_else(|| "asset catalog is unavailable".to_owned())
-            .and_then(|catalog| catalog.load_prefab(prefab_guid).map_err(|error| error.to_string()))
-        {
+            .and_then(|catalog| {
+                catalog
+                    .load_prefab(prefab_guid)
+                    .map_err(|error| error.to_string())
+            }) {
             Ok(prefab) => prefab,
             Err(error) => {
                 self.status = format!("Prefab instance failed: {error}");
@@ -330,7 +330,12 @@ impl EditorApp {
             }
         };
         let previous_dependencies = self.scene.dependencies.clone();
-        let mut dependencies = self.scene.dependencies.iter().copied().collect::<BTreeSet<_>>();
+        let mut dependencies = self
+            .scene
+            .dependencies
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
         dependencies.insert(prefab_guid);
         dependencies.extend(prefab.dependencies.iter().copied());
         self.scene.dependencies = dependencies.into_iter().collect();
@@ -375,8 +380,11 @@ impl EditorApp {
             .catalog
             .as_ref()
             .ok_or_else(|| "asset catalog is unavailable".to_owned())
-            .and_then(|catalog| catalog.load_prefab(link.prefab_asset).map_err(|error| error.to_string()))
-        {
+            .and_then(|catalog| {
+                catalog
+                    .load_prefab(link.prefab_asset)
+                    .map_err(|error| error.to_string())
+            }) {
             Ok(prefab) => prefab,
             Err(error) => {
                 self.status = format!("Prefab refresh failed: {error}");
@@ -388,7 +396,9 @@ impl EditorApp {
         dependencies.extend(prefab.dependencies.iter().copied());
         self.scene.dependencies = dependencies.into_iter().collect();
         match self.history.replace_object(&mut self.scene, replacement) {
-            Ok(()) => self.status = "Prefab instance refreshed; overridden properties were kept.".into(),
+            Ok(()) => {
+                self.status = "Prefab instance refreshed; overridden properties were kept.".into()
+            }
             Err(error) => self.status = format!("Prefab refresh failed: {error}"),
         }
     }
@@ -2314,7 +2324,10 @@ fn record_prefab_overrides(before: &SceneObject, after: &mut SceneObject) {
     for (changed, identifier) in [
         (before.sprite != after.sprite, "component.sprite"),
         (before.camera != after.camera, "component.camera"),
-        (before.rigid_body != after.rigid_body, "component.rigid_body"),
+        (
+            before.rigid_body != after.rigid_body,
+            "component.rigid_body",
+        ),
         (before.collider != after.collider, "component.collider"),
         (before.script != after.script, "component.script"),
     ] {
