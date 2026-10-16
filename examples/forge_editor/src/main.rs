@@ -54,6 +54,7 @@ impl EditorApp {
             transform: AuthoredTransform::default(),
             sprite: Some(AuthoredSprite {
                 asset: None,
+            animation_clip: None,
                 size: [1.0, 1.0],
                 tint: [0.25, 0.72, 0.95, 1.0],
                 uv_rect: [0.0, 0.0, 1.0, 1.0],
