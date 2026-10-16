@@ -33,12 +33,7 @@ mod tests {
         host.attach(definition, &mut world)
             .expect("attach valid Luau script");
 
-        host.update(
-            &mut world,
-            &BTreeMap::new(),
-            Duration::from_millis(50),
-            1,
-        );
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(50), 1);
 
         let transform = world.transform(entity).expect("object transform");
         assert!((transform.translation[0] - 0.2).abs() < 0.0001);
@@ -63,12 +58,7 @@ mod tests {
         host.attach(definition, &mut world)
             .expect("compile runaway script");
 
-        host.update(
-            &mut world,
-            &BTreeMap::new(),
-            Duration::from_millis(16),
-            7,
-        );
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 7);
 
         let diagnostics = host.take_diagnostics();
         assert_eq!(diagnostics.len(), 1);
