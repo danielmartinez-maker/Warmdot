@@ -378,7 +378,6 @@ impl Project {
     }
 }
 
-
 /// A bounded, cached lookup of scene files beneath one project's Scenes folder.
 pub struct SceneCatalog {
     scenes_root: PathBuf,
@@ -543,7 +542,9 @@ fn collect_scene_files(
                 scene_files,
             )?;
         } else if metadata.is_file()
-            && path.extension().is_some_and(|extension| extension == "forgescene")
+            && path
+                .extension()
+                .is_some_and(|extension| extension == "forgescene")
         {
             if scene_files.len() >= MAX_SCENE_FILES {
                 return Err(ProjectError::Invalid(format!(
@@ -625,10 +626,7 @@ mod tests {
 
     #[test]
     fn scene_lookup_resolves_nested_scene_by_stable_guid() {
-        let root = std::env::temp_dir().join(format!(
-            "forge-project-scene-lookup-{}",
-            Guid::new()
-        ));
+        let root = std::env::temp_dir().join(format!("forge-project-scene-lookup-{}", Guid::new()));
         let project = Project::create(&root, "Scene lookup").expect("create project");
         let scene_guid = Guid::new();
         let scene = SceneDocument {

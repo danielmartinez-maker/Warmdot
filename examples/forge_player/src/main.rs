@@ -10,7 +10,7 @@ use std::{
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_audio::{AudioBus, AudioEngine};
 use forge_core::Guid;
-use forge_project::{Project, SceneCatalog, PROJECT_FILE_NAME};
+use forge_project::{PROJECT_FILE_NAME, Project, SceneCatalog};
 use forge_renderer::{GpuRenderer, RenderOutcome};
 use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
 use forge_scene::{
