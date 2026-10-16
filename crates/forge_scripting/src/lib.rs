@@ -102,7 +102,7 @@ impl ScriptInstance {
 
         let lua = Lua::new();
         lua.set_memory_limit(MAX_VM_MEMORY_BYTES)?;
-        let interrupt_checkpoints = Rc::new(Cell::new(0));
+        let interrupt_checkpoints = Rc::new(Cell::new(0_usize));
         let checkpoints = interrupt_checkpoints.clone();
         lua.set_interrupt(move |_| {
             let count = checkpoints.get().saturating_add(1);
@@ -545,6 +545,7 @@ fn transform_is_finite(transform: Transform2D) -> bool {
 mod tests {
     use std::{collections::BTreeMap, time::Duration};
 
+    use forge_assets::LoadedScriptAsset;
     use forge_core::{ActionId, ActionState, Guid};
     use forge_scene::ScriptPropertyValue;
     use forge_world::{RuntimeWorld, Transform2D};
