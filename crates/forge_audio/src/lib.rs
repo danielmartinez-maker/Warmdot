@@ -125,8 +125,8 @@ impl AudioEngine {
         if asset.source_bytes > MAX_STATIC_SOUND_BYTES {
             return Err(AudioError::StaticSoundTooLarge(asset.source_bytes));
         }
-        let sound =
-            StaticSoundData::from_file(&asset.path).map_err(|error| AudioError::Decode(error.to_string()))?;
+        let sound = StaticSoundData::from_file(&asset.path)
+            .map_err(|error| AudioError::Decode(error.to_string()))?;
         let handle = match bus {
             AudioBus::Master => self.manager.main_track().play(sound),
             AudioBus::Sfx => self.sfx_track.play(sound),
@@ -164,9 +164,7 @@ impl AudioEngine {
     }
 
     pub fn set_bus_volume(&mut self, bus: AudioBus, decibels: f32) -> Result<(), AudioError> {
-        if !decibels.is_finite()
-            || !(MIN_BUS_DECIBELS..=MAX_BUS_DECIBELS).contains(&decibels)
-        {
+        if !decibels.is_finite() || !(MIN_BUS_DECIBELS..=MAX_BUS_DECIBELS).contains(&decibels) {
             return Err(AudioError::InvalidVolume(decibels));
         }
         let volume = Decibels(decibels);
@@ -198,7 +196,11 @@ mod tests {
 
     #[test]
     fn bus_volume_range_is_explicit() {
-        assert!(AudioError::InvalidVolume(f32::NAN).to_string().contains("finite"));
+        assert!(
+            AudioError::InvalidVolume(f32::NAN)
+                .to_string()
+                .contains("finite")
+        );
         assert!(AudioError::InvalidVolume(-61.0).to_string().contains("-60"));
         assert!(AudioError::InvalidVolume(7.0).to_string().contains("6"));
     }
