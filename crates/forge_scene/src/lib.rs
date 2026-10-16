@@ -80,7 +80,7 @@ pub enum ScriptPropertyValue {
     String(String),
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredTransform {
     #[serde(default = "unit_scale")]
@@ -101,7 +101,7 @@ impl Default for AuthoredTransform {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredSprite {
     #[serde(default)]
@@ -121,7 +121,7 @@ pub struct AuthoredSprite {
     pub order: i32,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredCamera {
     #[serde(default = "unit_scale")]
@@ -134,7 +134,7 @@ pub struct AuthoredCamera {
     pub active: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredRigidBody {
     pub kind: AuthoredRigidBodyKind,
@@ -174,7 +174,7 @@ pub enum AuthoredRigidBodyKind {
     KinematicPositionBased,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredCollider {
     pub shape: AuthoredColliderShape,
@@ -192,7 +192,7 @@ pub struct AuthoredCollider {
     pub sensor: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "shape", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredColliderShape {
     Circle { radius: f32 },

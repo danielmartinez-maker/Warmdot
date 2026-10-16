@@ -7,7 +7,7 @@ use std::{
 };
 
 use forge_core::Guid;
-use forge_scene::{SceneDiagnostic, SceneDocument};
+use forge_scene::{PrefabDocument, SceneDiagnostic, SceneDocument};
 use serde::{Deserialize, Serialize};
 
 pub const CURRENT_PROJECT_SCHEMA: u32 = 1;
@@ -271,6 +271,47 @@ impl Project {
             Err(error) => return Err(ProjectError::Io(error)),
         }
         fs::write(scene_path, scene.to_canonical_json()?)?;
+        Ok(())
+    }
+
+    /// Saves a versioned prefab resource beneath the project's Assets folder.
+    pub fn save_prefab(
+        &self,
+        relative_path: &str,
+        prefab: &PrefabDocument,
+    ) -> Result<(), ProjectError> {
+        prefab.validate().map_err(ProjectError::Scene)?;
+        let relative_prefab = Path::new(relative_path);
+        validate_scene_relative_path(relative_prefab)?;
+        let prefab_path = self.root.join(relative_prefab);
+        let parent = prefab_path
+            .parent()
+            .ok_or_else(|| ProjectError::Invalid("prefab path has no parent directory".into()))?;
+        create_confined_scene_parent(&self.root, parent)?;
+        let canonical_parent = parent.canonicalize()?;
+        if !canonical_parent.starts_with(&self.root) {
+            return Err(ProjectError::Invalid(
+                "prefab directory resolves outside the project folder".into(),
+            ));
+        }
+        match fs::symlink_metadata(&prefab_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ProjectError::Invalid(
+                    "prefab file must not be a symbolic link".into(),
+                ));
+            }
+            Ok(_) => {
+                let canonical_prefab = prefab_path.canonicalize()?;
+                if !canonical_prefab.starts_with(&self.root) {
+                    return Err(ProjectError::Invalid(
+                        "prefab resolves outside the project folder".into(),
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ProjectError::Io(error)),
+        }
+        fs::write(prefab_path, prefab.to_canonical_json()?)?;
         Ok(())
     }
 

@@ -260,6 +260,139 @@ impl EditorApp {
         }
     }
 
+    fn create_prefab_from_selected(&mut self, object_guid: Guid) {
+        let Some(mut object) = self
+            .scene
+            .objects
+            .iter()
+            .find(|object| object.object_guid == object_guid)
+            .cloned()
+        else {
+            self.status = "Selected object is missing.".into();
+            return;
+        };
+        if self.catalog.is_none() {
+            self.status = "Prefab creation needs an available asset catalog.".into();
+            return;
+        }
+        object.prefab_instance = None;
+        let prefab = PrefabDocument {
+            schema_version: CURRENT_PREFAB_SCHEMA,
+            resource_guid: Guid::new(),
+            name: object.name.clone(),
+            dependencies: object_asset_dependencies(&object),
+            object,
+        };
+        let relative_path = format!(
+            "Assets/Prefabs/{}.forgeprefab.json",
+            prefab.resource_guid
+        );
+        if let Err(error) = self.project.save_prefab(&relative_path, &prefab) {
+            self.status = format!("Prefab save failed: {error}");
+            return;
+        }
+        let refresh = self
+            .catalog
+            .as_mut()
+            .expect("catalog was checked above")
+            .refresh();
+        if let Err(error) = refresh {
+            self.status = format!("Prefab was saved but the asset catalog refresh failed: {error}");
+            return;
+        }
+        let prefab_guid = self.catalog.as_ref().and_then(|catalog| {
+            catalog
+                .entries()
+                .find(|record| record.relative_path == relative_path)
+                .map(|record| record.guid)
+        });
+        if let Some(prefab_guid) = prefab_guid {
+            self.selected_asset = Some(prefab_guid);
+            self.selected = None;
+            self.asset_validation = None;
+            self.status = format!("Prefab saved as {relative_path}.");
+        } else {
+            self.status = "Prefab was saved but did not appear in the asset catalog.".into();
+        }
+    }
+
+    fn instantiate_prefab(&mut self, prefab_guid: Guid) {
+        let prefab = match self
+            .catalog
+            .as_ref()
+            .ok_or_else(|| "asset catalog is unavailable".to_owned())
+            .and_then(|catalog| catalog.load_prefab(prefab_guid).map_err(|error| error.to_string()))
+        {
+            Ok(prefab) => prefab,
+            Err(error) => {
+                self.status = format!("Prefab instance failed: {error}");
+                return;
+            }
+        };
+        let previous_dependencies = self.scene.dependencies.clone();
+        let mut dependencies = self.scene.dependencies.iter().copied().collect::<BTreeSet<_>>();
+        dependencies.insert(prefab_guid);
+        dependencies.extend(prefab.dependencies.iter().copied());
+        self.scene.dependencies = dependencies.into_iter().collect();
+
+        let mut instance = prefab.object.clone();
+        instance.object_guid = Guid::new();
+        instance.name = format!("{} Instance", prefab.name);
+        instance.prefab_instance = Some(PrefabInstance {
+            prefab_asset: prefab_guid,
+            overrides: BTreeSet::new(),
+        });
+        let object_guid = instance.object_guid;
+        match self.history.create_object(&mut self.scene, instance, None) {
+            Ok(()) => {
+                self.selected = Some(object_guid);
+                self.selected_asset = None;
+                self.status = "Prefab instance created.".into();
+            }
+            Err(error) => {
+                self.scene.dependencies = previous_dependencies;
+                self.status = format!("Prefab instance failed: {error}");
+            }
+        }
+    }
+
+    fn refresh_prefab_instance(&mut self, object_guid: Guid) {
+        let Some(current) = self
+            .scene
+            .objects
+            .iter()
+            .find(|object| object.object_guid == object_guid)
+            .cloned()
+        else {
+            self.status = "Selected prefab instance is missing.".into();
+            return;
+        };
+        let Some(link) = current.prefab_instance.as_ref() else {
+            self.status = "Selected object is not a prefab instance.".into();
+            return;
+        };
+        let prefab = match self
+            .catalog
+            .as_ref()
+            .ok_or_else(|| "asset catalog is unavailable".to_owned())
+            .and_then(|catalog| catalog.load_prefab(link.prefab_asset).map_err(|error| error.to_string()))
+        {
+            Ok(prefab) => prefab,
+            Err(error) => {
+                self.status = format!("Prefab refresh failed: {error}");
+                return;
+            }
+        };
+        let replacement = merge_prefab_overrides(&prefab.object, &current);
+        let mut dependencies = self.scene.dependencies.iter().copied().collect::<BTreeSet<_>>();
+        dependencies.extend(prefab.dependencies.iter().copied());
+        self.scene.dependencies = dependencies.into_iter().collect();
+        match self.history.replace_object(&mut self.scene, replacement) {
+            Ok(()) => self.status = "Prefab instance refreshed; overridden properties were kept.".into(),
+            Err(error) => self.status = format!("Prefab refresh failed: {error}"),
+        }
+    }
+
     fn create_tilemap(&mut self) {
         let Some(tileset_guid) = self.catalog.as_ref().and_then(|catalog| {
             catalog
@@ -699,6 +832,9 @@ impl EditorApp {
             let result = self.validate_asset(guid);
             self.asset_validation = Some((guid, result));
         }
+        if kind == AssetKind::Prefab && ui.button("Create instance in scene").clicked() {
+            self.instantiate_prefab(guid);
+        }
         if let Some((validated_guid, result)) = &self.asset_validation {
             if *validated_guid == guid {
                 match result {
@@ -799,6 +935,15 @@ impl EditorApp {
         };
 
         let mut replacement = self.scene.objects[index].clone();
+        if replacement.prefab_instance.is_some() {
+            if ui.button("Refresh from prefab").clicked() {
+                self.refresh_prefab_instance(guid);
+                return;
+            }
+        } else if ui.button("Save as prefab").clicked() {
+            self.create_prefab_from_selected(guid);
+            return;
+        }
         let available_images = self
             .catalog
             .as_ref()
@@ -1303,6 +1448,9 @@ impl EditorApp {
             }
         }
         if changed {
+            if let Some(before) = self.scene.objects.get(index) {
+                record_prefab_overrides(before, &mut replacement);
+            }
             if let Some(sprite) = replacement.sprite {
                 for dependency in [sprite.asset, sprite.animation_clip].into_iter().flatten() {
                     if !self.scene.dependencies.contains(&dependency) {
@@ -1313,6 +1461,11 @@ impl EditorApp {
             if let Some(script) = &replacement.script {
                 if !self.scene.dependencies.contains(&script.asset) {
                     self.scene.dependencies.push(script.asset);
+                }
+            }
+            if let Some(instance) = &replacement.prefab_instance {
+                if !self.scene.dependencies.contains(&instance.prefab_asset) {
+                    self.scene.dependencies.push(instance.prefab_asset);
                 }
             }
             self.last_asset_scan = None;
@@ -2111,6 +2264,110 @@ fn connected_tile_fill(
         ]);
     }
     Ok(changes)
+}
+
+fn object_asset_dependencies(object: &SceneObject) -> Vec<Guid> {
+    let mut dependencies = BTreeSet::new();
+    if let Some(sprite) = object.sprite {
+        dependencies.extend([sprite.asset, sprite.animation_clip].into_iter().flatten());
+    }
+    if let Some(script) = &object.script {
+        dependencies.insert(script.asset);
+    }
+    dependencies.into_iter().collect()
+}
+
+fn record_prefab_overrides(before: &SceneObject, after: &mut SceneObject) {
+    let Some(instance) = after.prefab_instance.as_mut() else {
+        return;
+    };
+    let overrides = &mut instance.overrides;
+    if before.name != after.name {
+        overrides.insert("object.name".into());
+    }
+    for (changed, identifier) in [
+        (
+            before.transform.translation[0] != after.transform.translation[0],
+            "transform.translation.x",
+        ),
+        (
+            before.transform.translation[1] != after.transform.translation[1],
+            "transform.translation.y",
+        ),
+        (
+            before.transform.rotation_radians != after.transform.rotation_radians,
+            "transform.rotation",
+        ),
+        (
+            before.transform.scale[0] != after.transform.scale[0],
+            "transform.scale.x",
+        ),
+        (
+            before.transform.scale[1] != after.transform.scale[1],
+            "transform.scale.y",
+        ),
+    ] {
+        if changed {
+            overrides.insert(identifier.into());
+        }
+    }
+    for (changed, identifier) in [
+        (before.sprite != after.sprite, "component.sprite"),
+        (before.camera != after.camera, "component.camera"),
+        (before.rigid_body != after.rigid_body, "component.rigid_body"),
+        (before.collider != after.collider, "component.collider"),
+        (before.script != after.script, "component.script"),
+    ] {
+        if changed {
+            overrides.insert(identifier.into());
+        }
+    }
+}
+
+fn merge_prefab_overrides(template: &SceneObject, instance: &SceneObject) -> SceneObject {
+    let Some(link) = instance.prefab_instance.as_ref() else {
+        return instance.clone();
+    };
+    let mut merged = template.clone();
+    merged.object_guid = instance.object_guid;
+    merged.prefab_instance = Some(link.clone());
+    for (identifier, field) in [
+        ("object.name", 0),
+        ("transform.translation.x", 1),
+        ("transform.translation.y", 2),
+        ("transform.rotation", 3),
+        ("transform.scale.x", 4),
+        ("transform.scale.y", 5),
+    ] {
+        if !link.overrides.contains(identifier) {
+            continue;
+        }
+        match field {
+            0 => merged.name = instance.name.clone(),
+            1 => merged.transform.translation[0] = instance.transform.translation[0],
+            2 => merged.transform.translation[1] = instance.transform.translation[1],
+            3 => merged.transform.rotation_radians = instance.transform.rotation_radians,
+            4 => merged.transform.scale[0] = instance.transform.scale[0],
+            5 => merged.transform.scale[1] = instance.transform.scale[1],
+            _ => unreachable!(),
+        }
+    }
+    if link.overrides.contains("component.sprite") {
+        merged.sprite = instance.sprite;
+    }
+    if link.overrides.contains("component.camera") {
+        merged.camera = instance.camera;
+    }
+    if link.overrides.contains("component.rigid_body") {
+        merged.rigid_body = instance.rigid_body;
+    }
+    if link.overrides.contains("component.collider") {
+        merged.collider = instance.collider;
+    }
+    if link.overrides.contains("component.script") {
+        merged.script = instance.script.clone();
+    }
+    merged
 }
 
 fn import_asset_file(project_root: &Path, source: &Path) -> Result<String, String> {
