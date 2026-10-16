@@ -1,0 +1,17 @@
+[package]
+name = "forge_renderer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Native wgpu 2D sprite renderer for Forge"
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+forge_world = { path = "../forge_world" }
+pollster = "0.4"
+wgpu = "=30.0.1"
+winit = "=0.30.12"
+
+[lints]
+workspace = true

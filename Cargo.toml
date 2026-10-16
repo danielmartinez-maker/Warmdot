@@ -7,7 +7,9 @@ members = [
     "crates/forge_physics",
     "crates/forge_project",
     "crates/forge_runtime",
+    "crates/forge_renderer",
     "examples/action_arena",
+    "examples/renderer_benchmark",
 ]
 
 [workspace.package]

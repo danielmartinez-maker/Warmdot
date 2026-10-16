@@ -13,10 +13,12 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - Timestamped input actions are delivered in stable queue order.
 - The Rapier adapter supports fixed, dynamic, and position-based kinematic bodies; circle and box colliders; sensor/collision events; raycasts; and transform synchronization.
 - The headless action-arena sample runs a dynamic player against a fixed floor.
+- The native wgpu renderer draws ordered, tinted sprite instances in one instanced batch and can extract draw data from the runtime world.
+- The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
 
 ## Not implemented yet
 
-This branch is the runtime kernel, not the complete P0 engine. The 2D renderer and native window host, imported textures and sprite sheets, animation, Luau scripts, the editor and undo/redo workflow, tilemap painting, audio, retained game UI, standalone export pipeline, and the colony simulation remain ahead. The stress benchmark has not been run, so there are no measured performance results.
+This branch is the runtime kernel, not the complete P0 engine. The renderer currently handles solid tinted quads; PNG texture import, sprite sheets, animation, Luau scripts, the editor and undo/redo workflow, tilemap painting, audio, retained game UI, standalone export, and the colony simulation remain ahead. The stress benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
@@ -26,8 +28,11 @@ This branch is the runtime kernel, not the complete P0 engine. The 2D renderer a
 - `crates/forge_project`: project lifecycle and confined scene paths
 - `crates/forge_physics`: Rapier-backed rigid bodies, collision events, and raycasts
 - `crates/forge_runtime`: headless simulation host and ordered systems
+- `crates/forge_renderer`: native wgpu surface, camera projection, sprite batching, and runtime-world extraction
 - `examples/action_arena`: small headless physics scene
+- `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
+- `docs/architecture/renderer-and-benchmark.md`: renderer scope and benchmark measurement contract
 
 ## Build
 
@@ -36,5 +41,6 @@ Use stable Rust. On Windows, install the Visual C++ Build Tools workload and Win
     cargo fmt --all -- --check
     cargo check --workspace
     cargo run -p action-arena
+    cargo run --release -p renderer-benchmark -- --sprites 10000 --warmup 120 --samples 600
 
 The Windows GitHub Actions workflow runs formatting and a workspace type-check. It does not run a test suite.
