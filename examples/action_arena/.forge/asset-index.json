@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+      "relative_path": "Assets/PlayerController.luau",
+      "kind": "script",
+      "source_bytes": 0,
+      "fingerprint": 0
+    }
+  ]
+}
