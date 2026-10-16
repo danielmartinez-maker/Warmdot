@@ -230,8 +230,7 @@ impl Project {
                 "scene resolves outside the project folder".into(),
             ));
         }
-        SceneDocument::from_json(&fs::read_to_string(canonical_scene)?)
-            .map_err(ProjectError::Scene)
+        SceneDocument::from_json(&fs::read_to_string(canonical_scene)?).map_err(ProjectError::Scene)
     }
 
     /// Saves a scene resource to a project-relative path, creating its parent folders as needed.
@@ -296,11 +295,12 @@ impl Project {
     }
 }
 
-
 fn validate_scene_relative_path(path: &Path) -> Result<(), ProjectError> {
     if path.as_os_str().is_empty()
         || path.is_absolute()
-        || path.components().any(|part| !matches!(part, Component::Normal(_)))
+        || path
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
     {
         return Err(ProjectError::Invalid(
             "scene path must be a normalized project-relative path".into(),
