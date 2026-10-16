@@ -2084,8 +2084,8 @@ impl EditorApp {
                         }
                         TransformGizmoMode::Scale => {
                             let pointer_offset = pointer - drag.pointer_center;
-                            let factor =
-                                (pointer_offset.length() / drag.pointer_start_radius).clamp(0.01, 100.0);
+                            let factor = (pointer_offset.length() / drag.pointer_start_radius)
+                                .clamp(0.01, 100.0);
                             for value in &mut preview.scale {
                                 let sign = value.signum();
                                 *value = (value.abs() * factor).clamp(0.01, 10_000.0) * sign;
@@ -2523,8 +2523,7 @@ fn world_transform_to_local(
 }
 
 fn wrap_radians(angle: f32) -> f32 {
-    (angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
-        - std::f32::consts::PI
+    (angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
 }
 
 fn object_asset_dependencies(object: &SceneObject) -> Vec<Guid> {
