@@ -1,6 +1,5 @@
 # Tilemaps and edit history
-
-Tilemaps store occupied cells in sparse 32 by 32 chunks. Chunk coordinates use Euclidean division, so negative world cells map to a stable non-negative local index. Empty chunks are removed when the last tile is erased.
+Tilemaps store occupied cells in sparse 32 by 32 chunks using Forge's +X right and +Y down world convention. Chunk coordinates use Euclidean division, so negative world cells map to a stable non-negative local index. Empty chunks are removed when the last tile is erased.
 
 Tilemap documents use a versioned JSON schema. Chunks and cell entries serialize deterministically in sorted coordinate/index order. Each map stores its cell size in world units and its source tile size in PNG pixels; older documents default to 16 by 16 pixel tiles. Validation rejects duplicate chunks/cells, empty serialized chunks, invalid world or source tile sizes, out-of-range indices, and rotations outside zero to three quarter-turns.
 
