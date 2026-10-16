@@ -603,17 +603,13 @@ impl EditorApp {
         self.status = "Tilemap saved.".into();
     }
 
-    fn build_preview_scene(
-        &self,
-        authored_scene: &SceneDocument,
-    ) -> Result<SceneDocument, String> {
+    fn build_preview_scene(&self, authored_scene: &SceneDocument) -> Result<SceneDocument, String> {
         let mut scene = authored_scene.clone();
         if scene.resource_guid == self.project.document().default_scene_guid {
             if let Some(tilemap) = self.tilemap.as_ref() {
-                let catalog = self
-                    .catalog
-                    .as_ref()
-                    .ok_or_else(|| "Runtime preview needs an available asset catalog.".to_owned())?;
+                let catalog = self.catalog.as_ref().ok_or_else(|| {
+                    "Runtime preview needs an available asset catalog.".to_owned()
+                })?;
                 append_tilemap_to_scene(&mut scene, tilemap, catalog)?;
             }
         }
@@ -666,7 +662,8 @@ impl EditorApp {
                 return;
             }
         };
-        match GameRuntime::from_scene_with_assets(&runtime_scene, RuntimeConfig::default(), catalog) {
+        match GameRuntime::from_scene_with_assets(&runtime_scene, RuntimeConfig::default(), catalog)
+        {
             Ok(runtime) => {
                 self.selected_asset = None;
                 self.runtime = Some(runtime);
@@ -3782,8 +3779,7 @@ fn append_tilemap_to_scene(
                 (coordinate.x as f32 + 0.5) * document.tile_size[0],
                 (coordinate.y as f32 + 0.5) * document.tile_size[1],
             ],
-            rotation_radians: f32::from(cell.rotation_quarters)
-                * std::f32::consts::FRAC_PI_2,
+            rotation_radians: f32::from(cell.rotation_quarters) * std::f32::consts::FRAC_PI_2,
             scale: [
                 if cell.flip_x { -1.0 } else { 1.0 },
                 if cell.flip_y { -1.0 } else { 1.0 },
