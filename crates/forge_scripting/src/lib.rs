@@ -212,7 +212,12 @@ impl ScriptHost {
         delta: Duration,
         tick: u64,
     ) {
-        for instance in self.instances.values_mut() {
+        let mut orphaned = Vec::new();
+        for (object_guid, instance) in &mut self.instances {
+            if world.entity_for_guid(*object_guid).is_none() {
+                orphaned.push(*object_guid);
+                continue;
+            }
             if instance.disabled {
                 continue;
             }
@@ -244,6 +249,9 @@ impl ScriptHost {
                     );
                 }
             }
+        }
+        for object_guid in orphaned {
+            self.instances.remove(&object_guid);
         }
     }
 
