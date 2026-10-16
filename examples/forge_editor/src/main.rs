@@ -11,7 +11,8 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use forge_assets::{AssetCatalog, AssetChange, AssetChangeKind, AssetKind};
 use forge_core::{ActionId, Guid};
 use forge_editor_core::SceneEditHistory;
-use forge_project::Project;
+use forge_project::{Project, SceneCatalog};
+use forge_ui::{UiDocument, UiKey, UiRuntime};
 use forge_runtime::{BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
@@ -115,6 +116,7 @@ struct EditorApp {
     tilemap_mode: bool,
     last_asset_scan: Option<Instant>,
     runtime: Option<GameRuntime>,
+    preview_ui: Option<UiRuntime>,
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
     preview_actions: [f32; 2],
@@ -163,6 +165,7 @@ impl EditorApp {
             tilemap_mode: false,
             last_asset_scan: None,
             runtime: None,
+            preview_ui: None,
             preview_last_frame: None,
             preview_tick: 0,
             preview_actions: [0.0, 0.0],
@@ -529,10 +532,22 @@ impl EditorApp {
             self.status = "Runtime preview needs an available asset catalog.".into();
             return;
         };
+        if let Err(error) = validate_scene_dependencies(&self.scene, catalog) {
+            self.status = format!("Play failed: {error}");
+            return;
+        }
+        let preview_ui = match load_preview_ui(&self.scene, catalog) {
+            Ok(ui) => ui,
+            Err(error) => {
+                self.status = format!("Play failed: game UI could not load: {error}");
+                return;
+            }
+        };
         match GameRuntime::from_scene_with_assets(&self.scene, RuntimeConfig::default(), catalog) {
             Ok(runtime) => {
                 self.selected_asset = None;
                 self.runtime = Some(runtime);
+                self.preview_ui = Some(preview_ui);
                 self.preview_last_frame = Some(Instant::now());
                 self.preview_tick = 0;
                 self.preview_actions = [0.0, 0.0];
@@ -565,6 +580,7 @@ impl EditorApp {
                 .saturating_add(u64::from(frame.fixed_steps));
         }
         self.collect_script_diagnostics();
+        self.process_runtime_scene_transitions();
         self.preview_last_frame = Some(Instant::now());
     }
 
@@ -590,6 +606,7 @@ impl EditorApp {
             }
         }
         self.collect_script_diagnostics();
+        self.process_runtime_scene_transitions();
         self.preview_last_frame = Some(Instant::now());
     }
 
@@ -634,6 +651,7 @@ impl EditorApp {
 
     fn stop_runtime(&mut self) {
         self.runtime = None;
+        self.preview_ui = None;
         self.preview_last_frame = None;
         self.preview_tick = 0;
         self.preview_actions = [0.0, 0.0];
@@ -654,9 +672,9 @@ impl EditorApp {
     }
 
     fn advance_runtime(&mut self, ctx: &egui::Context) {
-        let Some(runtime) = self.runtime.as_mut() else {
+        if self.runtime.is_none() {
             return;
-        };
+        }
         let now = Instant::now();
         let previous = self.preview_last_frame.replace(now).unwrap_or(now);
         let keyboard_captured = ctx.egui_wants_keyboard_input();
@@ -673,21 +691,24 @@ impl EditorApp {
                 (if up { 1.0 } else { 0.0 }) - (if down { 1.0 } else { 0.0 }),
             ]
         });
-        if !runtime.is_paused() {
-            let at = runtime.simulation_time();
-            if movement[0] != self.preview_actions[0] {
-                runtime.push_action(at, ActionId(1), movement[0], movement[0] != 0.0);
+        if let Some(runtime) = self.runtime.as_mut() {
+            if !runtime.is_paused() {
+                let at = runtime.simulation_time();
+                if movement[0] != self.preview_actions[0] {
+                    runtime.push_action(at, ActionId(1), movement[0], movement[0] != 0.0);
+                }
+                if movement[1] != self.preview_actions[1] {
+                    runtime.push_action(at, ActionId(2), movement[1], movement[1] != 0.0);
+                }
+                self.preview_actions = movement;
+                let frame = runtime.advance_frame(now.saturating_duration_since(previous));
+                self.preview_tick = frame
+                    .first_tick
+                    .saturating_add(u64::from(frame.fixed_steps));
             }
-            if movement[1] != self.preview_actions[1] {
-                runtime.push_action(at, ActionId(2), movement[1], movement[1] != 0.0);
-            }
-            self.preview_actions = movement;
-            let frame = runtime.advance_frame(now.saturating_duration_since(previous));
-            self.preview_tick = frame
-                .first_tick
-                .saturating_add(u64::from(frame.fixed_steps));
         }
         self.collect_script_diagnostics();
+        self.process_runtime_scene_transitions();
         if self
             .runtime
             .as_ref()
@@ -700,6 +721,65 @@ impl EditorApp {
             .is_some_and(|runtime| runtime.current_script_breakpoint().is_some())
         {
             ctx.request_repaint();
+        }
+    }
+
+    fn process_runtime_scene_transitions(&mut self) {
+        let requests = self
+            .runtime
+            .as_mut()
+            .map(GameRuntime::take_scene_transition_requests)
+            .unwrap_or_default();
+        if requests.is_empty() {
+            return;
+        }
+        let scene_catalog = match SceneCatalog::open(self.project.root()) {
+            Ok(catalog) => catalog,
+            Err(error) => {
+                self.status = format!("Scene transition failed: {error}");
+                return;
+            }
+        };
+        let Some(assets) = self.catalog.as_ref() else {
+            self.status = "Scene transition failed: the asset catalog is unavailable.".into();
+            return;
+        };
+        for scene_guid in requests {
+            let scene = match scene_catalog.load_scene(scene_guid) {
+                Ok(scene) => scene,
+                Err(error) => {
+                    self.status = format!("Scene transition to {scene_guid} was rejected: {error}");
+                    continue;
+                }
+            };
+            if let Err(error) = validate_scene_dependencies(&scene, assets) {
+                self.status = format!("Scene transition to {scene_guid} was rejected: {error}");
+                continue;
+            }
+            let preview_ui = match load_preview_ui(&scene, assets) {
+                Ok(ui) => ui,
+                Err(error) => {
+                    self.status =
+                        format!("Scene transition to {} has invalid game UI: {error}", scene.resource_guid);
+                    continue;
+                }
+            };
+            match GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets) {
+                Ok(runtime) => {
+                    self.runtime = Some(runtime);
+                    self.preview_ui = Some(preview_ui);
+                    self.preview_tick = 0;
+                    self.preview_actions = [0.0, 0.0];
+                    self.preview_last_frame = Some(Instant::now());
+                    self.selected = None;
+                    self.status = format!("Editor preview entered scene {}.", scene.name);
+                    return;
+                }
+                Err(error) => {
+                    self.status =
+                        format!("Scene transition to {} could not prepare: {error}", scene.resource_guid);
+                }
+            }
         }
     }
     fn handle_asset_change(&mut self, change: AssetChange) {
@@ -2519,7 +2599,114 @@ impl EditorApp {
             Color32::LIGHT_GRAY,
         );
 
-        if response.clicked() {
+        let viewport_width = rect.width().ceil().max(1.0) as u32;
+        let viewport_height = rect.height().ceil().max(1.0) as u32;
+        let (pointer_position, primary_pressed, primary_released, window_focused, tab_pressed, enter_pressed, space_pressed, shift_pressed) =
+            ui.input(|input| {
+                (
+                    input.pointer.hover_pos(),
+                    input.pointer.button_pressed(egui::PointerButton::Primary),
+                    input.pointer.button_released(egui::PointerButton::Primary),
+                    input.raw.focused,
+                    input.key_pressed(egui::Key::Tab),
+                    input.key_pressed(egui::Key::Enter),
+                    input.key_pressed(egui::Key::Space),
+                    input.modifiers.shift,
+                )
+            });
+        let mut ui_input_consumed = false;
+        let mut activated_ui_event = None;
+        let mut ui_error = None;
+        if self.runtime.is_some() {
+            if response.clicked() {
+                response.request_focus();
+            }
+            if let Some(preview_ui) = self.preview_ui.as_mut() {
+                let pointer = pointer_position
+                    .map(|position| [position.x - rect.left(), position.y - rect.top()])
+                    .unwrap_or([-1.0, -1.0]);
+                match preview_ui.route_pointer_move(pointer, viewport_width, viewport_height) {
+                    Ok(result) => ui_input_consumed |= result.consumed,
+                    Err(error) => ui_error = Some(error.to_string()),
+                }
+                if primary_pressed {
+                    match preview_ui.route_pointer_down(pointer, viewport_width, viewport_height) {
+                        Ok(result) => ui_input_consumed |= result.consumed,
+                        Err(error) => ui_error = Some(error.to_string()),
+                    }
+                }
+                if primary_released {
+                    match preview_ui.route_pointer_up(pointer, viewport_width, viewport_height) {
+                        Ok(result) => {
+                            ui_input_consumed |= result.consumed;
+                            activated_ui_event =
+                                result.event.map(|event| (event.name, event.source_id));
+                        }
+                        Err(error) => ui_error = Some(error.to_string()),
+                    }
+                }
+                if response.has_focus() && window_focused {
+                    let key = if tab_pressed {
+                        Some(if shift_pressed {
+                            UiKey::Previous
+                        } else {
+                            UiKey::Next
+                        })
+                    } else if enter_pressed || space_pressed {
+                        Some(UiKey::Activate)
+                    } else {
+                        None
+                    };
+                    if let Some(key) = key {
+                        match preview_ui.route_key(key, viewport_width, viewport_height) {
+                            Ok(result) => {
+                                ui_input_consumed |= result.consumed;
+                                activated_ui_event =
+                                    result.event.map(|event| (event.name, event.source_id));
+                            }
+                            Err(error) => ui_error = Some(error.to_string()),
+                        }
+                    }
+                }
+                match preview_ui.draw_commands(viewport_width, viewport_height) {
+                    Ok(commands) => {
+                        for command in commands {
+                            let command_rect = Rect::from_min_size(
+                                rect.min + Vec2::new(command.rect.x, command.rect.y),
+                                Vec2::new(command.rect.width, command.rect.height),
+                            );
+                            let tint = tint_color(command.tint);
+                            if let Some(texture) = command
+                                .texture_asset
+                                .and_then(|asset| self.textures.get(&asset))
+                            {
+                                painter.image(
+                                    texture.id(),
+                                    command_rect,
+                                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                                    tint,
+                                );
+                            } else {
+                                painter.rect_filled(command_rect, 0.0, tint);
+                            }
+                        }
+                    }
+                    Err(error) => ui_error = Some(error.to_string()),
+                }
+            }
+        }
+        if let Some((event_name, source_id)) = activated_ui_event {
+            if let Some(runtime) = self.runtime.as_mut() {
+                if !runtime.emit_ui_event(event_name, source_id) {
+                    self.status = "Game UI event was rejected by the script queue.".into();
+                }
+            }
+        }
+        if let Some(error) = ui_error {
+            self.status = format!("Game UI preview failed: {error}");
+        }
+
+        if response.clicked() && !ui_input_consumed {
             self.selected_asset = None;
             if let Some(pointer) = response.interact_pointer_pos() {
                 self.selected = objects
@@ -2578,6 +2765,46 @@ impl EditorApp {
             }
         }
     }
+}
+
+fn validate_scene_dependencies(
+    scene: &SceneDocument,
+    assets: &AssetCatalog,
+) -> Result<(), String> {
+    for guid in scene.dependencies.iter().copied() {
+        let record = assets
+            .get(guid)
+            .ok_or_else(|| format!("scene dependency {guid} is not in the project asset catalog"))?;
+        let result = match record.kind {
+            AssetKind::Png => assets.load_png(guid).map(|_| ()),
+            AssetKind::SpriteSheet => assets.load_sprite_sheet(guid).map(|_| ()),
+            AssetKind::AnimationClip => assets.load_animation_clip(guid).map(|_| ()),
+            AssetKind::Script => assets.load_script(guid).map(|_| ()),
+            AssetKind::Prefab => assets.load_prefab(guid).map(|_| ()),
+            AssetKind::Audio => assets.load_audio(guid).map(|_| ()),
+            AssetKind::Ui => assets.load_ui_source(guid).map(|_| ()),
+        };
+        result.map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn load_preview_ui(
+    scene: &SceneDocument,
+    assets: &AssetCatalog,
+) -> Result<UiRuntime, String> {
+    let Some(guid) = scene.ui_document else {
+        return Ok(UiRuntime::empty());
+    };
+    let source = assets
+        .load_ui_source(guid)
+        .map_err(|error| error.to_string())?;
+    let document =
+        UiDocument::from_json(&source.source).map_err(|error| error.to_string())?;
+    let ui = UiRuntime::new(document).map_err(|error| error.to_string())?;
+    ui.validate_assets(assets)
+        .map_err(|error| error.to_string())?;
+    Ok(ui)
 }
 
 fn project_scene_paths(project_root: &Path) -> Vec<String> {
