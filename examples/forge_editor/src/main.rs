@@ -897,7 +897,7 @@ impl EditorApp {
             let center = rect.center()
                 + Vec2::new(
                     (coordinate.x as f32 + 0.5) * cell_pixels.x,
-                    -(coordinate.y as f32 + 0.5) * cell_pixels.y,
+                    (coordinate.y as f32 + 0.5) * cell_pixels.y,
                 );
             Rect::from_center_size(center, cell_pixels)
         };
@@ -1000,7 +1000,7 @@ impl EditorApp {
             if let Some(pointer) = pointer {
                 let coordinate = TileCoord {
                     x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
-                    y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
+                    y: ((pointer.y - rect.center().y) / cell_pixels.y).floor() as i32,
                 };
                 let primary_down =
                     ui.input(|input| input.pointer.button_down(egui::PointerButton::Primary));
@@ -1028,7 +1028,7 @@ impl EditorApp {
             if let Some(pointer) = pointer {
                 let coordinate = TileCoord {
                     x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
-                    y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
+                    y: ((pointer.y - rect.center().y) / cell_pixels.y).floor() as i32,
                 };
                 let cell = if tilemap.erase_mode {
                     None
@@ -1049,7 +1049,7 @@ impl EditorApp {
             if let Some(pointer) = pointer {
                 let coordinate = TileCoord {
                     x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
-                    y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
+                    y: ((pointer.y - rect.center().y) / cell_pixels.y).floor() as i32,
                 };
                 tilemap.pending_stroke.insert(coordinate, None);
             }
@@ -1099,7 +1099,7 @@ impl EditorApp {
             let center = rect.center()
                 + Vec2::new(
                     object.transform.translation[0] * pixels_per_unit,
-                    -object.transform.translation[1] * pixels_per_unit,
+                    object.transform.translation[1] * pixels_per_unit,
                 );
             let extent = Vec2::new(
                 (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
@@ -1142,7 +1142,7 @@ impl EditorApp {
                         let center = rect.center()
                             + Vec2::new(
                                 object.transform.translation[0] * pixels_per_unit,
-                                -object.transform.translation[1] * pixels_per_unit,
+                                object.transform.translation[1] * pixels_per_unit,
                             );
                         let extent = Vec2::new(
                             (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
