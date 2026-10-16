@@ -852,3 +852,58 @@ mod script_asset_tests {
         assert_eq!(catalog.load_script(guid).expect("reload source").guid, guid);
     }
 }
+
+#[cfg(test)]
+mod audio_asset_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn catalogs_audio_files_by_stable_guid_and_confines_the_resolved_path() {
+        let project = tempfile::tempdir().expect("temporary project");
+        let assets_dir = project.path().join("Assets");
+        fs::create_dir_all(&assets_dir).expect("Assets folder");
+        let wav_path = assets_dir.join("effect.wav");
+        let mut wav = b"RIFF\x04\x00\x00\x00WAVE".to_vec();
+        wav.extend_from_slice(b"fmt ");
+        fs::write(&wav_path, wav).expect("write wav header");
+        fs::write(assets_dir.join("music.ogg"), b"OggS\0\0\0\0")
+            .expect("write ogg header");
+
+        let catalog = AssetCatalog::open(project.path()).expect("open asset catalog");
+        let effect = catalog
+            .entries()
+            .find(|record| record.relative_path == "Assets/effect.wav")
+            .expect("WAV should be indexed");
+        assert_eq!(effect.kind, AssetKind::Audio);
+        let loaded = catalog.load_audio(effect.guid).expect("load WAV metadata");
+        assert_eq!(loaded.format, AudioFormat::Wav);
+        assert!(loaded.path.starts_with(project.path().canonicalize().unwrap()));
+
+        let music = catalog
+            .entries()
+            .find(|record| record.relative_path == "Assets/music.ogg")
+            .expect("OGG should be indexed");
+        assert_eq!(music.kind, AssetKind::Audio);
+        assert_eq!(
+            catalog.load_audio(music.guid).expect("load OGG metadata").format,
+            AudioFormat::Ogg
+        );
+    }
+
+    #[test]
+    fn rejects_audio_with_a_mismatched_container_signature() {
+        let project = tempfile::tempdir().expect("temporary project");
+        let assets_dir = project.path().join("Assets");
+        fs::create_dir_all(&assets_dir).expect("Assets folder");
+        fs::write(assets_dir.join("broken.wav"), b"OggS not a wave file")
+            .expect("write mismatched header");
+
+        let catalog = AssetCatalog::open(project.path()).expect("open asset catalog");
+        let audio = catalog
+            .entries()
+            .find(|record| record.relative_path == "Assets/broken.wav")
+            .expect("WAV should be indexed");
+        assert!(catalog.load_audio(audio.guid).is_err());
+    }
+}
