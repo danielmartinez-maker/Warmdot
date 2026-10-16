@@ -123,7 +123,11 @@ impl TileMapDocument {
                 self.schema_version, CURRENT_TILE_MAP_SCHEMA
             )));
         }
-        if !self.tile_size.iter().all(|value| value.is_finite() && *value > 0.0) {
+        if !self
+            .tile_size
+            .iter()
+            .all(|value| value.is_finite() && *value > 0.0)
+        {
             return Err(TileMapError::Invalid(
                 "tile width and height must be finite positive values".into(),
             ));
@@ -170,7 +174,9 @@ impl TileMapDocument {
                         .checked_mul(CHUNK_SIDE)
                         .and_then(|base| base.checked_add(x as i32))
                         .ok_or_else(|| {
-                            TileMapError::Invalid("tilemap x coordinate overflows world space".into())
+                            TileMapError::Invalid(
+                                "tilemap x coordinate overflows world space".into(),
+                            )
                         })?,
                     y: chunk
                         .coordinate
@@ -178,7 +184,9 @@ impl TileMapDocument {
                         .checked_mul(CHUNK_SIDE)
                         .and_then(|base| base.checked_add(y as i32))
                         .ok_or_else(|| {
-                            TileMapError::Invalid("tilemap y coordinate overflows world space".into())
+                            TileMapError::Invalid(
+                                "tilemap y coordinate overflows world space".into(),
+                            )
                         })?,
                 };
                 map.set_tile(coordinate, Some(entry.cell));
@@ -211,7 +219,10 @@ impl TileEdit {
 
     fn apply(&self, map: &mut ChunkedTileMap, after: bool) {
         for change in &self.changes {
-            map.set_tile(change.coordinate, if after { change.after } else { change.before });
+            map.set_tile(
+                change.coordinate,
+                if after { change.after } else { change.before },
+            );
         }
     }
 }
