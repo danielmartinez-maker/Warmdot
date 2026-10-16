@@ -23,7 +23,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The first native scene editor is now available, but this branch is not the complete P0 alpha yet. The editor can select project PNGs and preview textured sprites, but does not yet provide tilemap painting, a full asset browser, script/audio inspectors, or multi-scene workflows. Luau scripts, audio, retained game UI, standalone export, and deeper colony-simulation features remain ahead. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+The native editor supports scene editing plus a tilemap workspace with PNG tileset selection, tile painting and erasing, solid-cell metadata, bounded undo/redo, and a saved-state marker. Tilemaps save to `Assets/Default.forgetilemap.json`. This branch is still short of the complete P0 alpha: a full asset browser, Luau scripting, audio, retained game UI, standalone export, tilemap runtime rendering/physics, and deeper colony-simulation features remain. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
@@ -41,7 +41,7 @@ The first native scene editor is now available, but this branch is not the compl
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `examples/forge_player`: opens a `.forgeproj`, runs its default scene and authored animations, uploads project PNGs, and refreshes changed images while the player is open
-- `examples/forge_editor`: creates or opens projects, edits a scene tree plus sprite, camera, rigid-body, and collider properties, previews tinted or textured objects, and saves with undo/redo
+- `examples/forge_editor`: creates or opens projects, edits scenes and tilemaps, previews sprites and PNG tilesets, and saves scene or tilemap edits with undo/redo
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
