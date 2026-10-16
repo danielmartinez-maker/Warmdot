@@ -12,7 +12,7 @@ forge_core = { path = "../forge_core" }
 forge_world = { path = "../forge_world" }
 pollster = "0.4"
 wgpu = "=30.0.1"
-winit = "=0.30.12"
+winit = "=0.30.13"
 
 [lints]
 workspace = true
