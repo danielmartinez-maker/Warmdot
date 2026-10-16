@@ -9,7 +9,8 @@ use std::{
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use forge_assets::{AssetCatalog, AssetKind};
-use forge_core::Guid;
+use forge_core::{ActionId, Guid};
+use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
 use forge_scene::{
@@ -31,6 +32,19 @@ struct EditorTileMap {
     pending_stroke: BTreeMap<TileCoord, Option<TileCell>>,
 }
 
+#[derive(Clone, Copy)]
+struct CanvasSprite {
+    object_guid: Guid,
+    asset: Option<Guid>,
+    translation: [f32; 2],
+    scale: [f32; 2],
+    size: [f32; 2],
+    tint: [f32; 4],
+    uv_rect: [f32; 4],
+    layer: i32,
+    order: i32,
+}
+
 struct EditorApp {
     project: Project,
     scene: SceneDocument,
@@ -44,6 +58,10 @@ struct EditorApp {
     tilemap: Option<EditorTileMap>,
     tilemap_mode: bool,
     last_asset_scan: Option<Instant>,
+    runtime: Option<GameRuntime>,
+    preview_last_frame: Option<Instant>,
+    preview_tick: u64,
+    script_diagnostics: Vec<ScriptDiagnostic>,
 }
 
 impl EditorApp {
@@ -75,6 +93,10 @@ impl EditorApp {
             tilemap,
             tilemap_mode: false,
             last_asset_scan: None,
+            runtime: None,
+            preview_last_frame: None,
+            preview_tick: 0,
+            script_diagnostics: Vec::new(),
         }
     }
 
@@ -263,6 +285,95 @@ impl EditorApp {
         tilemap.metadata_dirty = false;
         tilemap.resource_unsaved = false;
         self.status = "Tilemap saved.".into();
+    }
+
+    fn start_runtime(&mut self) {
+        let Some(catalog) = self.catalog.as_ref() else {
+            self.status = "Runtime preview needs an available asset catalog.".into();
+            return;
+        };
+        match GameRuntime::from_scene_with_assets(&self.scene, RuntimeConfig::default(), catalog) {
+            Ok(runtime) => {
+                self.runtime = Some(runtime);
+                self.preview_last_frame = Some(Instant::now());
+                self.preview_tick = 0;
+                self.script_diagnostics.clear();
+                self.status = "Scene is running in the editor.".into();
+            }
+            Err(error) => self.status = format!("Play failed: {error}"),
+        }
+    }
+
+    fn toggle_runtime_pause(&mut self) {
+        if let Some(runtime) = self.runtime.as_mut() {
+            runtime.set_paused(!runtime.is_paused());
+            self.preview_last_frame = Some(Instant::now());
+            self.status = if runtime.is_paused() {
+                "Runtime paused.".into()
+            } else {
+                "Runtime resumed.".into()
+            };
+        }
+    }
+
+    fn step_runtime(&mut self) {
+        let Some(runtime) = self.runtime.as_mut() else {
+            return;
+        };
+        if let Some(frame) = runtime.step_once() {
+            self.preview_tick = frame.first_tick.saturating_add(u64::from(frame.fixed_steps));
+        }
+        self.collect_script_diagnostics();
+        self.preview_last_frame = Some(Instant::now());
+    }
+
+    fn stop_runtime(&mut self) {
+        self.runtime = None;
+        self.preview_last_frame = None;
+        self.preview_tick = 0;
+        self.status = "Runtime stopped; authored scene is unchanged.".into();
+    }
+
+    fn collect_script_diagnostics(&mut self) {
+        let new_diagnostics = self
+            .runtime
+            .as_mut()
+            .map(GameRuntime::take_script_diagnostics)
+            .unwrap_or_default();
+        self.script_diagnostics.extend(new_diagnostics);
+        if self.script_diagnostics.len() > 256 {
+            let excess = self.script_diagnostics.len() - 256;
+            self.script_diagnostics.drain(..excess);
+        }
+    }
+
+    fn advance_runtime(&mut self, ctx: &egui::Context) {
+        let Some(runtime) = self.runtime.as_mut() else {
+            return;
+        };
+        let now = Instant::now();
+        let previous = self.preview_last_frame.replace(now).unwrap_or(now);
+        let [move_x, move_y] = ctx.input(|input| {
+            let left = input.key_down(egui::Key::A) || input.key_down(egui::Key::ArrowLeft);
+            let right = input.key_down(egui::Key::D) || input.key_down(egui::Key::ArrowRight);
+            let down = input.key_down(egui::Key::S) || input.key_down(egui::Key::ArrowDown);
+            let up = input.key_down(egui::Key::W) || input.key_down(egui::Key::ArrowUp);
+            [
+                (if right { 1.0 } else { 0.0 }) - (if left { 1.0 } else { 0.0 }),
+                (if up { 1.0 } else { 0.0 }) - (if down { 1.0 } else { 0.0 }),
+            ]
+        });
+        let at = runtime.simulation_time();
+        runtime.push_action(at, ActionId(1), move_x, move_x != 0.0);
+        runtime.push_action(at, ActionId(2), move_y, move_y != 0.0);
+        if !runtime.is_paused() {
+            let frame = runtime.advance_frame(now.saturating_duration_since(previous));
+            self.preview_tick = frame.first_tick.saturating_add(u64::from(frame.fixed_steps));
+        }
+        self.collect_script_diagnostics();
+        if self.runtime.as_ref().is_some_and(|runtime| !runtime.is_paused()) {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        }
     }
 
     fn refresh_assets(&mut self, ctx: &egui::Context) {
@@ -1241,31 +1352,57 @@ impl EditorApp {
             Stroke::new(1.0, Color32::from_gray(55)),
         );
 
-        let mut objects = self.scene.objects.iter().collect::<Vec<_>>();
-        objects.sort_by_key(|object| {
-            (
-                object.sprite.map_or(0, |sprite| sprite.layer),
-                object.sprite.map_or(0, |sprite| sprite.order),
-                object.object_guid,
-            )
-        });
+        let mut objects = if let Some(runtime) = self.runtime.as_mut() {
+            runtime
+                .world_mut()
+                .extract_sprites()
+                .into_iter()
+                .map(|sprite| CanvasSprite {
+                    object_guid: sprite.object_guid,
+                    asset: sprite.asset,
+                    translation: sprite.translation,
+                    scale: sprite.scale,
+                    size: sprite.size,
+                    tint: sprite.tint,
+                    uv_rect: sprite.uv_rect,
+                    layer: sprite.layer,
+                    order: sprite.order,
+                })
+                .collect::<Vec<_>>()
+        } else {
+            self.scene
+                .objects
+                .iter()
+                .filter_map(|object| {
+                    object.sprite.map(|sprite| CanvasSprite {
+                        object_guid: object.object_guid,
+                        asset: sprite.asset,
+                        translation: object.transform.translation,
+                        scale: object.transform.scale,
+                        size: sprite.size,
+                        tint: sprite.tint,
+                        uv_rect: sprite.uv_rect,
+                        layer: sprite.layer,
+                        order: sprite.order,
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+        objects.sort_by_key(|sprite| (sprite.layer, sprite.order, sprite.object_guid));
         let pixels_per_unit = 24.0;
-        for object in &objects {
-            let Some(sprite) = object.sprite else {
-                continue;
-            };
+        for sprite in &objects {
             let center = rect.center()
                 + Vec2::new(
-                    object.transform.translation[0] * pixels_per_unit,
-                    object.transform.translation[1] * pixels_per_unit,
+                    sprite.translation[0] * pixels_per_unit,
+                    sprite.translation[1] * pixels_per_unit,
                 );
             let extent = Vec2::new(
-                (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
-                (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
+                (sprite.size[0] * sprite.scale[0]).abs() * pixels_per_unit,
+                (sprite.size[1] * sprite.scale[1]).abs() * pixels_per_unit,
             )
             .max(Vec2::splat(2.0));
             let object_rect = Rect::from_center_size(center, extent);
-            if self.selected == Some(object.object_guid) {
+            if self.selected == Some(sprite.object_guid) {
                 painter.rect_filled(object_rect.expand(4.0), 0.0, Color32::YELLOW);
             }
             if let Some(texture) = sprite.asset.and_then(|asset| self.textures.get(&asset)) {
@@ -1283,7 +1420,11 @@ impl EditorApp {
         painter.text(
             rect.left_top() + Vec2::new(12.0, 12.0),
             egui::Align2::LEFT_TOP,
-            "2D Scene Preview",
+            if self.runtime.is_some() {
+                format!("Play in Editor  •  tick {}", self.preview_tick)
+            } else {
+                "2D Scene Preview".into()
+            },
             egui::FontId::proportional(16.0),
             Color32::LIGHT_GRAY,
         );
@@ -1293,23 +1434,20 @@ impl EditorApp {
                 self.selected = objects
                     .iter()
                     .rev()
-                    .find(|object| {
-                        let Some(sprite) = object.sprite else {
-                            return false;
-                        };
+                    .find(|sprite| {
                         let center = rect.center()
                             + Vec2::new(
-                                object.transform.translation[0] * pixels_per_unit,
-                                object.transform.translation[1] * pixels_per_unit,
+                                sprite.translation[0] * pixels_per_unit,
+                                sprite.translation[1] * pixels_per_unit,
                             );
                         let extent = Vec2::new(
-                            (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
-                            (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
+                            (sprite.size[0] * sprite.scale[0]).abs() * pixels_per_unit,
+                            (sprite.size[1] * sprite.scale[1]).abs() * pixels_per_unit,
                         )
                         .max(Vec2::splat(2.0));
                         Rect::from_center_size(center, extent).contains(pointer)
                     })
-                    .map(|object| object.object_guid);
+                    .map(|sprite| sprite.object_guid);
             }
         }
     }
@@ -1440,26 +1578,32 @@ fn tint_color(tint: [f32; 4]) -> Color32 {
 impl eframe::App for EditorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.refresh_assets(ui.ctx());
+        self.advance_runtime(ui.ctx());
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.tilemap_mode, false, "Scene");
-                ui.selectable_value(&mut self.tilemap_mode, true, "Tilemap");
+                let can_edit_scene = self.runtime.is_none();
+                ui.add_enabled_ui(can_edit_scene, |ui| {
+                    ui.selectable_value(&mut self.tilemap_mode, false, "Scene");
+                    ui.selectable_value(&mut self.tilemap_mode, true, "Tilemap");
+                });
                 ui.separator();
                 if !self.tilemap_mode {
                     let scene_paths = project_scene_paths(self.project.root());
                     let mut selected_scene = self.scene_path.clone();
-                    egui::ComboBox::from_id_salt("scene_selector")
-                        .selected_text(&selected_scene)
-                        .show_ui(ui, |ui| {
-                            for path in &scene_paths {
-                                ui.selectable_value(&mut selected_scene, path.clone(), path);
-                            }
-                        });
-                    if selected_scene != self.scene_path {
+                    ui.add_enabled_ui(can_edit_scene, |ui| {
+                        egui::ComboBox::from_id_salt("scene_selector")
+                            .selected_text(&selected_scene)
+                            .show_ui(ui, |ui| {
+                                for path in &scene_paths {
+                                    ui.selectable_value(&mut selected_scene, path.clone(), path);
+                                }
+                            });
+                        if ui.button("New scene").clicked() {
+                            self.create_scene();
+                        }
+                    });
+                    if can_edit_scene && selected_scene != self.scene_path {
                         self.open_scene(selected_scene);
-                    }
-                    if ui.button("New scene").clicked() {
-                        self.create_scene();
                     }
                 }
                 if self.tilemap_mode {
@@ -1467,21 +1611,61 @@ impl eframe::App for EditorApp {
                         self.create_tilemap();
                     }
                     if ui
-                        .add_enabled(self.tilemap.is_some(), egui::Button::new("Save tilemap"))
+                        .add_enabled(
+                            can_edit_scene && self.tilemap.is_some(),
+                            egui::Button::new("Save tilemap"),
+                        )
                         .clicked()
                     {
                         self.save_tilemap();
                     }
                 } else {
-                    if ui.button("Add sprite").clicked() {
+                    if ui
+                        .add_enabled(can_edit_scene, egui::Button::new("Add sprite"))
+                        .clicked()
+                    {
                         self.add_sprite();
                     }
-                    if ui.button("Delete").clicked() {
+                    if ui
+                        .add_enabled(can_edit_scene, egui::Button::new("Delete"))
+                        .clicked()
+                    {
                         self.delete_selected();
                     }
                 }
                 ui.separator();
-                let can_undo = if self.tilemap_mode {
+                if !self.tilemap_mode {
+                    if self.runtime.is_none() {
+                        if ui.button("Play").clicked() {
+                            self.start_runtime();
+                        }
+                    } else {
+                        if ui
+                            .button(if self.runtime.as_ref().is_some_and(GameRuntime::is_paused) {
+                                "Resume"
+                            } else {
+                                "Pause"
+                            })
+                            .clicked()
+                        {
+                            self.toggle_runtime_pause();
+                        }
+                        if ui
+                            .add_enabled(
+                                self.runtime.as_ref().is_some_and(GameRuntime::is_paused),
+                                egui::Button::new("Step"),
+                            )
+                            .clicked()
+                        {
+                            self.step_runtime();
+                        }
+                        if ui.button("Stop").clicked() {
+                            self.stop_runtime();
+                        }
+                    }
+                    ui.separator();
+                }
+                let can_undo = self.runtime.is_none() && if self.tilemap_mode {
                     self.tilemap
                         .as_ref()
                         .is_some_and(|tilemap| tilemap.history.undo_depth() > 0)
@@ -1503,7 +1687,7 @@ impl eframe::App for EditorApp {
                         }
                     }
                 }
-                let can_redo = if self.tilemap_mode {
+                let can_redo = self.runtime.is_none() && if self.tilemap_mode {
                     self.tilemap
                         .as_ref()
                         .is_some_and(|tilemap| tilemap.history.redo_depth() > 0)
@@ -1548,14 +1732,45 @@ impl eframe::App for EditorApp {
         egui::Panel::right("inspector")
             .default_size(320.0)
             .show(ui, |ui| {
-                if self.tilemap_mode {
+                if self.runtime.is_some() {
+                    ui.heading("Runtime Preview");
+                    ui.label("Selection remains available while playing. Stop to edit authored properties.");
+                    self.show_hierarchy(ui);
+                } else if self.tilemap_mode {
                     self.show_tilemap_inspector(ui);
                 } else {
                     self.show_inspector(ui);
                 }
             });
+        egui::Panel::bottom("script_console")
+            .default_size(130.0)
+            .resizable(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("Script Console");
+                    if ui.button("Clear").clicked() {
+                        self.script_diagnostics.clear();
+                    }
+                    ui.label(format!("{} diagnostic(s)", self.script_diagnostics.len()));
+                });
+                egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+                    if self.script_diagnostics.is_empty() {
+                        ui.weak("Play the scene to inspect Luau runtime diagnostics.");
+                    } else {
+                        for diagnostic in self.script_diagnostics.iter().rev() {
+                            ui.label(format!(
+                                "{}  •  {}  •  tick {}  •  {}",
+                                diagnostic.source_path,
+                                diagnostic.object_guid,
+                                diagnostic.tick,
+                                diagnostic.message
+                            ));
+                        }
+                    }
+                });
+            });
         egui::CentralPanel::default().show(ui, |ui| {
-            if self.tilemap_mode {
+            if self.tilemap_mode && self.runtime.is_none() {
                 self.show_tilemap_canvas(ui);
             } else {
                 self.show_canvas(ui);
