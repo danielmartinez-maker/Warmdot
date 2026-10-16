@@ -1422,8 +1422,8 @@ mod tests {
 
     #[test]
     fn scene_transition_restores_project_tilemap_only_for_default_scene() {
-        let project_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../action_arena/project.forgeproj");
+        let project_file =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../action_arena/project.forgeproj");
         let project = Project::open(project_file).expect("Action Arena project opens");
         let project_root = project.root().to_path_buf();
         let default_scene_guid = project.document().default_scene_guid;
@@ -1435,12 +1435,9 @@ mod tests {
         append_tilemap_to_scene(&mut default_scene, &tilemap, &assets)
             .expect("project tilemap is appended to the default scene");
         let default_ui = load_scene_ui(&default_scene, &assets).expect("default UI loads");
-        let mut runtime = GameRuntime::from_scene_with_assets(
-            &default_scene,
-            RuntimeConfig::default(),
-            &assets,
-        )
-        .expect("default scene runtime loads");
+        let mut runtime =
+            GameRuntime::from_scene_with_assets(&default_scene, RuntimeConfig::default(), &assets)
+                .expect("default scene runtime loads");
         let default_sprite_count = runtime.world_mut().extract_sprites().len();
 
         let catalog = SceneCatalog::open(&project_root).expect("scene catalog opens");
@@ -1453,12 +1450,9 @@ mod tests {
             })
             .expect("Menu scene is indexed");
         let menu_scene = catalog.load_scene(menu_guid).expect("Menu scene loads");
-        let mut menu_runtime = GameRuntime::from_scene_with_assets(
-            &menu_scene,
-            RuntimeConfig::default(),
-            &assets,
-        )
-        .expect("Menu runtime loads");
+        let mut menu_runtime =
+            GameRuntime::from_scene_with_assets(&menu_scene, RuntimeConfig::default(), &assets)
+                .expect("Menu runtime loads");
         let menu_sprite_count = menu_runtime.world_mut().extract_sprites().len();
 
         let mut current_scene = default_scene;
