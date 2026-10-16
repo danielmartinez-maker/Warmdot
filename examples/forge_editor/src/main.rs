@@ -520,10 +520,7 @@ impl EditorApp {
             .show(ui, |ui| {
                 for object in &self.scene.objects {
                     if ui
-                        .selectable_label(
-                            self.selected == Some(object.object_guid),
-                            &object.name,
-                        )
+                        .selectable_label(self.selected == Some(object.object_guid), &object.name)
                         .clicked()
                     {
                         self.selected = Some(object.object_guid);
@@ -547,18 +544,20 @@ impl EditorApp {
                 if assets.is_empty() {
                     ui.weak("Add resources under Assets to browse them here.");
                 }
-                egui::ScrollArea::vertical().max_height(280.0).show(ui, |ui| {
-                    for (guid, path, kind) in &assets {
-                        if ui
-                            .selectable_label(self.selected_asset == Some(*guid), path)
-                            .clicked()
-                        {
-                            self.selected_asset = Some(*guid);
-                            self.selected = None;
+                egui::ScrollArea::vertical()
+                    .max_height(280.0)
+                    .show(ui, |ui| {
+                        for (guid, path, kind) in &assets {
+                            if ui
+                                .selectable_label(self.selected_asset == Some(*guid), path)
+                                .clicked()
+                            {
+                                self.selected_asset = Some(*guid);
+                                self.selected = None;
+                            }
+                            ui.small(format!("{kind:?} • {guid}"));
                         }
-                        ui.small(format!("{kind:?} • {guid}"));
-                    }
-                });
+                    });
             });
         }
     }
@@ -575,7 +574,10 @@ impl EditorApp {
                 .map(|record| (record.relative_path.clone(), record.kind))
         });
         let Some((path, kind)) = asset_info else {
-            ui.colored_label(Color32::RED, "This asset is missing from the project catalog.");
+            ui.colored_label(
+                Color32::RED,
+                "This asset is missing from the project catalog.",
+            );
             ui.label(format!("GUID: {guid}"));
             return;
         };
