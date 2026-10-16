@@ -27,6 +27,7 @@ struct EditorTileMap {
     selected_tile: u32,
     paint_solid: bool,
     erase_mode: bool,
+    fill_mode: bool,
     metadata_dirty: bool,
     resource_unsaved: bool,
     pending_stroke: BTreeMap<TileCoord, Option<TileCell>>,
@@ -240,6 +241,7 @@ impl EditorApp {
             selected_tile: 0,
             paint_solid: false,
             erase_mode: false,
+            fill_mode: false,
             metadata_dirty: true,
             resource_unsaved: true,
             pending_stroke: BTreeMap::new(),
@@ -1223,7 +1225,12 @@ impl EditorApp {
         }
         ui.checkbox(&mut tilemap.paint_solid, "Paint cells as solid");
         ui.checkbox(&mut tilemap.erase_mode, "Erase with left drag");
-        ui.label("Left drag paints. Right drag erases.");
+        ui.checkbox(&mut tilemap.fill_mode, "Fill connected region on click");
+        if tilemap.fill_mode {
+            ui.label("Fill replaces the connected occupied region, up to 65,536 cells.");
+        } else {
+            ui.label("Left drag paints. Right drag erases.");
+        }
         ui.separator();
         ui.label(format!("{} occupied cells", tilemap.map.tile_count()));
         ui.label(format!(
@@ -1395,7 +1402,7 @@ impl EditorApp {
                     ui.input(|input| input.pointer.button_down(egui::PointerButton::Primary));
                 let secondary_down =
                     ui.input(|input| input.pointer.button_down(egui::PointerButton::Secondary));
-                if primary_down {
+                if primary_down && !tilemap.fill_mode {
                     let cell = if tilemap.erase_mode {
                         None
                     } else {
@@ -1419,18 +1426,46 @@ impl EditorApp {
                     x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
                     y: ((pointer.y - rect.center().y) / cell_pixels.y).floor() as i32,
                 };
-                let cell = if tilemap.erase_mode {
-                    None
+                if tilemap.fill_mode {
+                    let replacement = if tilemap.erase_mode {
+                        None
+                    } else {
+                        Some(TileCell {
+                            tile_index: tilemap.selected_tile,
+                            flip_x: false,
+                            flip_y: false,
+                            rotation_quarters: 0,
+                            solid: tilemap.paint_solid,
+                        })
+                    };
+                    if tilemap.map.get(coordinate).is_none() {
+                        self.status = "Connected fill must start on an occupied cell.".into();
+                    } else {
+                        match connected_tile_fill(&tilemap.map, coordinate, replacement) {
+                            Ok(cells) => {
+                                tilemap.history.execute_stroke(&mut tilemap.map, cells);
+                            }
+                            Err(limit) => {
+                                self.status = format!(
+                                    "Connected fill exceeds the {limit}-cell limit; no cells changed."
+                                );
+                            }
+                        }
+                    }
                 } else {
-                    Some(TileCell {
-                        tile_index: tilemap.selected_tile,
-                        flip_x: false,
-                        flip_y: false,
-                        rotation_quarters: 0,
-                        solid: tilemap.paint_solid,
-                    })
-                };
-                tilemap.pending_stroke.insert(coordinate, cell);
+                    let cell = if tilemap.erase_mode {
+                        None
+                    } else {
+                        Some(TileCell {
+                            tile_index: tilemap.selected_tile,
+                            flip_x: false,
+                            flip_y: false,
+                            rotation_quarters: 0,
+                            solid: tilemap.paint_solid,
+                        })
+                    };
+                    tilemap.pending_stroke.insert(coordinate, cell);
+                }
             }
             finish_stroke = true;
         }
@@ -1647,6 +1682,55 @@ fn collect_scene_paths(project_root: &Path, directory: &Path, paths: &mut Vec<St
     }
 }
 
+const MAX_CONNECTED_TILE_FILL_CELLS: usize = 65_536;
+
+fn connected_tile_fill(
+    map: &ChunkedTileMap,
+    seed: TileCoord,
+    replacement: Option<TileCell>,
+) -> Result<Vec<(TileCoord, Option<TileCell>)>, usize> {
+    let Some(target) = map.get(seed) else {
+        return Ok(Vec::new());
+    };
+    let mut pending = vec![seed];
+    let mut visited = BTreeSet::new();
+    let mut changes = Vec::new();
+    while let Some(coordinate) = pending.pop() {
+        if !visited.insert(coordinate) {
+            continue;
+        }
+        let Some(current) = map.get(coordinate) else {
+            continue;
+        };
+        if current.tile_index != target.tile_index || current.solid != target.solid {
+            continue;
+        }
+        changes.push((coordinate, replacement));
+        if changes.len() > MAX_CONNECTED_TILE_FILL_CELLS {
+            return Err(MAX_CONNECTED_TILE_FILL_CELLS);
+        }
+        pending.extend([
+            TileCoord {
+                x: coordinate.x.saturating_sub(1),
+                y: coordinate.y,
+            },
+            TileCoord {
+                x: coordinate.x.saturating_add(1),
+                y: coordinate.y,
+            },
+            TileCoord {
+                x: coordinate.x,
+                y: coordinate.y.saturating_sub(1),
+            },
+            TileCoord {
+                x: coordinate.x,
+                y: coordinate.y.saturating_add(1),
+            },
+        ]);
+    }
+    Ok(changes)
+}
+
 fn tilemap_resource_path(project_root: &Path) -> Result<PathBuf, String> {
     let project_root = project_root
         .canonicalize()
@@ -1700,6 +1784,7 @@ fn load_saved_tilemap(project_root: &Path) -> Result<Option<EditorTileMap>, Stri
         selected_tile: 0,
         paint_solid: false,
         erase_mode: false,
+        fill_mode: false,
         metadata_dirty: false,
         resource_unsaved: false,
         pending_stroke: BTreeMap::new(),
@@ -1958,3 +2043,47 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{connected_tile_fill, ChunkedTileMap, TileCell, TileCoord, TileMapHistory};
+
+    #[test]
+    fn connected_tile_fill_respects_solid_boundaries_and_is_undoable() {
+        let mut map = ChunkedTileMap::new();
+        let seed = TileCell {
+            tile_index: 2,
+            flip_x: false,
+            flip_y: false,
+            rotation_quarters: 0,
+            solid: false,
+        };
+        for x in [-1, 0, 1] {
+            let _ = map.set_tile(TileCoord { x, y: 0 }, Some(seed));
+        }
+        let _ = map.set_tile(
+            TileCoord { x: 2, y: 0 },
+            Some(TileCell {
+                solid: true,
+                ..seed
+            }),
+        );
+        let _ = map.set_tile(TileCoord { x: 10, y: 10 }, Some(seed));
+        let replacement = TileCell {
+            tile_index: 7,
+            solid: true,
+            ..seed
+        };
+        let changes = connected_tile_fill(&map, TileCoord { x: 0, y: 0 }, Some(replacement))
+            .expect("bounded connected region");
+
+        assert_eq!(changes.len(), 3);
+        let mut history = TileMapHistory::new(8);
+        assert!(history.execute_stroke(&mut map, changes));
+        assert_eq!(map.get(TileCoord { x: -1, y: 0 }), Some(replacement));
+        assert_eq!(map.get(TileCoord { x: 2, y: 0 }), Some(TileCell { solid: true, ..seed }));
+        assert!(history.undo(&mut map));
+        assert_eq!(map.get(TileCoord { x: 0, y: 0 }), Some(seed));
+    }
+}
+
