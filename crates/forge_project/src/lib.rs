@@ -436,9 +436,7 @@ impl SceneCatalog {
                 .to_string_lossy()
                 .replace('\\', "/");
             let source = String::from_utf8(bytes).map_err(|error| {
-                ProjectError::Invalid(format!(
-                    "scene file {relative_path} is not UTF-8: {error}"
-                ))
+                ProjectError::Invalid(format!("scene file {relative_path} is not UTF-8: {error}"))
             })?;
             let scene = SceneDocument::from_json(&source).map_err(|diagnostics| {
                 ProjectError::Invalid(format!(

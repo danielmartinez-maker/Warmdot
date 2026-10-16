@@ -297,12 +297,7 @@ impl AssetCatalog {
 
         let mut discovered = BTreeMap::<String, (AssetKind, u64, u64)>::new();
         if assets_root.is_dir() {
-            scan_directory(
-                &project_root,
-                &assets_root,
-                &assets_root,
-                &mut discovered,
-            )?;
+            scan_directory(&project_root, &assets_root, &assets_root, &mut discovered)?;
         }
 
         let mut problems = BTreeSet::new();

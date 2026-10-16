@@ -19,8 +19,8 @@ use forge_scene::{
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
 };
 use forge_tilemap::{TileCell, TileMapDocument};
-use serde::Serialize;
 use forge_ui::{UiButtonEvent, UiDrawCommand, UiInputResult, UiKey, UiRuntime};
+use serde::Serialize;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -811,7 +811,6 @@ fn refresh_project_assets(
     Ok(())
 }
 
-
 #[derive(Debug, Serialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "snake_case")]
 enum ValidationSeverity {
@@ -892,7 +891,6 @@ fn validate_project(path: &Path) -> ValidationReport {
     let mut scenes = BTreeMap::new();
     let default_scene = project.default_scene().clone();
     scenes.insert(default_scene.resource_guid, default_scene);
-    report.scene_count = 1;
     match SceneCatalog::open(&root) {
         Ok(catalog) => {
             let scene_guids = catalog.scene_guids().collect::<Vec<_>>();
@@ -933,10 +931,12 @@ fn validate_project(path: &Path) -> ValidationReport {
                 AssetKind::Png => assets.load_png(record.guid).map(|_| ()),
                 AssetKind::SpriteSheet => assets.load_sprite_sheet(record.guid).map(|_| ()),
                 AssetKind::AnimationClip => assets.load_animation_clip(record.guid).map(|_| ()),
-                AssetKind::Script => assets.load_script(record.guid).and_then(|script| {
+                AssetKind::Script => assets.load_script(record.guid).map(|script| {
                     forge_scripting::validate_source(&script.source)
-                        .map_err(forge_assets::AssetError::Invalid)
-                }),
+                        .map_err(|error| error)
+                }).and_then(|result| result.map_err(|message| {
+                    forge_assets::AssetError::Invalid(message)
+                })),
                 AssetKind::Prefab => assets.load_prefab(record.guid).map(|_| ()),
                 AssetKind::Audio => assets.load_audio(record.guid).map(|_| ()),
                 AssetKind::Ui => assets.load_ui_source(record.guid).and_then(|source| {
@@ -1008,25 +1008,13 @@ fn validate_scene_asset_references(
         }
     }
     if let Some(guid) = scene.ui_document {
-        require_asset_kind(
-            assets,
-            guid,
-            AssetKind::Ui,
-            &path,
-            diagnostics,
-        );
+        require_asset_kind(assets, guid, AssetKind::Ui, &path, diagnostics);
     }
     for object in &scene.objects {
         let object_path = format!("{path}#{}", object.object_guid);
         if let Some(sprite) = object.sprite {
             if let Some(guid) = sprite.asset {
-                require_asset_kind(
-                    assets,
-                    guid,
-                    AssetKind::Png,
-                    &object_path,
-                    diagnostics,
-                );
+                require_asset_kind(assets, guid, AssetKind::Png, &object_path, diagnostics);
             }
             if let Some(guid) = sprite.animation_clip {
                 require_asset_kind(
@@ -1152,9 +1140,14 @@ fn finish_validation_report(mut report: ValidationReport) -> ValidationReport {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.first().is_some_and(|argument| argument == "--validate") {
+    if args
+        .first()
+        .is_some_and(|argument| argument == "--validate")
+    {
         if args.len() != 2 {
-            return Err("usage: forge-player --validate <project directory or .forgeproj path>".into());
+            return Err(
+                "usage: forge-player --validate <project directory or .forgeproj path>".into(),
+            );
         }
         let report = validate_project(Path::new(&args[1]));
         let valid = report.valid;
