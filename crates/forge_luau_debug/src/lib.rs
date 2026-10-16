@@ -90,9 +90,8 @@ mod raw_ffi_boundary {
         let result = unsafe {
             lua.exec_raw::<i32>(function.clone(), |state| {
                 let top = unsafe { ffi::lua_gettop(state) };
-                let placed = unsafe {
-                    ffi::lua_breakpoint(state, -1, line, if enabled { 1 } else { 0 })
-                };
+                let placed =
+                    unsafe { ffi::lua_breakpoint(state, -1, line, if enabled { 1 } else { 0 }) };
                 unsafe {
                     ffi::lua_settop(state, top - 1);
                     ffi::lua_pushinteger(state, i64::from(placed));
@@ -178,10 +177,7 @@ mod raw_ffi_boundary {
         debug: *mut ffi::lua_Debug,
     ) {
         let _ = catch_unwind(AssertUnwindSafe(|| {
-            if state.is_null()
-                || debug.is_null()
-                || unsafe { ffi::lua_atbreakpoint(state) } == 0
-            {
+            if state.is_null() || debug.is_null() || unsafe { ffi::lua_atbreakpoint(state) } == 0 {
                 return;
             }
             let context = ACTIVE_CONTEXTS.with(|contexts| {
@@ -231,7 +227,6 @@ mod raw_ffi_boundary {
         let bytes = unsafe { slice::from_raw_parts(message.cast::<u8>(), length) };
         String::from_utf8_lossy(bytes).into_owned()
     }
-
 }
 
 pub use raw_ffi_boundary::{
