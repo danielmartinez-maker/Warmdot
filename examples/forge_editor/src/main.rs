@@ -10,11 +10,11 @@ use std::{
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use forge_assets::{AssetCatalog, AssetChange, AssetChangeKind, AssetKind};
 use forge_audio::{AudioBus, AudioEngine};
-use forge_core::{ActionId, Guid};
+use forge_core::{ActionId, DiagnosticBuffer, DiagnosticLevel, DiagnosticRecord, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::{Project, SceneCatalog};
 use forge_runtime::{
-    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand, ScriptDiagnostic,
+    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand,
 };
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
@@ -137,7 +137,7 @@ struct EditorApp {
     preview_tick: u64,
     preview_actions: [f32; 2],
     breakpoint_line: u32,
-    script_diagnostics: Vec<ScriptDiagnostic>,
+    logs: DiagnosticBuffer,
     profile_samples: VecDeque<PreviewProfileSample>,
     hidden_layers: BTreeSet<i32>,
     canvas_offset: Vec2,
@@ -153,16 +153,32 @@ impl EditorApp {
         let scene = project.default_scene().clone();
         let scene_path = project.document().default_scene.clone();
         let selected = scene.objects.first().map(|object| object.object_guid);
+        let mut logs = DiagnosticBuffer::default();
         let (catalog, mut status) = match AssetCatalog::open(project.root()) {
             Ok(catalog) => (Some(catalog), String::new()),
-            Err(error) => (None, format!("Asset catalog unavailable: {error}")),
+            Err(error) => {
+                let message = format!("Asset catalog unavailable: {error}");
+                logs.push(DiagnosticRecord::new(
+                    DiagnosticLevel::Error,
+                    "editor.asset_catalog_open_failed",
+                    &message,
+                ));
+                (None, message)
+            }
         };
         let (tilemap, tilemap_error) = match load_saved_tilemap(project.root()) {
             Ok(tilemap) => (tilemap, None),
             Err(error) => (None, Some(error)),
         };
-        if status.is_empty() {
-            status = tilemap_error.unwrap_or_default();
+        if let Some(error) = tilemap_error {
+            logs.push(DiagnosticRecord::new(
+                DiagnosticLevel::Error,
+                "editor.tilemap_load_failed",
+                error.clone(),
+            ));
+            if status.is_empty() {
+                status = error;
+            }
         }
         Self {
             project,
@@ -188,7 +204,7 @@ impl EditorApp {
             preview_tick: 0,
             preview_actions: [0.0, 0.0],
             breakpoint_line: 1,
-            script_diagnostics: Vec::new(),
+            logs,
             profile_samples: VecDeque::with_capacity(180),
             hidden_layers: BTreeSet::new(),
             canvas_offset: Vec2::ZERO,
@@ -197,6 +213,16 @@ impl EditorApp {
             gizmo_mode: TransformGizmoMode::Move,
             snap_to_grid: false,
         }
+    }
+
+    fn log_event(&mut self, level: DiagnosticLevel, event: &str, message: impl AsRef<str>) {
+        self.logs
+            .push(DiagnosticRecord::new(level, event, message.as_ref()));
+    }
+
+    fn set_error_status(&mut self, event: &str, message: String) {
+        self.log_event(DiagnosticLevel::Error, event, &message);
+        self.status = message;
     }
 
     fn add_sprite(&mut self) {
@@ -335,7 +361,7 @@ impl EditorApp {
         };
         let relative_path = format!("Assets/Prefabs/{}.forgeprefab.json", prefab.resource_guid);
         if let Err(error) = self.project.save_prefab(&relative_path, &prefab) {
-            self.status = format!("Prefab save failed: {error}");
+            self.set_error_status("editor.prefab_save_failed", format!("Prefab save failed: {error}"));
             return;
         }
         let refresh = self
@@ -344,7 +370,7 @@ impl EditorApp {
             .expect("catalog was checked above")
             .refresh();
         if let Err(error) = refresh {
-            self.status = format!("Prefab was saved but the asset catalog refresh failed: {error}");
+            self.set_error_status("editor.prefab_catalog_refresh_failed", format!("Prefab was saved but the asset catalog refresh failed: {error}"));
             return;
         }
         let prefab_guid = self.catalog.as_ref().and_then(|catalog| {
@@ -375,7 +401,7 @@ impl EditorApp {
             }) {
             Ok(prefab) => prefab,
             Err(error) => {
-                self.status = format!("Prefab instance failed: {error}");
+                self.set_error_status("editor.prefab_instance_failed", format!("Prefab instance failed: {error}"));
                 return;
             }
         };
@@ -407,7 +433,7 @@ impl EditorApp {
             }
             Err(error) => {
                 self.scene.dependencies = previous_dependencies;
-                self.status = format!("Prefab instance failed: {error}");
+                self.set_error_status("editor.prefab_instance_failed", format!("Prefab instance failed: {error}"));
             }
         }
     }
@@ -438,7 +464,7 @@ impl EditorApp {
             }) {
             Ok(prefab) => prefab,
             Err(error) => {
-                self.status = format!("Prefab refresh failed: {error}");
+                self.set_error_status("editor.prefab_refresh_failed", format!("Prefab refresh failed: {error}"));
                 return;
             }
         };
@@ -455,7 +481,7 @@ impl EditorApp {
             Ok(()) => {
                 self.status = "Prefab instance refreshed; overridden properties were kept.".into()
             }
-            Err(error) => self.status = format!("Prefab refresh failed: {error}"),
+            Err(error) => self.set_error_status("editor.prefab_refresh_failed", format!("Prefab refresh failed: {error}")),
         }
     }
 
@@ -535,7 +561,7 @@ impl EditorApp {
             }
         };
         if let Err(error) = fs::write(path, source) {
-            self.status = format!("Tilemap save failed: {error}");
+            self.set_error_status("editor.tilemap_save_failed", format!("Tilemap save failed: {error}"));
             return;
         }
         let tilemap = self.tilemap.as_mut().expect("tilemap was checked above");
@@ -563,13 +589,13 @@ impl EditorApp {
             None
         };
         if let Err(error) = validate_scene_dependencies(&self.scene, catalog) {
-            self.status = format!("Play failed: {error}");
+            self.set_error_status("editor.preview_start_failed", format!("Play failed: {error}"));
             return;
         }
         let preview_ui = match load_preview_ui(&self.scene, catalog) {
             Ok(ui) => ui,
             Err(error) => {
-                self.status = format!("Play failed: game UI could not load: {error}");
+                self.set_error_status("editor.preview_ui_load_failed", format!("Play failed: game UI could not load: {error}"));
                 return;
             }
         };
@@ -581,11 +607,15 @@ impl EditorApp {
                 self.preview_last_frame = Some(Instant::now());
                 self.preview_tick = 0;
                 self.preview_actions = [0.0, 0.0];
-                self.script_diagnostics.clear();
                 self.profile_samples.clear();
                 self.status = audio_warning.map_or_else(
                     || "Scene is running in the editor.".into(),
                     |warning| format!("Scene is running in the editor without audio: {warning}"),
+                );
+                self.log_event(
+                    DiagnosticLevel::Info,
+                    "editor.preview_started",
+                    self.status.clone(),
                 );
             }
             Err(error) => self.status = format!("Play failed: {error}"),
@@ -691,6 +721,11 @@ impl EditorApp {
         self.preview_last_frame = None;
         self.preview_tick = 0;
         self.preview_actions = [0.0, 0.0];
+        self.log_event(
+            DiagnosticLevel::Info,
+            "editor.preview_stopped",
+            "Runtime stopped; authored scene is unchanged.",
+        );
         self.status = "Runtime stopped; authored scene is unchanged.".into();
     }
 
@@ -700,10 +735,16 @@ impl EditorApp {
             .as_mut()
             .map(GameRuntime::take_script_diagnostics)
             .unwrap_or_default();
-        self.script_diagnostics.extend(new_diagnostics);
-        if self.script_diagnostics.len() > 256 {
-            let excess = self.script_diagnostics.len() - 256;
-            self.script_diagnostics.drain(..excess);
+        for diagnostic in new_diagnostics {
+            let record = DiagnosticRecord::new(
+                DiagnosticLevel::Error,
+                "script.runtime_diagnostic",
+                diagnostic.message,
+            )
+            .with_field("source_path", diagnostic.source_path)
+            .with_field("object_guid", diagnostic.object_guid.to_string())
+            .with_field("tick", diagnostic.tick.to_string());
+            self.logs.push(record);
         }
     }
 
@@ -822,7 +863,7 @@ impl EditorApp {
         let scene_catalog = match SceneCatalog::open(self.project.root()) {
             Ok(catalog) => catalog,
             Err(error) => {
-                self.status = format!("Scene transition failed: {error}");
+                self.set_error_status("editor.scene_transition_failed", format!("Scene transition failed: {error}"));
                 return;
             }
         };
@@ -923,7 +964,7 @@ impl EditorApp {
         let changes = match catalog.refresh() {
             Ok(changes) => changes,
             Err(error) => {
-                self.status = format!("Asset scan failed: {error}");
+                self.set_error_status("editor.asset_scan_failed", format!("Asset scan failed: {error}"));
                 return;
             }
         };
@@ -984,7 +1025,7 @@ impl EditorApp {
             self.texture_sizes.insert(guid, size);
         }
         if let Some(error) = errors.into_iter().next() {
-            self.status = format!("Texture load failed: {error}");
+            self.set_error_status("editor.texture_load_failed", format!("Texture load failed: {error}"));
         }
     }
 
@@ -1904,7 +1945,7 @@ impl EditorApp {
                     Some(Ok(())) => self.status = "Live script properties updated.".into(),
                     Some(Err(error)) => {
                         let _ = self.history.undo(&mut self.scene);
-                        self.status = format!("Live property update rejected: {error}");
+                        self.set_error_status("editor.live_property_update_rejected", format!("Live property update rejected: {error}"));
                     }
                     None => self.status = "Runtime stopped before the property update.".into(),
                 }
@@ -2804,7 +2845,7 @@ impl EditorApp {
             }
         }
         if let Some(error) = ui_error {
-            self.status = format!("Game UI preview failed: {error}");
+            self.set_error_status("editor.game_ui_preview_failed", format!("Game UI preview failed: {error}"));
         }
 
         if response.clicked() && !ui_input_consumed {
@@ -3767,31 +3808,53 @@ impl eframe::App for EditorApp {
                     self.show_inspector(ui);
                 }
             });
-        egui::Panel::bottom("script_console")
-            .default_size(130.0)
+        egui::Panel::bottom("runtime_console")
+            .default_size(150.0)
             .resizable(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading("Runtime Console");
+                    ui.heading("Runtime / Editor Log");
                     if ui.button("Clear").clicked() {
-                        self.script_diagnostics.clear();
+                        self.logs.clear();
                     }
-                    ui.label(format!("{} diagnostic(s)", self.script_diagnostics.len()));
+                    ui.label(format!(
+                        "{} record(s) • {} dropped",
+                        self.logs.len(),
+                        self.logs.dropped_records()
+                    ));
                 });
                 egui::ScrollArea::vertical()
-                    .max_height(100.0)
+                    .max_height(115.0)
                     .show(ui, |ui| {
-                        if self.script_diagnostics.is_empty() {
-                            ui.weak("Play the scene to inspect Luau runtime diagnostics.");
+                        if self.logs.is_empty() {
+                            ui.weak("Runtime and editor events appear here as structured records.");
                         } else {
-                            for diagnostic in self.script_diagnostics.iter().rev() {
-                                ui.label(format!(
-                                    "{}  •  {}  •  tick {}  •  {}",
-                                    diagnostic.source_path,
-                                    diagnostic.object_guid,
-                                    diagnostic.tick,
-                                    diagnostic.message
-                                ));
+                            for record in self.logs.records().iter().rev() {
+                                let color = match record.level {
+                                    DiagnosticLevel::Error => Color32::LIGHT_RED,
+                                    DiagnosticLevel::Warning => Color32::YELLOW,
+                                    DiagnosticLevel::Info => Color32::LIGHT_BLUE,
+                                    DiagnosticLevel::Debug | DiagnosticLevel::Trace => Color32::GRAY,
+                                };
+                                ui.colored_label(
+                                    color,
+                                    format!(
+                                        "{}  {}  {}: {}",
+                                        record.timestamp_unix_ms,
+                                        format!("{:?}", record.level).to_lowercase(),
+                                        record.event,
+                                        record.message
+                                    ),
+                                );
+                                if !record.fields.is_empty() {
+                                    let fields = record
+                                        .fields
+                                        .iter()
+                                        .map(|(name, value)| format!("{name}={value}"))
+                                        .collect::<Vec<_>>()
+                                        .join("  •  ");
+                                    ui.small(fields);
+                                }
                             }
                         }
                     });

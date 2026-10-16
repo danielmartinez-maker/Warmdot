@@ -10,7 +10,7 @@ use std::{
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_audio::{AudioBus, AudioEngine};
-use forge_core::{ActionId, Guid};
+use forge_core::{ActionId, DiagnosticLevel, DiagnosticRecord, Guid};
 use forge_input::InputMap;
 use forge_project::{PROJECT_FILE_NAME, Project, SceneCatalog};
 use forge_renderer::{GpuRenderer, RenderOutcome, SpriteInstance, TexturedSprite};
@@ -30,6 +30,19 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
+
+fn emit_log(record: DiagnosticRecord) {
+    match serde_json::to_string(&record) {
+        Ok(line) => eprintln!("{line}"),
+        Err(_) => eprintln!(
+            "{{\"schema_version\":1,\"level\":\"error\",\"event\":\"runtime.log_serialization_failed\",\"message\":\"could not serialize diagnostic record\"}}"
+        ),
+    }
+}
+
+fn emit_message(level: DiagnosticLevel, event: &str, message: impl AsRef<str>) {
+    emit_log(DiagnosticRecord::new(level, event, message));
+}
 
 const PLAYER_MOVE_X: ActionId = ActionId(1);
 const PLAYER_MOVE_Y: ActionId = ActionId(2);
@@ -134,7 +147,7 @@ impl ApplicationHandler for PlayerApp {
         match GpuRenderer::new(event_loop.owned_display_handle(), window.clone()) {
             Ok(mut renderer) => {
                 if let Err(error) = load_project_textures(&self.assets, &mut renderer) {
-                    eprintln!("could not load project textures: {error}");
+                    emit_message(DiagnosticLevel::Error, "player.texture_load_failed", error.to_string());
                     event_loop.exit();
                     return;
                 }
@@ -142,7 +155,7 @@ impl ApplicationHandler for PlayerApp {
                 self.state = Some(RunState { window, renderer });
             }
             Err(error) => {
-                eprintln!("renderer initialization failed: {error}");
+                emit_message(DiagnosticLevel::Error, "player.renderer_init_failed", error.to_string());
                 event_loop.exit();
             }
         }
@@ -177,7 +190,7 @@ impl ApplicationHandler for PlayerApp {
                     .route_pointer_move(self.cursor_position, size.width, size.height)
                 {
                     Ok(result) => submit_ui_event(&mut self.runtime, result),
-                    Err(error) => eprintln!("game UI pointer move failed: {error}"),
+                    Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_pointer_move_failed", error.to_string()),
                 }
                 state.window.request_redraw();
             }
@@ -200,7 +213,7 @@ impl ApplicationHandler for PlayerApp {
                 };
                 match result {
                     Ok(result) => submit_ui_event(&mut self.runtime, result),
-                    Err(error) => eprintln!("game UI pointer input failed: {error}"),
+                    Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_pointer_input_failed", error.to_string()),
                 }
                 state.window.request_redraw();
             }
@@ -221,7 +234,7 @@ impl ApplicationHandler for PlayerApp {
                     let size = state.window.inner_size();
                     match self.ui.route_key(key, size.width, size.height) {
                         Ok(result) => submit_ui_event(&mut self.runtime, result),
-                        Err(error) => eprintln!("game UI keyboard input failed: {error}"),
+                        Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_keyboard_input_failed", error.to_string()),
                     }
                     state.window.request_redraw();
                 }
@@ -235,7 +248,7 @@ impl ApplicationHandler for PlayerApp {
                         &mut self.scene,
                         &mut self.ui,
                     ) {
-                        eprintln!("project asset refresh failed: {error}");
+                        emit_message(DiagnosticLevel::Error, "player.asset_refresh_failed", error.to_string());
                         event_loop.exit();
                         return;
                     }
@@ -267,24 +280,22 @@ impl ApplicationHandler for PlayerApp {
                     scene_requests,
                 );
                 for diagnostic in self.runtime.take_script_diagnostics() {
-                    eprintln!(
-                        "{}",
-                        serde_json::json!({
-                            "level": "error",
-                            "event": "script.runtime_diagnostic",
-                            "source_path": diagnostic.source_path,
-                            "object_guid": diagnostic.object_guid.to_string(),
-                            "tick": diagnostic.tick,
-                            "message": diagnostic.message,
-                        })
-                    );
+                    let record = DiagnosticRecord::new(
+                        DiagnosticLevel::Error,
+                        "script.runtime_diagnostic",
+                        diagnostic.message,
+                    )
+                    .with_field("source_path", diagnostic.source_path)
+                    .with_field("object_guid", diagnostic.object_guid.to_string())
+                    .with_field("tick", diagnostic.tick.to_string());
+                    emit_log(record);
                 }
                 let window_size = state.window.inner_size();
                 let ui_sprites = match self.ui.draw_commands(window_size.width, window_size.height)
                 {
                     Ok(commands) => ui_commands_to_sprites(commands),
                     Err(error) => {
-                        eprintln!("game UI draw extraction failed: {error}");
+                        emit_message(DiagnosticLevel::Error, "player.ui_draw_extraction_failed", error.to_string());
                         Vec::new()
                     }
                 };
@@ -297,7 +308,7 @@ impl ApplicationHandler for PlayerApp {
                         state.window.request_redraw();
                     }
                     Err(error) => {
-                        eprintln!("project rendering failed: {error}");
+                        emit_message(DiagnosticLevel::Error, "player.render_failed", error.to_string());
                         event_loop.exit();
                     }
                 }
@@ -308,6 +319,13 @@ impl ApplicationHandler for PlayerApp {
                     eprintln!(
                         "{}",
                         serde_json::json!({
+                            "schema_version": 1,
+                            "timestamp_unix_ms": DiagnosticRecord::new(
+                                DiagnosticLevel::Info,
+                                "runtime.profile",
+                                "runtime performance sample",
+                            )
+                            .timestamp_unix_ms,
                             "level": "info",
                             "event": "runtime.profile",
                             "frame_interval_ms": {
@@ -360,7 +378,7 @@ fn process_audio_commands(
             }
         };
         if let Err(error) = result {
-            eprintln!("audio command failed: {error}");
+            emit_message(DiagnosticLevel::Error, "player.audio_command_failed", error.to_string());
         }
     }
 }
@@ -380,7 +398,7 @@ fn process_scene_transition_requests(
     if scene_catalog.is_none() {
         let catalog = SceneCatalog::open(project_root).map_err(|error| error.to_string());
         if let Err(error) = &catalog {
-            eprintln!("scene catalog is unavailable: {error}");
+            emit_message(DiagnosticLevel::Error, "player.scene_catalog_unavailable", error.to_string());
         }
         *scene_catalog = Some(catalog);
     }
@@ -391,31 +409,31 @@ fn process_scene_transition_requests(
         let scene = match catalog.load_scene(scene_guid) {
             Ok(scene) => scene,
             Err(error) => {
-                eprintln!("scene transition to {scene_guid} was rejected: {error}");
+                emit_message(DiagnosticLevel::Error, "player.scene_transition_rejected", format!("{scene_guid}: {error}"));
                 continue;
             }
         };
         if let Err(error) = validate_scene_dependencies(&scene, assets) {
-            eprintln!("scene transition to {scene_guid} was rejected: {error}");
+            emit_message(DiagnosticLevel::Error, "player.scene_transition_rejected", format!("{scene_guid}: {error}"));
             continue;
         }
         let replacement_ui = match load_scene_ui(&scene, assets) {
             Ok(ui) => ui,
             Err(error) => {
-                eprintln!("scene transition to {scene_guid} has invalid UI: {error}");
+                emit_message(DiagnosticLevel::Error, "player.scene_transition_invalid_ui", format!("{scene_guid}: {error}"));
                 continue;
             }
         };
         match GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets) {
             Ok(replacement) => {
-                eprintln!("entered scene {} ({scene_guid})", scene.name);
+                emit_message(DiagnosticLevel::Info, "player.scene_entered", format!("{} ({scene_guid})", scene.name));
                 *runtime = replacement;
                 *current_scene = scene;
                 *ui = replacement_ui;
                 return;
             }
             Err(error) => {
-                eprintln!("scene transition to {scene_guid} could not prepare: {error}");
+                emit_message(DiagnosticLevel::Error, "player.scene_transition_failed", format!("{scene_guid}: {error}"));
             }
         }
     }
@@ -497,7 +515,7 @@ fn ui_commands_to_sprites(commands: Vec<UiDrawCommand>) -> Vec<TexturedSprite> {
 fn submit_ui_event(runtime: &mut GameRuntime, result: UiInputResult) {
     if let Some(UiButtonEvent { source_id, name }) = result.event {
         if !runtime.emit_ui_event(name.clone(), source_id) {
-            eprintln!("game UI event {name:?} was rejected by the script event queue");
+            emit_message(DiagnosticLevel::Warning, "player.ui_event_rejected", format!("event {name:?} was rejected by the script event queue"));
         }
     }
 }
@@ -866,7 +884,7 @@ fn refresh_project_assets(
                 {
                     match load_scene_ui(scene, assets) {
                         Ok(replacement) => *ui = replacement,
-                        Err(error) => eprintln!("game UI reload was rejected: {error}"),
+                        Err(error) => emit_message(DiagnosticLevel::Error, "player.ui_reload_rejected", error.to_string()),
                     }
                 } else if assets
                     .get(change.guid)
@@ -1285,7 +1303,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let audio = match AudioEngine::new() {
         Ok(audio) => Some(audio),
         Err(error) => {
-            eprintln!("audio is unavailable; continuing without game audio: {error}");
+            emit_message(DiagnosticLevel::Warning, "player.audio_unavailable", format!("continuing without game audio: {error}"));
             None
         }
     };
