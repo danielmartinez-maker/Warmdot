@@ -309,13 +309,8 @@ impl ScriptInstance {
     }
 
     fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<bool, LuaError> {
-        let applied = luau_debug::set_breakpoint(
-            &self._lua,
-            &self.source_function,
-            line,
-            enabled,
-        )?
-        .is_some();
+        let applied =
+            luau_debug::set_breakpoint(&self._lua, &self.source_function, line, enabled)?.is_some();
         if enabled && applied {
             self.breakpoint_lines.insert(line);
         } else if !enabled {
