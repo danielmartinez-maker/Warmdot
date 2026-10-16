@@ -683,7 +683,7 @@ mod schema_fixture_tests {
         )
         .expect("write scene fixture");
 
-        let project = Project::open(&root).expect("open schema fixture");
+        let mut project = Project::open(&root).expect("open schema fixture");
         let manifest_fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../tests/fixtures/schema-v1/project.forgeproj"
         ))
