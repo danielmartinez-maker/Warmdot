@@ -15,10 +15,12 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The headless action-arena sample runs a dynamic player against a fixed floor.
 - The native wgpu renderer draws ordered, tinted sprite instances in one instanced batch and can extract draw data from the runtime world.
 - The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
+- The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
+- The animation player advances clip frames using simulation delta and handles looping and completion without per-frame allocation.
 
 ## Not implemented yet
 
-This branch is the runtime kernel, not the complete P0 engine. The renderer currently handles solid tinted quads; PNG texture import, sprite sheets, animation, Luau scripts, the editor and undo/redo workflow, tilemap painting, audio, retained game UI, standalone export, and the colony simulation remain ahead. The stress benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+This branch is the runtime kernel, not the complete P0 engine. The renderer currently handles solid tinted quads; its texture sampling path is still outstanding. The editor and undo/redo workflow, tilemap painting, Luau scripts, audio, retained game UI, standalone export, and the colony simulation remain ahead. The stress benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
@@ -29,10 +31,12 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer curr
 - `crates/forge_physics`: Rapier-backed rigid bodies, collision events, and raycasts
 - `crates/forge_runtime`: headless simulation host and ordered systems
 - `crates/forge_renderer`: native wgpu surface, camera projection, sprite batching, and runtime-world extraction
+- `crates/forge_assets`: safe project asset catalog, PNG decode, sprite-sheet/clip validation, and animation playback
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
 - `docs/architecture/renderer-and-benchmark.md`: renderer scope and benchmark measurement contract
+- `docs/architecture/assets-and-animation.md`: asset scan, stable identity, and animation data contract
 
 ## Build
 
