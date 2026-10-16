@@ -16,7 +16,8 @@ use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform, CURRENT_SCENE_SCHEMA,
-    SceneDocument, SceneObject, ScriptPropertyValue,
+    PrefabDocument, PrefabInstance, SceneDocument, SceneObject, ScriptPropertyValue,
+    CURRENT_PREFAB_SCHEMA,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
 
@@ -874,7 +875,10 @@ impl EditorApp {
                 files.len(),
                 files
                     .iter()
-                    .filter_map(|file| file.path().map(Path::to_path_buf))
+                    .filter_map(|file| {
+                        let path = file.path();
+                        (!path.as_os_str().is_empty()).then(|| path.to_path_buf())
+                    })
                     .collect::<Vec<_>>(),
             )
         });
