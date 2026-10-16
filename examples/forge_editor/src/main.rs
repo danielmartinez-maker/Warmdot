@@ -1215,6 +1215,60 @@ impl EditorApp {
     }
 }
 
+fn project_scene_paths(project_root: &Path) -> Vec<String> {
+    let Ok(project_root) = project_root.canonicalize() else {
+        return Vec::new();
+    };
+    let scenes_root = project_root.join("Scenes");
+    let Ok(metadata) = fs::symlink_metadata(&scenes_root) else {
+        return Vec::new();
+    };
+    if metadata.file_type().is_symlink() {
+        return Vec::new();
+    }
+    let Ok(scenes_root) = scenes_root.canonicalize() else {
+        return Vec::new();
+    };
+    if !scenes_root.starts_with(&project_root) {
+        return Vec::new();
+    }
+    let mut paths = Vec::new();
+    collect_scene_paths(&project_root, &scenes_root, &mut paths);
+    paths.sort();
+    paths
+}
+
+fn collect_scene_paths(project_root: &Path, directory: &Path, paths: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    let mut entries = entries.flatten().collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            collect_scene_paths(project_root, &path, paths);
+        } else if file_type.is_file()
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("forgescene"))
+        {
+            if let Ok(relative) = path.strip_prefix(project_root) {
+                if let Some(relative) = relative.to_str() {
+                    paths.push(relative.replace('\\', "/"));
+                }
+            }
+        }
+    }
+}
+
 fn tilemap_resource_path(project_root: &Path) -> Result<PathBuf, String> {
     let project_root = project_root
         .canonicalize()
@@ -1291,6 +1345,23 @@ impl eframe::App for EditorApp {
                 ui.selectable_value(&mut self.tilemap_mode, false, "Scene");
                 ui.selectable_value(&mut self.tilemap_mode, true, "Tilemap");
                 ui.separator();
+                if !self.tilemap_mode {
+                    let scene_paths = project_scene_paths(self.project.root());
+                    let mut selected_scene = self.scene_path.clone();
+                    egui::ComboBox::from_id_salt("scene_selector")
+                        .selected_text(&selected_scene)
+                        .show_ui(ui, |ui| {
+                            for path in &scene_paths {
+                                ui.selectable_value(&mut selected_scene, path.clone(), path);
+                            }
+                        });
+                    if selected_scene != self.scene_path {
+                        self.open_scene(selected_scene);
+                    }
+                    if ui.button("New scene").clicked() {
+                        self.create_scene();
+                    }
+                }
                 if self.tilemap_mode {
                     if ui.button("New tilemap").clicked() {
                         self.create_tilemap();
