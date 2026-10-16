@@ -666,7 +666,6 @@ impl GameRuntime {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -674,7 +673,7 @@ mod tests {
     use forge_core::Guid;
     use forge_scene::{
         AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
-        AuthoredTransform, SceneObject, CURRENT_SCENE_SCHEMA,
+        AuthoredTransform, CURRENT_SCENE_SCHEMA, SceneObject,
     };
 
     use super::*;
@@ -775,14 +774,11 @@ mod tests {
             "overlapping sensor colliders should report a contact"
         );
         assert!(
-            runtime
-                .take_audio_commands()
-                .iter()
-                .any(|command| matches!(
-                    command,
-                    ScriptAudioCommand::PlayEffect { asset_guid, bus }
-                        if *asset_guid == sound_guid && bus == "sfx"
-                )),
+            runtime.take_audio_commands().iter().any(|command| matches!(
+                command,
+                ScriptAudioCommand::PlayEffect { asset_guid, bus }
+                    if *asset_guid == sound_guid && bus == "sfx"
+            )),
             "the contact event should reach Luau with its sender and other-object GUIDs"
         );
     }
