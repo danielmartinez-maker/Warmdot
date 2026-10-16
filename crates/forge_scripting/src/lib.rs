@@ -306,8 +306,40 @@ impl ScriptHost {
             definition.source = asset.source.clone();
             let context = Rc::new(RefCell::new(None));
             match ScriptInstance::compile(definition.clone(), context) {
-                Ok(instance) => {
-                    self.instances.insert(object_guid, instance);
+                Ok(mut instance) => {
+                    let migration = self.instances.get(&object_guid).map(|previous| {
+                        migrate_compatible_state(
+                            &previous.state,
+                            &instance.state,
+                            &instance._lua,
+                        )
+                        .map(|warnings| (previous.start_pending, warnings))
+                    });
+                    match migration {
+                        Some(Ok((start_pending, warnings))) => {
+                            instance.start_pending = start_pending;
+                            self.instances.insert(object_guid, instance);
+                            for warning in warnings {
+                                self.record_diagnostic(
+                                    object_guid,
+                                    asset.guid,
+                                    asset.relative_path.clone(),
+                                    0,
+                                    warning,
+                                );
+                            }
+                        }
+                        Some(Err(error)) => self.record_diagnostic(
+                            object_guid,
+                            asset.guid,
+                            asset.relative_path.clone(),
+                            0,
+                            format!("script state migration failed; the last-good script remains active: {error}"),
+                        ),
+                        None => {
+                            self.instances.insert(object_guid, instance);
+                        }
+                    }
                 }
                 Err(error) => self.record_diagnostic(
                     object_guid,
@@ -418,6 +450,50 @@ fn disable_with_diagnostic(
         tick,
         message,
     });
+}
+
+fn migrate_compatible_state(
+    previous: &Table,
+    replacement: &Table,
+    replacement_lua: &Lua,
+) -> Result<Vec<String>, LuaError> {
+    let mut diagnostics = Vec::new();
+    for pair in previous.clone().pairs::<LuaValue, LuaValue>() {
+        let (key, previous_value) = pair?;
+        let LuaValue::String(key) = key else {
+            continue;
+        };
+        let name = key.to_string_lossy();
+        let replacement_value: LuaValue = replacement.get(name.as_str())?;
+        let migrated_value = match (&previous_value, &replacement_value) {
+            (LuaValue::Boolean(value), LuaValue::Boolean(_)) => {
+                Some(LuaValue::Boolean(*value))
+            }
+            (LuaValue::Integer(value), LuaValue::Integer(_)) => Some(LuaValue::Integer(*value)),
+            (LuaValue::Number(value), LuaValue::Number(_)) => Some(LuaValue::Number(*value)),
+            (LuaValue::String(value), LuaValue::String(_)) => Some(LuaValue::String(
+                replacement_lua.create_string(value.to_string_lossy())?,
+            )),
+            (previous, _) if is_compatible_state_scalar(previous) => {
+                diagnostics.push(format!(
+                    "script state field {name:?} was reset because the replacement declares a different type or no compatible default"
+                ));
+                None
+            }
+            _ => None,
+        };
+        if let Some(value) = migrated_value {
+            replacement.set(name.as_str(), value)?;
+        }
+    }
+    Ok(diagnostics)
+}
+
+fn is_compatible_state_scalar(value: &LuaValue) -> bool {
+    matches!(
+        value,
+        LuaValue::Boolean(_) | LuaValue::Integer(_) | LuaValue::Number(_) | LuaValue::String(_)
+    )
 }
 
 fn install_forge_api(lua: &Lua, context: SharedContext) -> Result<(), LuaError> {
