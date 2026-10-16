@@ -51,7 +51,7 @@ In the **Luau Script** section, click **Add property**. Leave its name as `prope
 
 ## 4. Run it in the editor
 
-Click **Save scene**, then **Play**. Click the center viewport so it has keyboard focus. Use **W/A/S/D** to move the blue sprite; diagonal movement is normalized so it is not faster. Click **Stop** to return to editing.
+Click **Save scene**, then **Play**. Click **Move** in the top toolbar once to clear any Inspector text-field focus, then click the center viewport. Use **W/A/S/D** to move the blue sprite; diagonal movement is normalized so it is not faster. Click **Stop** to return to editing.
 
 Script or asset errors appear in the bottom **Script Console**. Fix the Luau file and save it; the editor preview applies a compatible source change while running and keeps the last working script if a replacement fails.
 
