@@ -202,7 +202,20 @@ impl EditorApp {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let available_animations = self
+            .catalog
+            .as_ref()
+            .map(|catalog| {
+                catalog
+                    .entries()
+                    .filter(|record| record.kind == AssetKind::AnimationClip)
+                    .map(|record| (record.guid, record.relative_path.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let mut changed = false;
+        let mut selected_texture_changed = false;
+        let mut selected_animation_changed = false;
         ui.small(guid.to_string());
         changed |= ui.text_edit_singleline(&mut replacement.name).changed();
 
@@ -266,18 +279,44 @@ impl EditorApp {
                                 .map(|(_, path)| path.clone())
                         })
                         .unwrap_or_else(|| "None".into());
-                    changed |= egui::ComboBox::from_id_salt("sprite_texture")
+                    let response = egui::ComboBox::from_id_salt("sprite_texture")
                         .selected_text(selected_name)
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut sprite.asset, None, "None");
                             for (asset, path) in &available_images {
                                 ui.selectable_value(&mut sprite.asset, Some(*asset), path);
                             }
-                        })
-                        .response
-                        .changed();
+                        });
+                    selected_texture_changed |= response.response.changed();
+                    changed |= response.response.changed();
                 });
-                ui.small("Place PNG images in the project Assets folder.");
+                ui.horizontal(|ui| {
+                    ui.label("Animation");
+                    let selected_name = sprite
+                        .animation_clip
+                        .and_then(|clip| {
+                            available_animations
+                                .iter()
+                                .find(|(guid, _)| *guid == clip)
+                                .map(|(_, path)| path.clone())
+                        })
+                        .unwrap_or_else(|| "None".into());
+                    let response = egui::ComboBox::from_id_salt("sprite_animation")
+                        .selected_text(selected_name)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut sprite.animation_clip, None, "None");
+                            for (clip, path) in &available_animations {
+                                ui.selectable_value(
+                                    &mut sprite.animation_clip,
+                                    Some(*clip),
+                                    path,
+                                );
+                            }
+                        });
+                    selected_animation_changed |= response.response.changed();
+                    changed |= response.response.changed();
+                });
+                ui.small("Place PNG images and animation metadata in the project Assets folder.");
                 ui.horizontal(|ui| {
                     ui.label("Tint");
                     for channel in &mut sprite.tint {
@@ -531,10 +570,40 @@ impl EditorApp {
             }
         });
 
+        if selected_texture_changed {
+            if let Some(sprite) = replacement.sprite.as_mut() {
+                sprite.animation_clip = None;
+            }
+        }
+        if selected_animation_changed {
+            if let Some(clip_guid) = replacement.sprite.and_then(|sprite| sprite.animation_clip) {
+                if let Some((texture_guid, uv_rect)) = self.catalog.as_ref().and_then(|catalog| {
+                    let clip = catalog.load_animation_clip(clip_guid).ok()?;
+                    let sheet = catalog.load_sprite_sheet(clip.sprite_sheet).ok()?;
+                    let texture = catalog.load_png(sheet.texture).ok()?;
+                    let frame = clip.frames.first()?;
+                    let uv_rect = sheet
+                        .uv_rect_for_frame(
+                            &frame.sprite_frame,
+                            texture.width,
+                            texture.height,
+                        )
+                        .ok()?;
+                    Some((texture.guid, uv_rect))
+                }) {
+                    if let Some(sprite) = replacement.sprite.as_mut() {
+                        sprite.asset = Some(texture_guid);
+                        sprite.uv_rect = uv_rect;
+                    }
+                }
+            }
+        }
         if changed {
-            if let Some(asset) = replacement.sprite.and_then(|sprite| sprite.asset) {
-                if !self.scene.dependencies.contains(&asset) {
-                    self.scene.dependencies.push(asset);
+            if let Some(sprite) = replacement.sprite {
+                for dependency in [sprite.asset, sprite.animation_clip].into_iter().flatten() {
+                    if !self.scene.dependencies.contains(&dependency) {
+                        self.scene.dependencies.push(dependency);
+                    }
                 }
             }
             self.last_asset_scan = None;
