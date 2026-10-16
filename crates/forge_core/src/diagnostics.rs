@@ -38,11 +38,7 @@ pub struct DiagnosticRecord {
 }
 
 impl DiagnosticRecord {
-    pub fn new(
-        level: DiagnosticLevel,
-        event: impl AsRef<str>,
-        message: impl AsRef<str>,
-    ) -> Self {
+    pub fn new(level: DiagnosticLevel, event: impl AsRef<str>, message: impl AsRef<str>) -> Self {
         let timestamp_unix_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
@@ -147,10 +143,10 @@ mod tests {
     fn record_text_and_fields_are_bounded_at_utf8_boundaries() {
         let record = DiagnosticRecord::new(
             DiagnosticLevel::Error,
-            format!("{}🧰", "e".repeat(MAX_EVENT_BYTES)),
-            "é".repeat(MAX_MESSAGE_BYTES),
+            format!("{}界", "e".repeat(MAX_EVENT_BYTES - 1)),
+            "界".repeat(MAX_MESSAGE_BYTES),
         )
-        .with_field("context", "📄".repeat(MAX_FIELD_VALUE_BYTES));
+        .with_field("context", "界".repeat(MAX_FIELD_VALUE_BYTES));
         assert_eq!(record.event.len(), MAX_EVENT_BYTES);
         assert!(record.message.len() <= MAX_MESSAGE_BYTES);
         assert!(record.fields["context"].len() <= MAX_FIELD_VALUE_BYTES);
