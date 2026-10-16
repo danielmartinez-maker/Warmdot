@@ -26,11 +26,36 @@ struct EditorTileMap {
     history: TileMapHistory,
     selected_tile: u32,
     paint_solid: bool,
+    collision_only_mode: bool,
+    collision_brush_solid: bool,
     erase_mode: bool,
     fill_mode: bool,
     metadata_dirty: bool,
     resource_unsaved: bool,
     pending_stroke: BTreeMap<TileCoord, Option<TileCell>>,
+}
+
+impl EditorTileMap {
+    /// Returns None when the brush should leave this coordinate unchanged.
+    fn brush_edit(&self, coordinate: TileCoord) -> Option<Option<TileCell>> {
+        if self.collision_only_mode {
+            return self.map.get(coordinate).map(|mut cell| {
+                cell.solid = self.collision_brush_solid;
+                cell
+            });
+        }
+        if self.erase_mode {
+            Some(None)
+        } else {
+            Some(Some(TileCell {
+                tile_index: self.selected_tile,
+                flip_x: false,
+                flip_y: false,
+                rotation_quarters: 0,
+                solid: self.paint_solid,
+            }))
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -247,6 +272,8 @@ impl EditorApp {
             history,
             selected_tile: 0,
             paint_solid: false,
+            collision_only_mode: false,
+            collision_brush_solid: false,
             erase_mode: false,
             fill_mode: false,
             metadata_dirty: true,
@@ -1330,13 +1357,26 @@ impl EditorApp {
         } else {
             ui.label("No complete tiles fit the PNG tile size.");
         }
-        ui.checkbox(&mut tilemap.paint_solid, "Paint cells as solid");
-        ui.checkbox(&mut tilemap.erase_mode, "Erase with left drag");
-        ui.checkbox(&mut tilemap.fill_mode, "Fill connected region on click");
-        if tilemap.fill_mode {
-            ui.label("Fill replaces the connected occupied region, up to 65,536 cells.");
+        let collision_mode = ui.checkbox(
+            &mut tilemap.collision_only_mode,
+            "Collision-only brush (preserve tile art)",
+        );
+        if collision_mode.changed() && tilemap.collision_only_mode {
+            tilemap.fill_mode = false;
+            tilemap.erase_mode = false;
+        }
+        if tilemap.collision_only_mode {
+            ui.checkbox(&mut tilemap.collision_brush_solid, "Mark brushed cells as solid");
+            ui.label("Left drag changes collision on occupied cells. Right drag erases tiles.");
         } else {
-            ui.label("Left drag paints. Right drag erases.");
+            ui.checkbox(&mut tilemap.paint_solid, "New tiles are solid");
+            ui.checkbox(&mut tilemap.erase_mode, "Erase with left drag");
+            ui.checkbox(&mut tilemap.fill_mode, "Fill connected region on click");
+            if tilemap.fill_mode {
+                ui.label("Fill replaces the connected occupied region, up to 65,536 cells.");
+            } else {
+                ui.label("Left drag paints. Right drag erases.");
+            }
         }
         ui.separator();
         ui.label(format!("{} occupied cells", tilemap.map.tile_count()));
@@ -1509,19 +1549,10 @@ impl EditorApp {
                     ui.input(|input| input.pointer.button_down(egui::PointerButton::Primary));
                 let secondary_down =
                     ui.input(|input| input.pointer.button_down(egui::PointerButton::Secondary));
-                if primary_down && !tilemap.fill_mode {
-                    let cell = if tilemap.erase_mode {
-                        None
-                    } else {
-                        Some(TileCell {
-                            tile_index: tilemap.selected_tile,
-                            flip_x: false,
-                            flip_y: false,
-                            rotation_quarters: 0,
-                            solid: tilemap.paint_solid,
-                        })
-                    };
-                    tilemap.pending_stroke.insert(coordinate, cell);
+                if primary_down && (!tilemap.fill_mode || tilemap.collision_only_mode) {
+                    if let Some(cell) = tilemap.brush_edit(coordinate) {
+                        tilemap.pending_stroke.insert(coordinate, cell);
+                    }
                 } else if secondary_down {
                     tilemap.pending_stroke.insert(coordinate, None);
                 }
@@ -1533,7 +1564,7 @@ impl EditorApp {
                     x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
                     y: ((pointer.y - rect.center().y) / cell_pixels.y).floor() as i32,
                 };
-                if tilemap.fill_mode {
+                if tilemap.fill_mode && !tilemap.collision_only_mode {
                     let replacement = if tilemap.erase_mode {
                         None
                     } else {
@@ -1559,18 +1590,7 @@ impl EditorApp {
                             }
                         }
                     }
-                } else {
-                    let cell = if tilemap.erase_mode {
-                        None
-                    } else {
-                        Some(TileCell {
-                            tile_index: tilemap.selected_tile,
-                            flip_x: false,
-                            flip_y: false,
-                            rotation_quarters: 0,
-                            solid: tilemap.paint_solid,
-                        })
-                    };
+                } else if let Some(cell) = tilemap.brush_edit(coordinate) {
                     tilemap.pending_stroke.insert(coordinate, cell);
                 }
             }
