@@ -4118,4 +4118,35 @@ mod tests {
         assert!(history.undo(&mut map));
         assert_eq!(map.get(TileCoord { x: 0, y: 0 }), Some(seed));
     }
+    #[test]
+    fn editor_preview_includes_project_tilemap_sprites() {
+        let project_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../colony_project/project.forgeproj");
+        let project = super::Project::open(project_path).expect("Colony project opens");
+        let mut app = super::EditorApp::new(project);
+        let authored_sprites = app
+            .scene
+            .objects
+            .iter()
+            .filter(|object| object.sprite.is_some())
+            .count();
+        let tile_count = app
+            .tilemap
+            .as_ref()
+            .expect("Colony project tilemap loads")
+            .map
+            .iter()
+            .count();
+        assert!(tile_count > 0, "Colony project includes map cells");
+
+        app.start_runtime();
+        let preview = app.runtime.as_mut().expect("editor preview starts");
+        let preview_sprites = preview.world_mut().extract_sprites().len();
+        assert_eq!(
+            preview_sprites,
+            authored_sprites + tile_count,
+            "Play in Editor should include the current project tilemap"
+        );
+    }
+
 }
