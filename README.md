@@ -5,8 +5,7 @@ Forge 2D is a 2D-first game engine project for action games, RPGs, and simulatio
 This repository is being implemented from the Forge 2D product proposal. The target is the proposal's P0 alpha: a usable editor, runtime services, two sample games, and reproducible Windows builds. This is work in progress; no performance claims are made until the documented benchmark has been run.
 
 ## Runtime kernel currently on the implementation branch
-
-- Stable authored GUIDs are kept separate from ephemeral runtime entities.
+- Stable authored GUIDs are kept separate from ephemeral runtime entities; world coordinates use +X right and +Y down.
 - Scene JSON is schema-versioned, validated, and compiled into a Forge-owned world API.
 - Project manifests resolve a default scene and reject path traversal or symlink escape.
 - The fixed-step clock caps frame time and simulation catch-up and reports dropped time; the runtime supports play, pause, one-tick stepping, and scene replacement with clock/input/physics reset.
