@@ -14,6 +14,7 @@ members = [
     "crates/forge_editor_core",
     "examples/action_arena",
     "examples/renderer_benchmark",
+    "examples/forge_player",
     "examples/playable_action_arena",
 ]
 

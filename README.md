@@ -40,6 +40,7 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer samp
 - `crates/forge_editor_core`: validated scene edits with bounded undo/redo and dirty-state tracking
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
+- `examples/forge_player`: opens a `.forgeproj`, runs its default scene, uploads project PNGs, and refreshes changed images while the player is open
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
 - `docs/architecture/renderer-and-benchmark.md`: renderer scope and benchmark measurement contract
@@ -57,6 +58,7 @@ Use stable Rust. On Windows, install the Visual C++ Build Tools workload and Win
     cargo fmt --all -- --check
     cargo check --workspace
     cargo run -p action-arena
+    cargo run -p forge-player -- path/to/project.forgeproj
     cargo run --release -p renderer-benchmark -- --sprites 10000 --warmup 120 --samples 600
 
 The Windows GitHub Actions workflow runs formatting and a workspace type-check. It does not run a test suite.
