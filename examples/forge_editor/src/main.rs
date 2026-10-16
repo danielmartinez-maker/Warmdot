@@ -896,6 +896,9 @@ impl EditorApp {
         if let Some(tilemap) = &self.tilemap {
             required.insert(tilemap.document.tileset_guid);
         }
+        if let Some(preview_ui) = self.preview_ui.as_ref() {
+            required.extend(preview_ui.document().dependencies.iter().copied());
+        }
         let mut updates = Vec::new();
         let mut errors = Vec::new();
         if let Some(catalog) = self.catalog.as_ref() {
