@@ -12,7 +12,7 @@ use std::{
 use forge_core::{ActionId, ActionState, Guid};
 use forge_scene::ScriptPropertyValue;
 use forge_world::{RuntimeWorld, Transform2D};
-use mlua::{Function, Lua, LuaError, Table, Value as LuaValue, VmState};
+use mlua::{Error as LuaError, Function, Lua, Table, Value as LuaValue, VmState};
 
 const MAX_SCRIPT_SOURCE_BYTES: usize = 1024 * 1024;
 const MAX_VM_MEMORY_BYTES: usize = 4 * 1024 * 1024;

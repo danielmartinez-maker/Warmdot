@@ -14,8 +14,8 @@ use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
-    AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
-    ScriptPropertyValue, CURRENT_SCENE_SCHEMA, SceneDocument, SceneObject,
+    AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform, CURRENT_SCENE_SCHEMA,
+    SceneDocument, SceneObject, ScriptPropertyValue,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
 
@@ -404,7 +404,6 @@ impl EditorApp {
         let mut changed = false;
         let mut selected_texture_changed = false;
         let mut selected_animation_changed = false;
-        let mut selected_script_changed = false;
         ui.small(guid.to_string());
         changed |= ui.text_edit_singleline(&mut replacement.name).changed();
 
@@ -763,7 +762,6 @@ impl EditorApp {
                         asset: *asset,
                         properties: BTreeMap::new(),
                     });
-                    selected_script_changed = true;
                     changed = true;
                 } else {
                     self.status = "Add a .luau file under Assets before attaching a script.".into();
@@ -784,7 +782,6 @@ impl EditorApp {
                             ui.selectable_value(&mut script.asset, *asset, path);
                         }
                     });
-                selected_script_changed |= response.response.changed();
                 changed |= response.response.changed();
                 if available_scripts.is_empty() {
                     ui.small("Place .luau scripts in the project's Assets folder.");
@@ -801,9 +798,8 @@ impl EditorApp {
                                     changed |= ui.checkbox(value, "").changed();
                                 }
                                 ScriptPropertyValue::Number(value) => {
-                                    changed |= ui
-                                        .add(egui::DragValue::new(value).speed(0.1))
-                                        .changed();
+                                    changed |=
+                                        ui.add(egui::DragValue::new(value).speed(0.1)).changed();
                                 }
                                 ScriptPropertyValue::String(value) => {
                                     changed |= ui.text_edit_singleline(value).changed();
@@ -838,7 +834,6 @@ impl EditorApp {
         }
         if remove_script {
             replacement.script = None;
-            selected_script_changed = true;
             changed = true;
         }
 
