@@ -35,7 +35,7 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. The P0.4 implementation snapshot `99d3bf7f024bb425ee17c48c072f2112fbd92836` passed Windows formatting, workspace type-check, and workspace tests on runs `38917440379` and `38917444348`. The current branch adds read-only project validation and a release export workflow; Windows CI for head `63871f5de8863c8e1882ad96caf3bd5a5294fd22` is pending.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Windows run `38920804391` on parent commit `18da157e53720d0610c765d7f7918bab23294be0` passed formatting, workspace type-check, workspace tests, release player build, Action Arena validation, export, package-content checks, and artifact upload. The `forge2d-action-arena-windows` artifact is available from [run 38920804391](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38920804391). Current head `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` wires standalone player keyboard/mouse actions into the runtime; its Windows run `38922572623` is in progress.
 
 ### Present in the branch
 
@@ -46,13 +46,13 @@ Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1
 - Player play/pause/step APIs, standalone project export and launchers, plus editor runtime preview with GUID-based rendering and selection.
 - Luau VM isolation with source and per-VM memory caps, fixed-tick Forge APIs, bounded typed events, compatible scalar state migration, resumable line breakpoints, error isolation, and last-good hot reload.
 - Kira-backed audio commands, scene-transition requests, a retained game UI runtime, UI rendering/input, and the Action Arena HUD/menu/audio/scene sample. Editor preview handles UI pointer/keyboard input, scripted transitions, and audio playback.
-- A player `--validate` command that checks project scenes/assets without modifying the project or executing Luau top-level code. Its Windows CI result is pending.
-- Playable keyboard/mouse action arena, colony simulation sample, and renderer benchmark. The Windows workflow checks formatting, workspace type-checking, tests, and is being extended to build, validate, export, and upload the Action Arena package.
+- The player `--validate` command checks project scenes/assets without modifying the project or executing Luau top-level code; run `38920804391` passed it on Windows. The same run built and exported the Windows Action Arena package and uploaded the artifact. The player now feeds default WASD/F/right-click actions into the runtime; head `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` is under CI.
+- Playable keyboard/mouse action arena, colony simulation sample, and renderer benchmark. The Windows workflow checks formatting, workspace type-checking, tests, builds the release player, validates the Action Arena project, exports it, checks package contents, and uploads the package. Generic standalone projects receive WASD actions 1/2 and F/right-click action 3.
 
 ### Confirmed gaps or partial coverage
 
 - The editor preview still needs a player-facing desktop session for focus loss, pause/step, live changes, last-good behavior, and breakpoint interaction. The standalone player's HUD, audio, and scene transition also need native desktop interaction acceptance.
-- The profiler/logging overlay, migration fixtures and serialization round-trip coverage, and newcomer tutorial remain open. The new export includes Forge's MIT license, but not a consolidated copy of all third-party license texts.
+- Structured runtime/editor logging and the profiler overlay, migration fixtures and serialization round-trip coverage, and third-party license-text bundling remain open. The offline first-game tutorial is now in `docs/tutorials/first-playable-game.md`. The export includes Forge's MIT license; the runtime-contents document records that third-party license texts are not yet bundled.
 - Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; incremental large-map rendering/collision and navigation are not implemented.
 - The action and colony samples are early gameplay slices, not the complete P0 vertical slices. The renderer benchmark has not been run on a desktop GPU, so no performance results are claimed.
 
@@ -112,12 +112,12 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 ### P0.5 — Runtime diagnostics and dependable shipping
 
 - [ ] Add structured runtime/editor logging, a visible error console, and a profiler overlay for frame percentiles, system/script cost, draw calls, and entity/chunk counts.
-- [ ] Make the Windows player/export path reproducible from clean CI and document its runtime/license contents.
-- [ ] Add import/scene validation commands or editor equivalents with deterministic diagnostic output.
+- [x] Make the Windows player/export path reproducible from clean CI and document its runtime/license contents. Windows run `38920804391` built, validated, exported, checked, and uploaded the Action Arena package; the artifact metadata and third-party-license limitation are documented.
+- [x] Add import/scene validation commands or editor equivalents with deterministic diagnostic output. `forge-player --validate` passed against the sample in run `38920804391`.
 - [ ] Add schema migration fixtures and serialization round trips for projects, scenes, prefabs, scripts, and tilemaps.
-- [ ] Add a newcomer tutorial that builds a small playable game using the editor.
+- [x] Add an offline first-game tutorial in `docs/tutorials/first-playable-game.md`; its project assets and instructions are local and it does not require online services.
 
-**Exit:** Clean Windows CI opens/validates/builds/exports a template project; logs and performance costs are inspectable; the tutorial is completable offline.
+**Exit:** Still open. Clean Windows CI now validates/builds/exports the Action Arena sample, but there is no native desktop open/interaction acceptance yet; runtime/editor logs and performance costs are not inspectable; migration round trips remain unverified. The tutorial is documented, but it still needs a player-facing completion pass.
 
 ### P0.6 — Two real sample vertical slices and release gate
 
@@ -159,7 +159,8 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 
 - 2026-10-16: Completed P0.4 implementation on `99d3bf7f024bb425ee17c48c072f2112fbd92836`: Kira audio, authored scene transitions, retained game UI, Action Arena HUD/menu/audio resources, and editor-preview UI/audio/transition handling. Windows runs `38917440379` and `38917444348` passed format, type-check, and workspace tests. Native desktop interaction acceptance remains open.
 - 2026-10-16: Added `forge-player --validate` with read-only asset-index consistency checking, scene/resource validation, JSON diagnostics, and syntax-only Luau compilation. Updated SceneCatalog to reject malformed scene files instead of silently omitting them. Formatting correction passed on head `e2ae31bf430e7d923c2a1ed1f973ad82caa62736`; type-check and tests were still running when the Windows export workflow was added.
-- 2026-10-16: Added the Windows release build/validation/export/artifact workflow, copied Forge's MIT license into exports, and documented package contents. Current head `63871f5de8863c8e1882ad96caf3bd5a5294fd22` is awaiting GitHub Actions.
+- 2026-10-16: Added the Windows release build/validation/export/artifact workflow, copied Forge's MIT license into exports, and documented package contents. Run `38920804391` on `18da157e53720d0610c765d7f7918bab23294be0` passed all check and package steps; artifact `forge2d-action-arena-windows` uploaded. The first validation attempt exposed Windows CRLF conversion in fingerprinted text assets; `.gitattributes` now pins text to LF and CI passes.
+- 2026-10-16: Wired the standalone project player's WASD/F/right-click input map into the runtime using the existing bounded `InputMap` and fixed action IDs 1/2/3. Added an offline first-game tutorial and corrected the scripting/input docs; commit `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` is under Windows CI run `38922572623`.
 
 ## Execution ledger
 
@@ -170,4 +171,4 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 - 2026-10-16: Completed the P0.1 authoring-model slice on `aa6173577d4116defac860a406ea1e2ab8a04ea4`: bounded drag/drop asset import; parent hierarchy and world transforms; prefab instances with granular sprite property overrides; move/rotate/scale/anchor gizmos with snapping; selectable render layers; and validated history/save handling. Windows run `38873215811` passed formatting, workspace type-check, and workspace tests.
 - 2026-10-16: Added compatible scalar state migration and typed next-tick events to P0.2, then fixed event docs/types and bounded editor preview input while paused with window-focus/text-input gating. Windows formatting, type-check, and workspace tests passed on `d34a4835157ba07beb0f54377b5036e8058a6485` (run `38875425714`). Line breakpoints remain the P0.2 code gap; P0.3 still needs player-facing verification.
 - 2026-10-16: Added resumable Luau line breakpoints, deterministic callback queue suspension, fixed-tick Continue semantics, and editor Set/Remove/Continue controls with accepted-line and hit feedback. Windows formatting, workspace type-check, and workspace tests passed on `faeaa9679bfd2d497f6acddbf943fd37b73cd895` (run `38879901911`). P0.3 still needs a player-facing desktop acceptance session.
-- Next: deliver P0.4 audio, transitions, and retained game UI, then P0.5 diagnostics/shipping/tutorial and P0.6 sample exits before opening P1.
+- Next: finish P0.5 structured logs/profiling and schema migration round trips; continue P0.6 action-arena and colony vertical slices; obtain desktop acceptance before considering P0 complete or opening P1.

@@ -17,15 +17,15 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The renderer benchmark defaults to 10,000 colored sprites, 120 warm-up frames, and 600 CPU frame-time samples; it emits raw samples plus p50/p95/p99 on the selected GPU.
 - The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
 - The animation player advances clip frames using fixed simulation delta and handles looping and completion without per-frame allocation; scene sprites can reference animation-clip assets, which the runtime validates, attaches, and applies as normalized sprite-sheet UV regions.
-- Luau scripts load as scene components with exposed properties, per-component memory limits, fixed-tick input/transform/event APIs, compatible scalar state migration, per-script error isolation, and last-good hot reload in the standalone player and editor preview. Typed scalar events are delivered deterministically on the next fixed tick. The playable action-arena sample uses a Luau controller.
+- Luau scripts load as scene components with exposed properties, per-component memory limits, fixed-tick input/transform/event APIs, compatible scalar state migration, per-script error isolation, and last-good hot reload in the standalone player and editor preview. Typed scalar events are delivered deterministically on the next fixed tick. The standalone player maps WASD to action IDs 1/2 and F/right-click to action 3; the playable action-arena sample uses a Luau controller.
 - Tilemaps use sparse 32x32 chunks with correct negative-coordinate mapping, deterministic serialization, batched paint edits, connected fill capped at 65,536 cells, an undoable collision-only brush, and bounded undo/redo history.
 - Scene authoring commands add, delete, and replace objects through a bounded undo/redo history with a saved-state marker.
 
 ## Remaining P0 work
 
-The branch contains the P0.1 authoring model, P0.2 Luau scripting, P0.3 editor runtime-preview implementation, and P0.4 audio, scene transitions, and retained game UI. Windows formatting, workspace type-check, and tests passed for the P0.4 editor-preview code at commit `99d3bf7f024bb425ee17c48c072f2112fbd92836` (runs `38917440379` and `38917444348`).
+The branch contains the P0.1 authoring model, P0.2 Luau scripting, P0.3 editor runtime-preview implementation, and P0.4 audio, scene transitions, and retained game UI. Windows run `38920804391` passed formatting, workspace type-check, workspace tests, release player build, sample validation, export, package checks, and artifact upload at commit `18da157e53720d0610c765d7f7918bab23294be0`.
 
-P0 remains open. The player-facing editor and standalone-player interaction sessions are still needed for desktop acceptance. P0.5 profiler/logging, consolidated third-party license notices, migration fixtures/round-trip coverage, and a newcomer tutorial remain. The action arena and colony simulation are early gameplay slices and still need the full P0.6 acceptance audit. The renderer benchmark has not been run on a desktop GPU, so there are no measured performance results. The current branch is adding read-only project validation and a clean Windows build/export job; GitHub Actions is still checking that work.
+P0 remains open. The player-facing editor and standalone-player interaction sessions are still needed for desktop acceptance. The player input-map integration is on current head `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` and run `38922572623` is checking it. P0.5 logging/profiling, third-party license-text bundling, and migration fixtures/round-trip coverage remain; the offline first-game tutorial is now documented. The action arena and colony simulation still need the full P0.6 acceptance audit. The renderer benchmark has not been run on a desktop GPU, so no measured performance results are claimed.
 
 ## Workspace
 
@@ -52,6 +52,7 @@ P0 remains open. The player-facing editor and standalone-player interaction sess
 - `docs/architecture/tilemaps-and-edit-history.md`: chunk layout, coordinate mapping, and editor history contract
 - `docs/architecture/runtime-controls.md`: pause, stepping, and scene replacement behavior
 - `docs/architecture/project-export.md`: standalone player and project-folder packaging contract
+- `docs/tutorials/first-playable-game.md`: create and export a script-driven movement game without Rust edits
 - `docs/architecture/input-bindings.md`: key/mouse action mapping and focus-loss semantics
 - `docs/architecture/editor-core.md`: scene command and save-state history behavior
 - `docs/architecture/playable-action-arena.md`: controls and systems used by the windowed sample
