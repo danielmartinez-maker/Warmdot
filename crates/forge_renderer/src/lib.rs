@@ -74,7 +74,7 @@ impl Default for Camera {
             position: [0.0, 0.0],
             rotation_radians: 0.0,
             zoom: [1.0, 1.0],
-            pixels_per_world_unit: 1.0,
+            pixels_per_world_unit: 32.0,
         }
     }
 }
