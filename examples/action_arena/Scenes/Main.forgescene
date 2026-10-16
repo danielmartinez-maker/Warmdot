@@ -35,11 +35,13 @@
         "lock_rotation": true
       },
       "collider": {
-        "shape": "box",
-        "half_extents": [
-          0.35,
-          0.45
-        ],
+        "shape": {
+          "shape": "box",
+          "half_extents": [
+            0.35,
+            0.45
+          ]
+        },
         "offset": [
           0,
           0
@@ -78,11 +80,13 @@
         "kind": "fixed"
       },
       "collider": {
-        "shape": "box",
-        "half_extents": [
-          8,
-          0.5
-        ],
+        "shape": {
+          "shape": "box",
+          "half_extents": [
+            8,
+            0.5
+          ]
+        },
         "density": 1,
         "friction": 0.8
       }
