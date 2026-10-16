@@ -465,6 +465,7 @@ impl GameRuntime {
                 continue;
             }
 
+            self.queue_collision_script_events(pending.next_tick.saturating_sub(1));
             self.simulation_time = self.simulation_time.saturating_add(self.clock.step());
             let input_events = self.input.drain_through(self.simulation_time);
             let context = FixedUpdateContext {
@@ -515,12 +516,49 @@ impl GameRuntime {
         );
     }
 
+    fn queue_collision_script_events(&mut self, tick: u64) {
+        'contacts: for event in &self.pending_physics_events {
+            let event_name = if event.started {
+                "physics.collision.started"
+            } else {
+                "physics.collision.ended"
+            };
+            for (sender_guid, other_guid) in [
+                (event.object_a, event.object_b),
+                (event.object_b, event.object_a),
+            ] {
+                if !self.script_host.queue_external_event(
+                    event_name,
+                    ScriptEventValue::String(other_guid.to_string()),
+                    sender_guid,
+                    tick,
+                ) {
+                    break 'contacts;
+                }
+            }
+        }
+    }
+
     fn finish_script_tick(&mut self, pending: &mut PendingRuntimeFrame) {
         let systems_started = Instant::now();
         self.advance_sprite_animations(self.clock.step());
         self.pending_physics_events = self
             .physics
             .step(&mut self.world, self.clock.step().as_secs_f32());
+        for event in &mut self.pending_physics_events {
+            if event.object_b < event.object_a {
+                std::mem::swap(&mut event.object_a, &mut event.object_b);
+            }
+        }
+        self.pending_physics_events.sort_by_key(|event| {
+            (
+                event.object_a,
+                event.object_b,
+                event.started,
+                event.sensor,
+                event.removed,
+            )
+        });
         pending
             .physics_events
             .extend(self.pending_physics_events.iter().copied());

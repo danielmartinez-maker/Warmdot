@@ -1195,6 +1195,14 @@ fn install_forge_api(
 }
 
 fn install_object_api(lua: &Lua, state: &Table, context: SharedContext) -> Result<(), LuaError> {
+    let guid_context = context.clone();
+    state.set(
+        "get_guid",
+        lua.create_function(move |_, _self: Table| {
+            Ok(active_context(&guid_context)?.object_guid.to_string())
+        })?,
+    )?;
+
     let getter_context = context.clone();
     state.set(
         "get",

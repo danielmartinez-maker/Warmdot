@@ -20,6 +20,7 @@ declare namespace Forge
 end
 
 export type ForgeObject = {
+    get_guid: (self: ForgeObject) -> string,
     get: (self: ForgeObject, name: string) -> (boolean | number | string)?,
     set: (self: ForgeObject, name: string, value: boolean | number | string) -> (),
     get_position: (self: ForgeObject) -> (number, number),
