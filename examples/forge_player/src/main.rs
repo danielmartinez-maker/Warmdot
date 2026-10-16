@@ -104,9 +104,11 @@ impl ApplicationHandler for PlayerApp {
             WindowEvent::Resized(size) => state.renderer.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 if refresh_assets {
-                    if let Err(error) =
-                        refresh_project_assets(&mut self.assets, &mut state.renderer, &mut self.runtime)
-                    {
+                    if let Err(error) = refresh_project_assets(
+                        &mut self.assets,
+                        &mut state.renderer,
+                        &mut self.runtime,
+                    ) {
                         eprintln!("project asset refresh failed: {error}");
                         event_loop.exit();
                         return;

@@ -618,6 +618,56 @@ mod tests {
     }
 
     #[test]
+    fn hot_reload_keeps_last_good_code_when_the_replacement_is_invalid() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        let asset_guid = Guid::new();
+        let entity = world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let mut host = ScriptHost::new();
+        host.attach(
+            ScriptDefinition {
+                object_guid,
+                asset_guid,
+                source_path: "Assets/Move.luau".into(),
+                source: "return { on_fixed_update = function(self, dt) self:translate(dt, 0) end }".into(),
+                properties: BTreeMap::new(),
+            },
+            &mut world,
+        )
+        .expect("attach original script");
+
+        host.reload_asset(&LoadedScriptAsset {
+            guid: asset_guid,
+            relative_path: "Assets/Move.luau".into(),
+            source: "return { on_fixed_update = function(self, dt) self:translate(dt * 2, 0) end }".into(),
+        });
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(50), 1);
+        let first_position = world
+            .transform(entity)
+            .expect("object transform")
+            .translation[0];
+        assert!((first_position - 0.1).abs() < 0.0001);
+
+        host.reload_asset(&LoadedScriptAsset {
+            guid: asset_guid,
+            relative_path: "Assets/Move.luau".into(),
+            source: "return {".into(),
+        });
+        let diagnostics = host.take_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].message.contains("Luau script failed"));
+
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(50), 2);
+        let second_position = world
+            .transform(entity)
+            .expect("object transform")
+            .translation[0];
+        assert!((second_position - 0.2).abs() < 0.0001);
+    }
+
+    #[test]
     fn input_api_is_tick_scoped_and_uses_numeric_action_ids() {
         let mut world = RuntimeWorld::new();
         let object_guid = Guid::new();
