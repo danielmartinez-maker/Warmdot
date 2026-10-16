@@ -2,7 +2,7 @@ name: Windows workspace check
 
 on:
   push:
-    branches: [main, codex/forge2d-engine]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -20,3 +20,40 @@ jobs:
         run: cargo check --workspace
       - name: Run workspace tests
         run: cargo test --workspace
+
+  package:
+    runs-on: windows-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build release player
+        run: cargo build --release -p forge-player
+      - name: Validate Action Arena project
+        run: cargo run --release -p forge-player -- --validate examples/action_arena/project.forgeproj
+      - name: Export standalone Action Arena package
+        run: cargo run --release -p forge-player -- --export examples/action_arena/project.forgeproj artifacts/action-arena-windows
+      - name: Check exported package contents
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/action-arena-windows/Forge2DPlayer.exe',
+            'artifacts/action-arena-windows/run-game.bat',
+            'artifacts/action-arena-windows/LICENSE',
+            'artifacts/action-arena-windows/Game/project.forgeproj',
+            'artifacts/action-arena-windows/Game/Scenes/Main.forgescene',
+            'artifacts/action-arena-windows/Game/Scenes/Menu.forgescene',
+            'artifacts/action-arena-windows/Game/Assets/MainHUD.forgeui.json',
+            'artifacts/action-arena-windows/Game/.forge/asset-index.json'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing expected export file: $path"
+            }
+          }
+      - name: Upload Windows player package
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge2d-action-arena-windows
+          path: artifacts/action-arena-windows
+          if-no-files-found: error

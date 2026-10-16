@@ -650,6 +650,8 @@ fn export_project(project_path: PathBuf, output_path: PathBuf) -> Result<(), Box
         .into());
     }
 
+    fs::write(output_root.join("LICENSE"), include_str!("../../../LICENSE"))?;
+
     let game_root = output_root.join("Game");
     fs::create_dir_all(&game_root)?;
     copy_regular_file(&manifest_source, &game_root.join(PROJECT_FILE_NAME))?;
