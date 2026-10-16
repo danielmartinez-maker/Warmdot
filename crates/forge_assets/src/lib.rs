@@ -269,7 +269,7 @@ impl AssetCatalog {
         let record = self.record_of_kind(guid, AssetKind::Png)?;
         let path = self.resolve_record_path(record)?;
         let bytes = read_limited(&path, MAX_PNG_SOURCE_BYTES)?;
-        if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
+        if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" || &bytes[12..16] != b"IHDR" {
             return Err(AssetError::Invalid(format!(
                 "{} is not a valid PNG source",
                 record.relative_path
@@ -310,7 +310,7 @@ impl AssetCatalog {
         let bytes = read_limited(&self.resolve_record_path(record)?, MAX_METADATA_BYTES)?;
         let clip: AnimationClipDocument = serde_json::from_slice(&bytes)?;
         let sheet = self.load_sprite_sheet(clip.sprite_sheet)?;
-        clip.validate(&sheet)?;
+        clip.validate(guid, &sheet)?;
         Ok(clip)
     }
 
@@ -461,16 +461,16 @@ pub struct AnimationClipDocument {
 }
 
 impl AnimationClipDocument {
-    pub fn validate(&self, sheet: &SpriteSheetDocument) -> Result<(), AssetError> {
+    pub fn validate(&self, sheet_guid: Guid, sheet: &SpriteSheetDocument) -> Result<(), AssetError> {
         if self.schema_version != CURRENT_ANIMATION_CLIP_SCHEMA {
             return Err(AssetError::Invalid(format!(
                 "animation-clip schema {} is unsupported",
                 self.schema_version
             )));
         }
-        if self.sprite_sheet != sheet.texture && self.sprite_sheet == Guid::new() {
+        if self.sprite_sheet != sheet_guid {
             return Err(AssetError::Invalid(
-                "animation clip references an invalid sprite sheet".into(),
+                "animation clip does not reference the loaded sprite sheet".into(),
             ));
         }
         if self.frames.is_empty() {
