@@ -2059,10 +2059,8 @@ impl EditorApp {
                                 ((pointer - pivot).length() - radius).abs() <= 8.0
                             }
                             TransformGizmoMode::Scale if is_selected => {
-                                let handle =
-                                    object_rect.right_bottom() + Vec2::splat(8.0);
-                                Rect::from_center_size(handle, Vec2::splat(20.0))
-                                    .contains(pointer)
+                                let handle = object_rect.right_bottom() + Vec2::splat(8.0);
+                                Rect::from_center_size(handle, Vec2::splat(20.0)).contains(pointer)
                             }
                             _ => false,
                         };
@@ -2216,6 +2214,7 @@ impl EditorApp {
             {
                 sprite.translation = drag.transform_preview.translation;
                 sprite.scale = drag.transform_preview.scale;
+                sprite.rotation_radians = drag.transform_preview.rotation_radians;
             }
         }
         for sprite in &objects {

@@ -174,7 +174,9 @@ fn relative_transform(
 }
 
 fn valid_anchor(anchor: [f32; 2]) -> bool {
-    anchor.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value))
+    anchor
+        .iter()
+        .all(|value| value.is_finite() && (0.0..=1.0).contains(value))
 }
 
 fn valid_uv_rect([u, v, width, height]: [f32; 4]) -> bool {

@@ -325,7 +325,10 @@ impl SceneDocument {
                     .size
                     .iter()
                     .all(|value| value.is_finite() && *value > 0.0)
-                    || !sprite.anchor.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value))
+                    || !sprite
+                        .anchor
+                        .iter()
+                        .all(|value| value.is_finite() && (0.0..=1.0).contains(value))
                     || !sprite.tint.iter().all(|value| value.is_finite())
                     || !sprite.uv_rect.iter().all(|value| value.is_finite())
                     || sprite.uv_rect[0] < 0.0
