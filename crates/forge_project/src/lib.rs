@@ -422,3 +422,33 @@ fn validate_scene_relative_path(path: &Path) -> Result<(), ProjectError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scene_lookup_resolves_nested_scene_by_stable_guid() {
+        let root = std::env::temp_dir().join(format!(
+            "forge-project-scene-lookup-{}",
+            Guid::new()
+        ));
+        let project = Project::create(&root, "Scene lookup").expect("create project");
+        let scene_guid = Guid::new();
+        let scene = SceneDocument {
+            schema_version: forge_scene::CURRENT_SCENE_SCHEMA,
+            resource_guid: scene_guid,
+            name: "Second".into(),
+            dependencies: Vec::new(),
+            objects: Vec::new(),
+        };
+        project
+            .save_scene("Scenes/nested/Second.forgescene", &scene)
+            .expect("save secondary scene");
+
+        let loaded = load_scene_by_guid(project.root(), scene_guid);
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(loaded.expect("find scene").name, "Second");
+    }
+}

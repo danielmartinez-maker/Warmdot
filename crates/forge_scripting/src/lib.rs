@@ -1565,4 +1565,68 @@ mod tests {
         assert!(host.take_audio_commands().is_empty());
         assert_eq!(host.take_diagnostics().len(), 1);
     }
+
+    #[test]
+    fn scene_requests_preserve_callback_order() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let first_scene = Guid::new();
+        let second_scene = Guid::new();
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/SceneRequest.luau".into(),
+            source: format!(
+                r#"return {{ on_fixed_update = function()
+                    assert(Forge.Scene.load("{first_scene}"))
+                    assert(Forge.Scene.load("{second_scene}"))
+                end }}"#
+            ),
+            properties: BTreeMap::new(),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach scene request script");
+
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1);
+
+        assert_eq!(
+            host.take_scene_transition_requests(),
+            vec![first_scene, second_scene]
+        );
+    }
+
+    #[test]
+    fn scene_requests_are_discarded_when_the_script_callback_fails() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let scene_guid = Guid::new();
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/SceneRequest.luau".into(),
+            source: format!(
+                r#"return {{ on_fixed_update = function()
+                    Forge.Scene.load("{scene_guid}")
+                    error("rollback scene request")
+                end }}"#
+            ),
+            properties: BTreeMap::new(),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach scene request script");
+
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1);
+
+        assert!(host.take_scene_transition_requests().is_empty());
+        assert_eq!(host.take_diagnostics().len(), 1);
+    }
+
 }
