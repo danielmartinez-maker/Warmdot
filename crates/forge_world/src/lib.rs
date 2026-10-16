@@ -335,6 +335,22 @@ impl RuntimeWorld {
         Ok(())
     }
 
+    pub fn set_sprite_asset(
+        &mut self,
+        entity: RuntimeEntity,
+        asset: Option<Guid>,
+    ) -> Result<(), WorldError> {
+        let mut current = self
+            .ecs
+            .get_entity_mut(entity.0)
+            .map_err(|_| WorldError::StaleEntity)?;
+        let Some(mut sprite) = current.get_mut::<Sprite>() else {
+            return Err(WorldError::MissingSprite);
+        };
+        sprite.asset = asset;
+        Ok(())
+    }
+
     pub fn set_sprite_uv_rect(
         &mut self,
         entity: RuntimeEntity,
