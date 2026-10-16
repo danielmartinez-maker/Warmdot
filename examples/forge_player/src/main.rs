@@ -170,8 +170,9 @@ fn process_audio_commands(
     };
     for command in commands {
         let result = match command {
-            ScriptAudioCommand::PlayEffect { asset_guid, bus } => AudioBus::parse(&bus)
-                .and_then(|bus| audio.play_effect(assets, asset_guid, bus)),
+            ScriptAudioCommand::PlayEffect { asset_guid, bus } => {
+                AudioBus::parse(&bus).and_then(|bus| audio.play_effect(assets, asset_guid, bus))
+            }
             ScriptAudioCommand::PlayMusic {
                 asset_guid,
                 looping,

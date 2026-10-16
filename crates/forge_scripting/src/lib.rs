@@ -637,9 +637,7 @@ impl ScriptHost {
                 );
                 if let Some(instance) = instances.get_mut(&object_guid) {
                     if apply_callback_result(instance, world, Ok(context), tick, diagnostics) {
-                        pending_audio_commands
-                            .borrow_mut()
-                            .extend(audio_commands);
+                        pending_audio_commands.borrow_mut().extend(audio_commands);
                     }
                 }
                 None
@@ -705,8 +703,7 @@ impl ScriptHost {
                 context,
                 self.pending_events.clone(),
                 self.pending_audio_commands.clone(),
-            )
-            {
+            ) {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
                         migrate_compatible_state(&previous.state, &instance.state, &instance._lua)
@@ -1006,7 +1003,8 @@ fn install_forge_api(
         "play",
         lua.create_function(move |_, (guid, bus): (String, Option<String>)| {
             let bus = bus.unwrap_or_else(|| "sfx".to_owned());
-            if guid.len() > MAX_AUDIO_GUID_BYTES || !matches!(bus.as_str(), "master" | "sfx" | "ui") {
+            if guid.len() > MAX_AUDIO_GUID_BYTES || !matches!(bus.as_str(), "master" | "sfx" | "ui")
+            {
                 return Ok(false);
             }
             let Ok(asset_guid) = Guid::from_str(&guid) else {
