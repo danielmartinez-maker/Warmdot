@@ -25,9 +25,10 @@ impl fmt::Display for SpriteAnimationError {
             Self::Asset(error) => {
                 write!(f, "sprite animation asset could not be loaded: {error}")
             }
-            Self::MissingObject(guid) => {
-                write!(f, "sprite animation object {guid} does not exist in this scene")
-            }
+            Self::MissingObject(guid) => write!(
+                f,
+                "sprite animation object {guid} does not exist in this scene"
+            )
             Self::World(error) => {
                 write!(f, "sprite animation could not update the world: {error}")
             }
