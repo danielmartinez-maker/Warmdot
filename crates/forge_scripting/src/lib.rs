@@ -253,11 +253,8 @@ impl ScriptHost {
             return Err(ScriptError::MissingObject(definition.object_guid));
         }
         let context = Rc::new(RefCell::new(None));
-        let instance = ScriptInstance::compile(
-            definition.clone(),
-            context,
-            self.pending_events.clone(),
-        )?;
+        let instance =
+            ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())?;
         self.instances.insert(definition.object_guid, instance);
         Ok(())
     }
@@ -373,11 +370,8 @@ impl ScriptHost {
             definition.source_path = asset.relative_path.clone();
             definition.source = asset.source.clone();
             let context = Rc::new(RefCell::new(None));
-            match ScriptInstance::compile(
-                definition.clone(),
-                context,
-                self.pending_events.clone(),
-            ) {
+            match ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())
+            {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
                         migrate_compatible_state(&previous.state, &instance.state, &instance._lua)
