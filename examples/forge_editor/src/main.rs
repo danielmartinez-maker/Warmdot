@@ -54,7 +54,7 @@ impl EditorApp {
             transform: AuthoredTransform::default(),
             sprite: Some(AuthoredSprite {
                 asset: None,
-            animation_clip: None,
+                animation_clip: None,
                 size: [1.0, 1.0],
                 tint: [0.25, 0.72, 0.95, 1.0],
                 uv_rect: [0.0, 0.0, 1.0, 1.0],
@@ -306,11 +306,7 @@ impl EditorApp {
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut sprite.animation_clip, None, "None");
                             for (clip, path) in &available_animations {
-                                ui.selectable_value(
-                                    &mut sprite.animation_clip,
-                                    Some(*clip),
-                                    path,
-                                );
+                                ui.selectable_value(&mut sprite.animation_clip, Some(*clip), path);
                             }
                         });
                     selected_animation_changed |= response.response.changed();
@@ -583,11 +579,7 @@ impl EditorApp {
                     let texture = catalog.load_png(sheet.texture).ok()?;
                     let frame = clip.frames.first()?;
                     let uv_rect = sheet
-                        .uv_rect_for_frame(
-                            &frame.sprite_frame,
-                            texture.width,
-                            texture.height,
-                        )
+                        .uv_rect_for_frame(&frame.sprite_frame, texture.width, texture.height)
                         .ok()?;
                     Some((texture.guid, uv_rect))
                 }) {
