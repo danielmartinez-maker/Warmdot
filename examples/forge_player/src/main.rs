@@ -97,7 +97,8 @@ impl ApplicationHandler for PlayerApp {
             WindowEvent::Resized(size) => state.renderer.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 if refresh_assets {
-                    if let Err(error) = refresh_project_textures(&mut self.assets, &mut state.renderer)
+                    if let Err(error) =
+                        refresh_project_textures(&mut self.assets, &mut state.renderer)
                     {
                         eprintln!("project asset refresh failed: {error}");
                         event_loop.exit();
@@ -107,10 +108,10 @@ impl ApplicationHandler for PlayerApp {
                 let delta = now.saturating_duration_since(self.last_frame);
                 self.last_frame = now;
                 self.runtime.advance_frame(delta);
-                match state.renderer.render_world(
-                    self.runtime.world_mut(),
-                    [0.035, 0.045, 0.065, 1.0],
-                ) {
+                match state
+                    .renderer
+                    .render_world(self.runtime.world_mut(), [0.035, 0.045, 0.065, 1.0])
+                {
                     Ok(RenderOutcome::Presented | RenderOutcome::Skipped) => {
                         state.window.request_redraw();
                     }
@@ -162,7 +163,12 @@ fn refresh_project_textures(
                     .is_some_and(|record| record.kind == AssetKind::Png)
                 {
                     let image = assets.load_png(change.guid)?;
-                    renderer.register_texture(image.guid, image.width, image.height, &image.rgba8)?;
+                    renderer.register_texture(
+                        image.guid,
+                        image.width,
+                        image.height,
+                        &image.rgba8,
+                    )?;
                 }
             }
         }
