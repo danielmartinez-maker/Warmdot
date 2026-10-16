@@ -33,6 +33,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    let player_guid = "529bb9ad-47b8-4992-874e-055c7fbf0003"
+        .parse::<Guid>()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid sample Player GUID"))?;
     let player = runtime.entity_for_guid(player_guid).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
