@@ -214,6 +214,20 @@ pub struct SceneDiagnostic {
     pub object_guid: Option<Guid>,
 }
 
+impl std::fmt::Display for SceneDiagnostic {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{:?} {}: {}",
+            self.severity, self.code, self.message
+        )?;
+        if let Some(object_guid) = self.object_guid {
+            write!(formatter, " (object {:?})", object_guid)?;
+        }
+        Ok(())
+    }
+}
+
 impl SceneDiagnostic {
     fn error(code: &str, message: impl Into<String>, object_guid: Option<Guid>) -> Self {
         Self {
