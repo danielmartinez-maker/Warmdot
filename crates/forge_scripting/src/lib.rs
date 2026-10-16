@@ -2,7 +2,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet, VecDeque},
     error::Error,
     fmt,
     rc::Rc,
@@ -769,7 +769,7 @@ impl ScriptHost {
             asset_guid,
             source_path: source_path.into(),
             tick,
-            message,
+            message: message.into(),
         });
     }
 }
