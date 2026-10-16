@@ -1068,9 +1068,7 @@ impl EditorApp {
                     ScriptPropertyValue::Number(value) => {
                         ui.add(egui::DragValue::new(value).speed(0.1)).changed()
                     }
-                    ScriptPropertyValue::String(value) => {
-                        ui.text_edit_singleline(value).changed()
-                    }
+                    ScriptPropertyValue::String(value) => ui.text_edit_singleline(value).changed(),
                 };
             });
         }
@@ -1843,10 +1841,7 @@ impl eframe::App for EditorApp {
                 };
                 if !self.tilemap_mode
                     && ui
-                        .add_enabled(
-                            can_edit_scene && changed,
-                            egui::Button::new("Save scene"),
-                        )
+                        .add_enabled(can_edit_scene && changed, egui::Button::new("Save scene"))
                         .clicked()
                 {
                     self.save();

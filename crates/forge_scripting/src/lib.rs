@@ -691,7 +691,10 @@ mod tests {
             BTreeMap::from([("speed".into(), ScriptPropertyValue::Bool(true))]),
         );
 
-        assert!(matches!(result, Err(super::ScriptError::InvalidProperty(_))));
+        assert!(matches!(
+            result,
+            Err(super::ScriptError::InvalidProperty(_))
+        ));
     }
 
     #[test]
