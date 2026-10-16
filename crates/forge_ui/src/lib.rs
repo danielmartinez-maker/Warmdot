@@ -1162,12 +1162,16 @@ mod tests {
             &runtime.document().elements[0].widget,
             UiWidget::Text { text } if text == "SCORE 12"
         ));
-        assert!(!runtime
-            .set_text(Guid::new(), "missing")
-            .expect("missing UI ID is ignored"));
-        assert!(runtime
-            .set_text(id, &"x".repeat(MAX_UI_TEXT_ELEMENT_BYTES + 1))
-            .is_err());
+        assert!(
+            !runtime
+                .set_text(Guid::new(), "missing")
+                .expect("missing UI ID is ignored")
+        );
+        assert!(
+            runtime
+                .set_text(id, &"x".repeat(MAX_UI_TEXT_ELEMENT_BYTES + 1))
+                .is_err()
+        );
         assert!(matches!(
             &runtime.document().elements[0].widget,
             UiWidget::Text { text } if text == "SCORE 12"
@@ -1179,9 +1183,11 @@ mod tests {
         };
         let button_id = text.id;
         let mut runtime = UiRuntime::new(document(vec![text])).expect("create button UI runtime");
-        assert!(runtime
-            .set_text(button_id, "CONTINUE")
-            .expect("update button label"));
+        assert!(
+            runtime
+                .set_text(button_id, "CONTINUE")
+                .expect("update button label")
+        );
         assert!(matches!(
             &runtime.document().elements[0].widget,
             UiWidget::Button { label, .. } if label == "CONTINUE"

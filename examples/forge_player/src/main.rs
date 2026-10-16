@@ -293,9 +293,7 @@ impl ApplicationHandler for PlayerApp {
                     &self.assets,
                     self.runtime.take_audio_commands(),
                 );
-                for error in
-                    apply_script_ui_commands(&mut self.ui, self.runtime.take_ui_commands())
-                {
+                for error in apply_script_ui_commands(&mut self.ui, self.runtime.take_ui_commands()) {
                     emit_message(
                         DiagnosticLevel::Error,
                         "player.ui_command_failed",
@@ -560,10 +558,7 @@ fn load_scene_ui(
     Ok(ui)
 }
 
-fn apply_script_ui_commands(
-    ui: &mut UiRuntime,
-    commands: Vec<ScriptUiCommand>,
-) -> Vec<String> {
+fn apply_script_ui_commands(ui: &mut UiRuntime, commands: Vec<ScriptUiCommand>) -> Vec<String> {
     commands
         .into_iter()
         .filter_map(|command| match command {
@@ -575,7 +570,7 @@ fn apply_script_ui_commands(
                     )),
                     Err(error) => Some(format!("script UI target {element_guid}: {error}")),
                 }
-            },
+            }
         })
         .collect()
 }
