@@ -55,6 +55,9 @@ impl NavigationGrid {
     }
 
     fn cell_at(&self, position: [f32; 2]) -> Option<GridCell> {
+        if position.iter().any(|coordinate| !coordinate.is_finite()) {
+            return None;
+        }
         let cell = GridCell {
             x: ((position[0] - GRID_ORIGIN[0]) / GRID_CELL_SIZE).floor() as i32,
             y: ((position[1] - GRID_ORIGIN[1]) / GRID_CELL_SIZE).floor() as i32,
@@ -92,11 +95,11 @@ impl NavigationGrid {
     }
 
     fn find_path(&self, start: GridCell, goal: GridCell) -> Option<VecDeque<GridCell>> {
+        if !self.is_walkable(start) || !self.is_walkable(goal) {
+            return None;
+        }
         if start == goal {
             return Some(VecDeque::new());
-        }
-        if !self.in_bounds(start) || !self.is_walkable(goal) {
-            return None;
         }
 
         let mut frontier = VecDeque::from([start]);
