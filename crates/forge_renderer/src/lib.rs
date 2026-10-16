@@ -136,6 +136,7 @@ impl GpuRenderer {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+                apply_limit_buckets: false,
         }))
         .map_err(|error| RendererError::Adapter(error.to_string()))?;
         let adapter_info = adapter.get_info();
@@ -205,8 +206,8 @@ impl GpuRenderer {
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("forge2d-sprite-pipeline-layout"),
-            bind_group_layouts: &[&camera_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&camera_layout)],
+            immediate_size: 0,
         });
         let instance_attributes = wgpu::vertex_attr_array![
             0 => Float32x2,
@@ -222,11 +223,11 @@ impl GpuRenderer {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[wgpu::VertexBufferLayout {
+                buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: size_of::<SpriteInstance>() as u64,
                     step_mode: wgpu::VertexStepMode::Instance,
                     attributes: &instance_attributes,
-                }],
+                })],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
