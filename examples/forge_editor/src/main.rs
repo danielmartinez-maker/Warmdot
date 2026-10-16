@@ -397,7 +397,9 @@ impl EditorApp {
                     changed |= ui
                         .add(egui::DragValue::new(&mut body.gravity_scale).speed(0.05))
                         .changed();
-                    changed |= ui.checkbox(&mut body.lock_rotation, "Lock rotation").changed();
+                    changed |= ui
+                        .checkbox(&mut body.lock_rotation, "Lock rotation")
+                        .changed();
                 });
                 ui.horizontal(|ui| {
                     ui.label("Damping");
@@ -458,7 +460,11 @@ impl EditorApp {
                         ui.horizontal(|ui| {
                             ui.label("Radius");
                             changed |= ui
-                                .add(egui::DragValue::new(radius).speed(0.05).range(0.01..=10000.0))
+                                .add(
+                                    egui::DragValue::new(radius)
+                                        .speed(0.05)
+                                        .range(0.01..=10000.0),
+                                )
                                 .changed();
                         });
                     }
@@ -517,10 +523,7 @@ impl EditorApp {
                 });
                 ui.horizontal(|ui| {
                     changed |= ui
-                        .add(
-                            egui::DragValue::new(&mut collider.rotation_radians)
-                                .speed(0.02),
-                        )
+                        .add(egui::DragValue::new(&mut collider.rotation_radians).speed(0.02))
                         .changed();
                     changed |= ui.checkbox(&mut collider.sensor, "Sensor").changed();
                 });
