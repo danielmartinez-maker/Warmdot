@@ -1189,7 +1189,6 @@ mod ui_asset_tests {
     }
 }
 
-
 #[cfg(test)]
 mod script_fixture_tests {
     use super::*;

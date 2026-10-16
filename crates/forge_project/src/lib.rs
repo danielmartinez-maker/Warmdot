@@ -661,7 +661,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod schema_fixture_tests {
     use super::*;
@@ -669,7 +668,8 @@ mod schema_fixture_tests {
 
     #[test]
     fn schema_v1_project_fixture_round_trips_through_open_and_save() {
-        let root = std::env::temp_dir().join(format!("forge-project-schema-fixture-{}", Guid::new()));
+        let root =
+            std::env::temp_dir().join(format!("forge-project-schema-fixture-{}", Guid::new()));
         let scenes = root.join("Scenes");
         fs::create_dir_all(&scenes).expect("create fixture scene directory");
         fs::write(
@@ -703,9 +703,18 @@ mod schema_fixture_tests {
             .save_default_scene(&restored_scene)
             .expect("save round-tripped scene");
         let reopened = Project::open(&root).expect("reopen saved project");
-        assert_eq!(reopened.document.resource_guid, project.document.resource_guid);
-        assert_eq!(reopened.document.default_scene_guid, project.document.default_scene_guid);
-        assert_eq!(reopened.default_scene.resource_guid, project.default_scene.resource_guid);
+        assert_eq!(
+            reopened.document.resource_guid,
+            project.document.resource_guid
+        );
+        assert_eq!(
+            reopened.document.default_scene_guid,
+            project.document.default_scene_guid
+        );
+        assert_eq!(
+            reopened.default_scene.resource_guid,
+            project.default_scene.resource_guid
+        );
 
         let _ = fs::remove_dir_all(root);
     }

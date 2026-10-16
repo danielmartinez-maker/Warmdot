@@ -477,7 +477,6 @@ fn split_coordinate(coordinate: TileCoord) -> (ChunkCoord, usize) {
     )
 }
 
-
 #[cfg(test)]
 mod schema_fixture_tests {
     use super::*;
@@ -491,11 +490,15 @@ mod schema_fixture_tests {
         assert_eq!(document.chunks[0].coordinate, ChunkCoord { x: -1, y: 2 });
         assert_eq!(document.chunks[0].entries[0].local_index, 1023);
 
-        let canonical = document.to_canonical_json().expect("serialize tilemap fixture");
+        let canonical = document
+            .to_canonical_json()
+            .expect("serialize tilemap fixture");
         let restored = TileMapDocument::from_json(&canonical).expect("reload tilemap fixture");
         assert_eq!(
             canonical,
-            restored.to_canonical_json().expect("serialize restored tilemap")
+            restored
+                .to_canonical_json()
+                .expect("serialize restored tilemap")
         );
         assert_eq!(restored.chunks[0].entries[0].cell.tile_index, 7);
     }
