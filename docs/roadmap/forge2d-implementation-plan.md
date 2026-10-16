@@ -35,27 +35,25 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Verified code snapshot `faeaa9679bfd2d497f6acddbf943fd37b73cd895`; Windows run `38879901911` passed formatting, workspace type-check, and workspace tests.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. The P0.4 implementation snapshot `99d3bf7f024bb425ee17c48c072f2112fbd92836` passed Windows formatting, workspace type-check, and workspace tests on runs `38917440379` and `38917444348`. The current branch adds read-only project validation and a release export workflow; Windows CI for head `63871f5de8863c8e1882ad96caf3bd5a5294fd22` is pending.
 
 ### Present in the branch
 
 - Rust workspace, GUIDs, fixed-step clock, input actions, validated project/scene data, Bevy ECS abstraction, Rapier physics, and the wgpu sprite renderer.
 - PNG, sprite-sheet, animation-clip, prefab, and bounded Luau asset loading; stable asset GUIDs and deterministic resource validation.
-- Native editor project-name/default-scene settings, external file import by drag/drop, asset browser/inspector, multi-scene lifecycle, hierarchy, parent transforms, and history-backed edits with dirty-state save markers.
-- Versioned prefab documents and instances with stable object/component/property override identifiers; refreshing a prefab preserves only locally overridden fields.
-- Viewport selection, pan/zoom, move/rotate/scale/anchor gizmos, snapping, sprite anchors, and selectable render-layer visibility.
-- Sparse 32x32 tilemaps with paint/erase, bounded undo/redo, connected fill capped at 65,536 cells, and a collision-only brush that preserves tile art.
-- Player play/pause/step APIs, standalone project export and launchers.
-- Luau VM isolation with source and per-VM memory caps, a fixed-tick Forge transform/property/input/event API, bounded next-tick typed events, compatible scalar state migration on successful hot reload, runaway callback interruption, per-script diagnostics, and last-good script retention on invalid replacements.
-- Editor runtime preview with Play/Pause/Resume/Step/Stop, GUID-based rendering and selection, script diagnostics, live compatible property updates, PNG texture refresh, transactional Luau hot reload, and input focus/paused-queue gating.
-- Playable keyboard/mouse action arena, colony simulation sample, and renderer benchmark. Windows GitHub Actions checks formatting, workspace type-checking, and workspace tests.
+- Native editor project settings, bounded external file import, stable-GUID asset browser, hierarchy, parent transforms, reusable components, versioned prefab instances with granular overrides, viewport selection, transform/anchor gizmos, snapping, render-layer visibility, and history-backed edits.
+- Sparse 32x32 tilemaps with negative-coordinate mapping, paint/erase, connected fill capped at 65,536 cells, bounded undo/redo, and a collision-only brush.
+- Player play/pause/step APIs, standalone project export and launchers, plus editor runtime preview with GUID-based rendering and selection.
+- Luau VM isolation with source and per-VM memory caps, fixed-tick Forge APIs, bounded typed events, compatible scalar state migration, resumable line breakpoints, error isolation, and last-good hot reload.
+- Kira-backed audio commands, scene-transition requests, a retained game UI runtime, UI rendering/input, and the Action Arena HUD/menu/audio/scene sample. Editor preview handles UI pointer/keyboard input, scripted transitions, and audio playback.
+- A player `--validate` command that checks project scenes/assets without modifying the project or executing Luau top-level code. Its Windows CI result is pending.
+- Playable keyboard/mouse action arena, colony simulation sample, and renderer benchmark. The Windows workflow checks formatting, workspace type-checking, tests, and is being extended to build, validate, export, and upload the Action Arena package.
 
 ### Confirmed gaps or partial coverage
 
-- Luau line breakpoints now suspend and resume the current callback, preserve the fixed tick, and surface hit metadata. The editor preview has line selection, Set/Remove, accepted-line feedback, and Continue controls.
-- The editor preview still needs a player-facing desktop session for focus loss, pause/step, live changes, last-good behavior, and breakpoint interaction.
-- No game audio runtime, retained game UI, scene-transition flow, profiler/logging overlay, or newcomer tutorial.
-- Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; large-map incremental rendering/collision and navigation are not implemented.
+- The editor preview still needs a player-facing desktop session for focus loss, pause/step, live changes, last-good behavior, and breakpoint interaction. The standalone player's HUD, audio, and scene transition also need native desktop interaction acceptance.
+- The profiler/logging overlay, migration fixtures and serialization round-trip coverage, and newcomer tutorial remain open. The new export includes Forge's MIT license, but not a consolidated copy of all third-party license texts.
+- Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; incremental large-map rendering/collision and navigation are not implemented.
 - The action and colony samples are early gameplay slices, not the complete P0 vertical slices. The renderer benchmark has not been run on a desktop GPU, so no performance results are claimed.
 
 ---
@@ -102,12 +100,14 @@ The existing suite covers asset GUID stability/reload, old-scene compatibility a
 
 ### P0.4 — Audio, transitions, and game UI
 
-- [ ] Add a Forge-owned playback API and Kira adapter for sound effects, music/streaming, and sound buses.
-- [ ] Add authored scene-transition requests and player/editor scene lifecycle integration.
-- [ ] Add a separate retained-mode game UI tree with basic layout, image/text/button, focus, and input; keep egui editor UI separate.
-- [ ] Add runtime UI rendering and sample HUD/menu interaction.
+- [x] Add a Forge-owned playback API and Kira adapter for sound effects, music/streaming, and sound buses.
+- [x] Add authored scene-transition requests and player/editor scene lifecycle integration.
+- [x] Add a separate retained-mode game UI tree with basic layout, image/text/button, focus, and input; keep egui editor UI separate.
+- [x] Add runtime UI rendering and sample HUD/menu interaction.
 
-**Exit:** The action sample has responsive HUD/menu, sound effects/music, and a real transition between authored scenes using the standalone player.
+Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024bb425ee17c48c072f2112fbd92836`, runs `38917440379` and `38917444348`. The P0.4 exit remains open until the standalone action sample is exercised in a native desktop session; P0.3 editor-preview desktop acceptance also remains open.
+
+**Exit:** Pending player-facing desktop acceptance of responsive HUD/menu input, sound effects/music, and transitions between authored scenes in the standalone player.
 
 ### P0.5 — Runtime diagnostics and dependable shipping
 
@@ -156,6 +156,10 @@ The existing suite covers asset GUID stability/reload, old-scene compatibility a
 **P2 completion gate:** Each item has a documented compatibility, capability, migration, and packaging contract; opt-in AI and community assets remain offline/safe by default.
 
 ---
+
+- 2026-10-16: Completed P0.4 implementation on `99d3bf7f024bb425ee17c48c072f2112fbd92836`: Kira audio, authored scene transitions, retained game UI, Action Arena HUD/menu/audio resources, and editor-preview UI/audio/transition handling. Windows runs `38917440379` and `38917444348` passed format, type-check, and workspace tests. Native desktop interaction acceptance remains open.
+- 2026-10-16: Added `forge-player --validate` with read-only asset-index consistency checking, scene/resource validation, JSON diagnostics, and syntax-only Luau compilation. Updated SceneCatalog to reject malformed scene files instead of silently omitting them. Formatting correction passed on head `e2ae31bf430e7d923c2a1ed1f973ad82caa62736`; type-check and tests were still running when the Windows export workflow was added.
+- 2026-10-16: Added the Windows release build/validation/export/artifact workflow, copied Forge's MIT license into exports, and documented package contents. Current head `63871f5de8863c8e1882ad96caf3bd5a5294fd22` is awaiting GitHub Actions.
 
 ## Execution ledger
 

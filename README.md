@@ -23,7 +23,9 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The P0.1 editor authoring foundation is implemented and passed Windows formatting, workspace type-check, and workspace tests on commit `aa6173577d4116defac860a406ea1e2ab8a04ea4`. It includes bounded external asset import, hierarchy and parent transforms, reusable components, versioned prefab instances with granular overrides, move/rotate/scale/anchor gizmos, snapping, render-layer visibility, tile fill/collision brush, and history-backed saving. State migration, typed next-tick events, and bounded preview input are implemented on the current code snapshot (`d34a4835157ba07beb0f54377b5036e8058a6485`, Windows run `38875425714` passed). Remaining P0 work includes resumable script-line breakpoints, player-facing verification of editor preview behavior, audio, retained game UI, scene transitions, profiler/logging, reproducible export documentation, validation commands, schema migration coverage, a tutorial, and complete action/colony vertical slices. The renderer benchmark executable has not been run on a desktop GPU, so there are no measured performance results.
+The branch contains the P0.1 authoring model, P0.2 Luau scripting, P0.3 editor runtime-preview implementation, and P0.4 audio, scene transitions, and retained game UI. Windows formatting, workspace type-check, and tests passed for the P0.4 editor-preview code at commit `99d3bf7f024bb425ee17c48c072f2112fbd92836` (runs `38917440379` and `38917444348`).
+
+P0 remains open. The player-facing editor and standalone-player interaction sessions are still needed for desktop acceptance. P0.5 profiler/logging, consolidated third-party license notices, migration fixtures/round-trip coverage, and a newcomer tutorial remain. The action arena and colony simulation are early gameplay slices and still need the full P0.6 acceptance audit. The renderer benchmark has not been run on a desktop GPU, so there are no measured performance results. The current branch is adding read-only project validation and a clean Windows build/export job; GitHub Actions is still checking that work.
 
 ## Workspace
 
@@ -62,6 +64,7 @@ Use stable Rust. On Windows, install the Visual C++ Build Tools workload and Win
     cargo check --workspace
     cargo run -p action-arena
     cargo run -p forge-player -- path/to/project.forgeproj
+    cargo run -p forge-player -- --validate path/to/project.forgeproj
     cargo run -p forge-player -- --export path/to/project.forgeproj path/to/export-folder
     cargo run -p forge-editor -- path/to/project.forgeproj
     cargo run -p colony-simulation

@@ -6,7 +6,7 @@ Run the standalone player in validation mode:
 
     cargo run -p forge-player -- --validate path/to/project.forgeproj
 
-The command is read-only. It checks the project manifest and every scene under `Scenes/`, confirms the asset index matches the bounded scan of `Assets/`, validates referenced asset kinds and resource data, checks the default tilemap and tileset indices, and compiles Luau source without executing it. It prints a schema-versioned JSON report with diagnostics sorted by severity, code, path, and message. A valid project exits with status 0; invalid data exits non-zero after printing the report.
+The command is read-only. It checks the project manifest and every scene under `Scenes/`, confirms the asset index matches the scan of `Assets/`, validates referenced asset kinds and resource data, checks the default tilemap and tileset indices, and compiles Luau source without executing it. It prints a schema-versioned JSON report with diagnostics sorted by severity, code, path, and message. A valid project exits with status 0; invalid data exits non-zero after printing the report.
 
 A missing asset index is accepted only when the project has no indexed assets. The validation command never repairs the index or creates project folders.
 
