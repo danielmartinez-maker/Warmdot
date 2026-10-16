@@ -1,15 +1,57 @@
 //! Headless-capable runtime kernel with fixed-step input and physics barriers.
 
-use std::{error::Error, fmt, time::Duration};
+use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
 
+use forge_assets::{AnimationClipDocument, AnimationPlayer, AssetCatalog, AssetError, SpriteSheetDocument};
 use forge_core::{
     ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
 };
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument};
-use forge_world::RuntimeWorld;
+use forge_world::{RuntimeWorld, WorldError};
 
 #[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
+pub enum SpriteAnimationError {
+    Asset(AssetError),
+    MissingObject(Guid),
+    World(WorldError),
+}
+
+impl fmt::Display for SpriteAnimationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Asset(error) => write!(f, "sprite animation asset could not be loaded: {error}"),
+            Self::MissingObject(guid) => {
+                write!(f, "sprite animation object {guid} does not exist in this scene")
+            }
+            Self::World(error) => write!(f, "sprite animation could not update the world: {error}"),
+        }
+    }
+}
+
+impl Error for SpriteAnimationError {}
+
+impl From<AssetError> for SpriteAnimationError {
+    fn from(error: AssetError) -> Self {
+        Self::Asset(error)
+    }
+}
+
+impl From<WorldError> for SpriteAnimationError {
+    fn from(error: WorldError) -> Self {
+        Self::World(error)
+    }
+}
+
+struct RuntimeSpriteAnimation {
+    clip: AnimationClipDocument,
+    sheet: SpriteSheetDocument,
+    texture_width: u32,
+    texture_height: u32,
+    player: AnimationPlayer,
+}
+
 pub struct RuntimeConfig {
     pub fixed_step: Duration,
     pub max_frame_delta: Duration,
@@ -56,6 +98,7 @@ pub struct RuntimeFrame {
 pub enum RuntimeError {
     InvalidClockConfiguration(&'static str),
     Scene(Vec<SceneDiagnostic>),
+    Animation(SpriteAnimationError),
 }
 
 impl fmt::Display for RuntimeError {
@@ -63,6 +106,7 @@ impl fmt::Display for RuntimeError {
         match self {
             Self::InvalidClockConfiguration(message) => f.write_str(message),
             Self::Scene(diagnostics) => write!(f, "scene has {} diagnostic(s)", diagnostics.len()),
+            Self::Animation(error) => write!(f, "{error}"),
         }
     }
 }
@@ -80,6 +124,7 @@ pub struct GameRuntime {
     physics: PhysicsSimulation,
     pending_physics_events: Vec<CollisionEvent2D>,
     paused: bool,
+    sprite_animations: BTreeMap<Guid, RuntimeSpriteAnimation>,
 }
 
 impl GameRuntime {
@@ -99,6 +144,7 @@ impl GameRuntime {
             physics: PhysicsSimulation::new(),
             pending_physics_events: Vec::new(),
             paused: false,
+            sprite_animations: BTreeMap::new(),
         })
     }
 
@@ -110,6 +156,16 @@ impl GameRuntime {
     pub fn from_scene_json(source: &str, config: RuntimeConfig) -> Result<Self, RuntimeError> {
         let scene = SceneDocument::from_json(source).map_err(RuntimeError::Scene)?;
         Self::from_scene(&scene, config)
+    }
+
+    pub fn from_scene_with_assets(
+        scene: &SceneDocument,
+        config: RuntimeConfig,
+        assets: &AssetCatalog,
+    ) -> Result<Self, RuntimeError> {
+        let mut runtime = Self::from_scene(scene, config)?;
+        runtime.attach_scene_animations(scene, assets)?;
+        Ok(runtime)
     }
 
     /// Registers one fixed update system. Insertion order is the execution order.
@@ -149,12 +205,119 @@ impl GameRuntime {
     /// Replaces the scene and resets physics, clock, input, and pending collision events.
     pub fn replace_scene(&mut self, scene: &SceneDocument) -> Result<(), RuntimeError> {
         self.world = scene.instantiate().map_err(RuntimeError::Scene)?;
+        self.sprite_animations.clear();
         self.clock.reset();
         self.input.clear();
         self.simulation_time = Duration::ZERO;
         self.physics = PhysicsSimulation::new();
         self.pending_physics_events.clear();
         Ok(())
+    }
+
+    pub fn replace_scene_with_assets(
+        &mut self,
+        scene: &SceneDocument,
+        assets: &AssetCatalog,
+    ) -> Result<(), RuntimeError> {
+        self.replace_scene(scene)?;
+        self.attach_scene_animations(scene, assets)?;
+        Ok(())
+    }
+
+    fn attach_scene_animations(
+        &mut self,
+        scene: &SceneDocument,
+        assets: &AssetCatalog,
+    ) -> Result<(), RuntimeError> {
+        for object in &scene.objects {
+            if let Some(clip_guid) = object.sprite.and_then(|sprite| sprite.animation_clip) {
+                self.attach_sprite_animation(object.object_guid, clip_guid, assets)
+                    .map_err(RuntimeError::Animation)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn attach_sprite_animation(
+        &mut self,
+        object_guid: Guid,
+        clip_guid: Guid,
+        assets: &AssetCatalog,
+    ) -> Result<(), SpriteAnimationError> {
+        let clip = assets.load_animation_clip(clip_guid)?;
+        let sheet_guid = clip.sprite_sheet;
+        let sheet = assets.load_sprite_sheet(sheet_guid)?;
+        let texture = assets.load_png(sheet.texture)?;
+        clip.validate(sheet_guid, &sheet)?;
+        let entity = self
+            .world
+            .entity_for_guid(object_guid)
+            .ok_or(SpriteAnimationError::MissingObject(object_guid))?;
+        let mut player = AnimationPlayer::default();
+        let uv_rect = player.current_frame_uv_rect(
+            &clip,
+            &sheet,
+            texture.width,
+            texture.height,
+        )?;
+        self.world.set_sprite_asset(entity, Some(sheet.texture))?;
+        self.world.set_sprite_uv_rect(entity, uv_rect)?;
+        self.sprite_animations.insert(
+            object_guid,
+            RuntimeSpriteAnimation {
+                clip,
+                sheet,
+                texture_width: texture.width,
+                texture_height: texture.height,
+                player,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn detach_sprite_animation(&mut self, object_guid: Guid) -> bool {
+        self.sprite_animations.remove(&object_guid).is_some()
+    }
+
+    pub fn set_sprite_animation_playing(&mut self, object_guid: Guid, playing: bool) -> bool {
+        let Some(animation) = self.sprite_animations.get_mut(&object_guid) else {
+            return false;
+        };
+        animation.player.set_playing(playing);
+        true
+    }
+
+    pub fn sprite_animation_count(&self) -> usize {
+        self.sprite_animations.len()
+    }
+
+    fn advance_sprite_animations(&mut self, delta: Duration) {
+        let mut remove = Vec::new();
+        for (object_guid, animation) in &mut self.sprite_animations {
+            let Some(entity) = self.world.entity_for_guid(*object_guid) else {
+                remove.push(*object_guid);
+                continue;
+            };
+            if animation.player.advance(&animation.clip, delta).is_err() {
+                remove.push(*object_guid);
+                continue;
+            }
+            let Ok(uv_rect) = animation.player.current_frame_uv_rect(
+                &animation.clip,
+                &animation.sheet,
+                animation.texture_width,
+                animation.texture_height,
+            ) else {
+                remove.push(*object_guid);
+                continue;
+            };
+            if self.world.set_sprite_uv_rect(entity, uv_rect).is_err() {
+                remove.push(*object_guid);
+            }
+        }
+        for object_guid in remove {
+            self.sprite_animations.remove(&object_guid);
+        }
     }
 
     /// Advances bounded fixed steps. Systems run before physics; collision events produced by
@@ -184,6 +347,7 @@ impl GameRuntime {
             for system in &mut self.fixed_systems {
                 system(&mut self.world, &context);
             }
+            self.advance_sprite_animations(self.clock.step());
             self.pending_physics_events = self
                 .physics
                 .step(&mut self.world, self.clock.step().as_secs_f32());
