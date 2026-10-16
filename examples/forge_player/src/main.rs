@@ -242,7 +242,8 @@ impl ApplicationHandler for PlayerApp {
                 }
                 let delta = now.saturating_duration_since(self.last_frame);
                 self.last_frame = now;
-                self.frame_samples_ms.push_back(delta.as_secs_f64() * 1000.0);
+                self.frame_samples_ms
+                    .push_back(delta.as_secs_f64() * 1000.0);
                 if self.frame_samples_ms.len() > 180 {
                     self.frame_samples_ms.pop_front();
                 }
@@ -266,14 +267,17 @@ impl ApplicationHandler for PlayerApp {
                     scene_requests,
                 );
                 for diagnostic in self.runtime.take_script_diagnostics() {
-                    eprintln!("{}", serde_json::json!({
-                        "level": "error",
-                        "event": "script.runtime_diagnostic",
-                        "source_path": diagnostic.source_path,
-                        "object_guid": diagnostic.object_guid.to_string(),
-                        "tick": diagnostic.tick,
-                        "message": diagnostic.message,
-                    }));
+                    eprintln!(
+                        "{}",
+                        serde_json::json!({
+                            "level": "error",
+                            "event": "script.runtime_diagnostic",
+                            "source_path": diagnostic.source_path,
+                            "object_guid": diagnostic.object_guid.to_string(),
+                            "tick": diagnostic.tick,
+                            "message": diagnostic.message,
+                        })
+                    );
                 }
                 let window_size = state.window.inner_size();
                 let ui_sprites = match self.ui.draw_commands(window_size.width, window_size.height)
@@ -301,23 +305,26 @@ impl ApplicationHandler for PlayerApp {
                     self.next_profile_log = now + Duration::from_secs(2);
                     let stats = state.renderer.last_render_stats();
                     let object_count = self.runtime.world().object_count();
-                    eprintln!("{}", serde_json::json!({
-                        "level": "info",
-                        "event": "runtime.profile",
-                        "frame_interval_ms": {
-                            "p50": percentile_ms(&self.frame_samples_ms, 0.50),
-                            "p95": percentile_ms(&self.frame_samples_ms, 0.95),
-                        },
-                        "fixed_system_ms": self.fixed_system_time.as_secs_f64() * 1000.0,
-                        "script_ms": self.script_time.as_secs_f64() * 1000.0,
-                        "fixed_steps": self.fixed_steps,
-                        "world_sprites": stats.world_sprites,
-                        "ui_sprites": stats.ui_sprites,
-                        "draw_calls": stats.draw_calls,
-                        "renderer_cpu_submit_ms": stats.cpu_submit_time.as_secs_f64() * 1000.0,
-                        "object_count": object_count,
-                        "tilemap_chunks": self.tilemap_chunk_count,
-                    }));
+                    eprintln!(
+                        "{}",
+                        serde_json::json!({
+                            "level": "info",
+                            "event": "runtime.profile",
+                            "frame_interval_ms": {
+                                "p50": percentile_ms(&self.frame_samples_ms, 0.50),
+                                "p95": percentile_ms(&self.frame_samples_ms, 0.95),
+                            },
+                            "fixed_system_ms": self.fixed_system_time.as_secs_f64() * 1000.0,
+                            "script_ms": self.script_time.as_secs_f64() * 1000.0,
+                            "fixed_steps": self.fixed_steps,
+                            "world_sprites": stats.world_sprites,
+                            "ui_sprites": stats.ui_sprites,
+                            "draw_calls": stats.draw_calls,
+                            "renderer_cpu_submit_ms": stats.cpu_submit_time.as_secs_f64() * 1000.0,
+                            "object_count": object_count,
+                            "tilemap_chunks": self.tilemap_chunk_count,
+                        })
+                    );
                 }
             }
             _ => {}
@@ -1266,7 +1273,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let assets = AssetCatalog::open(project_root.clone())?;
     let mut scene = project.default_scene().clone();
     let tilemap = load_project_tilemap(&project_root)?;
-    let tilemap_chunk_count = tilemap.as_ref().map(|tilemap| tilemap.chunks.len()).unwrap_or(0);
+    let tilemap_chunk_count = tilemap
+        .as_ref()
+        .map(|tilemap| tilemap.chunks.len())
+        .unwrap_or(0);
     if let Some(tilemap) = tilemap {
         append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
     }
