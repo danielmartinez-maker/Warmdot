@@ -308,15 +308,19 @@ impl ScriptInstance {
         }
     }
 
-    fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<bool, LuaError> {
-        let applied =
-            luau_debug::set_breakpoint(&self._lua, &self.source_function, line, enabled)?.is_some();
-        if enabled && applied {
+    fn set_breakpoint(
+        &mut self,
+        line: u32,
+        enabled: bool,
+    ) -> Result<Option<u32>, LuaError> {
+        let accepted_line =
+            luau_debug::set_breakpoint(&self._lua, &self.source_function, line, enabled)?;
+        if enabled && accepted_line.is_some() {
             self.breakpoint_lines.insert(line);
         } else if !enabled {
             self.breakpoint_lines.remove(&line);
         }
-        Ok(applied)
+        Ok(accepted_line)
     }
 
     fn restore_breakpoints(&mut self, lines: &BTreeSet<u32>) -> Result<(), LuaError> {
@@ -405,7 +409,7 @@ impl ScriptHost {
         object_guid: Guid,
         line: u32,
         enabled: bool,
-    ) -> Result<bool, ScriptError> {
+    ) -> Result<Option<u32>, ScriptError> {
         let instance = self
             .instances
             .get_mut(&object_guid)
