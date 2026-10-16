@@ -4226,8 +4226,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use eframe::egui;
     use super::{ChunkedTileMap, TileCell, TileCoord, TileMapHistory, connected_tile_fill};
+    use eframe::egui;
 
     #[test]
     fn connected_tile_fill_respects_solid_boundaries_and_is_undoable() {
