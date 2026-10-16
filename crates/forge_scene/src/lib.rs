@@ -951,3 +951,54 @@ mod script_authoring_tests {
         );
     }
 }
+
+
+#[cfg(test)]
+mod schema_fixture_tests {
+    use super::*;
+
+    #[test]
+    fn schema_v1_scene_fixture_round_trips_canonically() {
+        let scene = SceneDocument::from_json(include_str!(
+            "../tests/fixtures/schema-v1/scene.forgescene"
+        ))
+        .expect("load scene fixture");
+        assert_eq!(scene.resource_guid.to_string(), "00000000-0000-4000-8000-000000000020");
+        assert_eq!(scene.objects[0].script.as_ref().unwrap().properties["speed"], ScriptPropertyValue::Number(4.0));
+
+        let canonical = scene.to_canonical_json().expect("serialize scene fixture");
+        let restored = SceneDocument::from_json(&canonical).expect("reload scene fixture");
+        assert_eq!(
+            canonical,
+            restored.to_canonical_json().expect("serialize restored scene")
+        );
+    }
+
+    #[test]
+    fn schema_v1_prefab_fixture_round_trips_canonically() {
+        let prefab = PrefabDocument::from_json(include_str!(
+            "../tests/fixtures/schema-v1/enemy.forgeprefab"
+        ))
+        .expect("load prefab fixture");
+        let canonical = prefab.to_canonical_json().expect("serialize prefab fixture");
+        let restored = PrefabDocument::from_json(&canonical).expect("reload prefab fixture");
+        assert_eq!(
+            canonical,
+            restored.to_canonical_json().expect("serialize restored prefab")
+        );
+        assert_eq!(restored.resource_guid, prefab.resource_guid);
+        assert_eq!(restored.object.object_guid, prefab.object.object_guid);
+    }
+
+    #[test]
+    fn legacy_scene_fixture_keeps_implicit_optional_fields() {
+        let scene = SceneDocument::from_json(include_str!(
+            "../tests/fixtures/schema-v1/legacy-scene.forgescene"
+        ))
+        .expect("load legacy scene fixture");
+        let object = &scene.objects[0];
+        assert!(object.script.is_none());
+        assert!(object.prefab_instance.is_none());
+        assert!(scene.dependencies.is_empty());
+    }
+}

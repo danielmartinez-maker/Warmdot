@@ -1188,3 +1188,30 @@ mod ui_asset_tests {
         );
     }
 }
+
+
+#[cfg(test)]
+mod script_fixture_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn luau_asset_fixture_preserves_source_bytes_across_catalog_load() {
+        let project = tempfile::tempdir().expect("temporary project");
+        let assets_dir = project.path().join("Assets");
+        fs::create_dir_all(&assets_dir).expect("Assets folder");
+        let fixture = include_str!("../tests/fixtures/schema-v1/PlayerController.luau");
+        let script_path = assets_dir.join("PlayerController.luau");
+        fs::write(&script_path, fixture).expect("write script fixture");
+
+        let catalog = AssetCatalog::open(project.path()).expect("open asset catalog");
+        let asset = catalog
+            .entries()
+            .find(|record| record.relative_path == "Assets/PlayerController.luau")
+            .expect("fixture is indexed as an asset");
+        assert_eq!(asset.kind, AssetKind::Script);
+        let loaded = catalog.load_script(asset.guid).expect("load script asset");
+        assert_eq!(loaded.source.as_bytes(), fixture.as_bytes());
+        assert_eq!(loaded.relative_path, "Assets/PlayerController.luau");
+    }
+}

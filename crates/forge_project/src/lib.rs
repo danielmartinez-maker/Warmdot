@@ -660,3 +660,53 @@ mod tests {
         assert_eq!(loaded.expect("find scene").name, "Second");
     }
 }
+
+
+#[cfg(test)]
+mod schema_fixture_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn schema_v1_project_fixture_round_trips_through_open_and_save() {
+        let root = std::env::temp_dir().join(format!("forge-project-schema-fixture-{}", Guid::new()));
+        let scenes = root.join("Scenes");
+        fs::create_dir_all(&scenes).expect("create fixture scene directory");
+        fs::write(
+            root.join(PROJECT_FILE_NAME),
+            include_str!("../tests/fixtures/schema-v1/project.forgeproj"),
+        )
+        .expect("write project fixture");
+        fs::write(
+            scenes.join("Main.forgescene"),
+            include_str!("../tests/fixtures/schema-v1/main.forgescene"),
+        )
+        .expect("write scene fixture");
+
+        let project = Project::open(&root).expect("open schema fixture");
+        let manifest_fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/schema-v1/project.forgeproj"
+        ))
+        .expect("parse project fixture");
+        assert_eq!(
+            serde_json::to_value(&project.document).expect("serialize project"),
+            manifest_fixture
+        );
+
+        let canonical_scene = project
+            .default_scene
+            .to_canonical_json()
+            .expect("serialize default scene");
+        let restored_scene =
+            SceneDocument::from_json(&canonical_scene).expect("reload serialized scene");
+        project
+            .save_default_scene(&restored_scene)
+            .expect("save round-tripped scene");
+        let reopened = Project::open(&root).expect("reopen saved project");
+        assert_eq!(reopened.document.resource_guid, project.document.resource_guid);
+        assert_eq!(reopened.document.default_scene_guid, project.document.default_scene_guid);
+        assert_eq!(reopened.default_scene.resource_guid, project.default_scene.resource_guid);
+
+        let _ = fs::remove_dir_all(root);
+    }
+}
