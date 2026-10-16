@@ -632,7 +632,8 @@ mod tests {
                 object_guid,
                 asset_guid,
                 source_path: "Assets/Move.luau".into(),
-                source: "return { on_fixed_update = function(self, dt) self:translate(dt, 0) end }".into(),
+                source: "return { on_fixed_update = function(self, dt) self:translate(dt, 0) end }"
+                    .into(),
                 properties: BTreeMap::new(),
             },
             &mut world,
@@ -642,7 +643,8 @@ mod tests {
         host.reload_asset(&LoadedScriptAsset {
             guid: asset_guid,
             relative_path: "Assets/Move.luau".into(),
-            source: "return { on_fixed_update = function(self, dt) self:translate(dt * 2, 0) end }".into(),
+            source: "return { on_fixed_update = function(self, dt) self:translate(dt * 2, 0) end }"
+                .into(),
         });
         host.update(&mut world, &BTreeMap::new(), Duration::from_millis(50), 1);
         let first_position = world
