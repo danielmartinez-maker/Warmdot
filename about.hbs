@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Third Party Licenses</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.5 system-ui, sans-serif; }
+    body { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    .overview, .licenses { padding-left: 1.5rem; }
+    .license { border-top: 1px solid #8888; padding: 1rem 0; }
+    .license-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .used-by { margin-top: .25rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Third Party Licenses</h1>
+    <p>Forge 2D includes the third-party Rust crates listed below. Each entry links to its source and includes the applicable license text.</p>
+    <h2>License overview</h2>
+    <ul class="overview">
+      {{#each overview}}
+      <li><a href="#{{id}}">{{name}}</a> ({{count}} component(s))</li>
+      {{/each}}
+    </ul>
+    <h2>Components and license texts</h2>
+    <ul class="licenses">
+      {{#each licenses}}
+      <li class="license">
+        {{#if first_of_kind}}<h3 id="{{id}}">{{name}}</h3>{{/if}}
+        <h4 id="{{id}}-{{@index}}">{{name}}</h4>
+        <h5>Used by</h5>
+        <ul class="used-by">
+          {{#each used_by}}
+          <li><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></li>
+          {{/each}}
+        </ul>
+        <pre class="license-text">{{text}}</pre>
+      </li>
+      {{/each}}
+    </ul>
+  </main>
+</body>
+</html>

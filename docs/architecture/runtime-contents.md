@@ -28,6 +28,6 @@ The exported folder contains:
 
 The package runs without the editor, Rust, or Cargo installed. It relies on the host's Windows graphics drivers; game audio remains optional when no compatible audio device is available. The CI artifact proves the build, validation, and package layout on a clean Windows runner. It does not prove the native window opens on a user's GPU or that audio is audible.
 
-The root `LICENSE` in the repository covers Forge-owned code and is copied into the export. Rust dependencies are pinned by the repository's `Cargo.lock`; each dependency's license expression and source are recorded in its Cargo package metadata. This export currently does not bundle a consolidated copy of every third-party license text, so third-party notice packaging remains an open release item.
+The root `LICENSE` in the repository covers Forge-owned code and is copied into the export. Rust dependencies are pinned by the repository's `Cargo.lock`; each dependency's license expression and source are recorded in its Cargo package metadata. The Windows Actions packaging workflow installs `cargo-about` 0.9.1 and generates `THIRD_PARTY_LICENSES.html` for the `x86_64-pc-windows-msvc` player dependency graph from `about.toml` and `about.hbs`. Package validation requires the report and its title before upload.
 
 A clean build using the floating Rust `stable` channel is repeatable from the lockfile in CI, but the binary is not claimed to be bit-for-bit reproducible across toolchain releases or runner images.

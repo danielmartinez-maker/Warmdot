@@ -33,6 +33,10 @@ jobs:
         run: cargo run --release -p forge-player -- --validate examples/action_arena/project.forgeproj
       - name: Export standalone Action Arena package
         run: cargo run --release -p forge-player -- --export examples/action_arena/project.forgeproj artifacts/action-arena-windows
+      - name: Install cargo-about
+        run: cargo install cargo-about --version 0.9.1 --locked --features cli
+      - name: Generate third-party license notices
+        run: cargo about generate --manifest-path examples/forge_player/Cargo.toml --target x86_64-pc-windows-msvc --locked --fail --output-file artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html about.hbs
       - name: Check exported package contents
         shell: pwsh
         run: |
