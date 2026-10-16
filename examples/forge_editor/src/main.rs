@@ -71,6 +71,14 @@ struct CanvasSprite {
     order: i32,
 }
 
+#[derive(Clone, Copy)]
+struct MoveGizmoDrag {
+    object_guid: Guid,
+    pointer_start: Pos2,
+    translation_start: [f32; 2],
+    translation_preview: [f32; 2],
+}
+
 struct EditorApp {
     project: Project,
     project_name_draft: String,
@@ -94,6 +102,8 @@ struct EditorApp {
     script_diagnostics: Vec<ScriptDiagnostic>,
     canvas_offset: Vec2,
     canvas_zoom: f32,
+    move_gizmo_drag: Option<MoveGizmoDrag>,
+    snap_to_grid: bool,
 }
 
 impl EditorApp {
@@ -136,6 +146,8 @@ impl EditorApp {
             script_diagnostics: Vec::new(),
             canvas_offset: Vec2::ZERO,
             canvas_zoom: 1.0,
+            move_gizmo_drag: None,
+            snap_to_grid: false,
         }
     }
 
@@ -1662,8 +1674,60 @@ impl EditorApp {
 
     fn show_canvas(&mut self, ui: &mut egui::Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+        if self.runtime.is_some() {
+            self.move_gizmo_drag = None;
+        }
+        let pixels_per_unit = 24.0 * self.canvas_zoom;
+        let origin_before_drag = rect.center() + self.canvas_offset;
+        if response.drag_started() && self.runtime.is_none() {
+            let target = response.interact_pointer_pos().and_then(|pointer| {
+                self.scene.objects.iter().rev().find_map(|object| {
+                    let sprite = object.sprite?;
+                    let center = origin_before_drag
+                        + Vec2::new(
+                            object.transform.translation[0] * pixels_per_unit,
+                            object.transform.translation[1] * pixels_per_unit,
+                        );
+                    let extent = Vec2::new(
+                        (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
+                        (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
+                    )
+                    .max(Vec2::splat(2.0));
+                    Rect::from_center_size(center, extent)
+                        .contains(pointer)
+                        .then_some((object.object_guid, object.transform.translation))
+                })
+            });
+            self.move_gizmo_drag = target.map(|(object_guid, translation)| {
+                self.selected = Some(object_guid);
+                self.selected_asset = None;
+                let pointer_start = response.interact_pointer_pos().unwrap_or(origin_before_drag);
+                MoveGizmoDrag {
+                    object_guid,
+                    pointer_start,
+                    translation_start: translation,
+                    translation_preview: translation,
+                }
+            });
+        }
         if response.dragged() {
-            self.canvas_offset += ui.input(|input| input.pointer.delta());
+            if let Some(pointer) = response.interact_pointer_pos() {
+                if let Some(drag) = self.move_gizmo_drag.as_mut() {
+                    let delta = (pointer - drag.pointer_start) / pixels_per_unit;
+                    let mut translation = [
+                        drag.translation_start[0] + delta.x,
+                        drag.translation_start[1] + delta.y,
+                    ];
+                    if self.snap_to_grid {
+                        for value in &mut translation {
+                            *value = (*value / 0.5).round() * 0.5;
+                        }
+                    }
+                    drag.translation_preview = translation;
+                } else {
+                    self.canvas_offset += ui.input(|input| input.pointer.delta());
+                }
+            }
         }
         if response.hovered() {
             let scroll = ui.input(|input| input.smooth_scroll_delta.y);
@@ -1726,7 +1790,14 @@ impl EditorApp {
                 .collect::<Vec<_>>()
         };
         objects.sort_by_key(|sprite| (sprite.layer, sprite.order, sprite.object_guid));
-        let pixels_per_unit = 24.0 * self.canvas_zoom;
+        if let Some(drag) = self.move_gizmo_drag {
+            if let Some(sprite) = objects
+                .iter_mut()
+                .find(|sprite| sprite.object_guid == drag.object_guid)
+            {
+                sprite.translation = drag.translation_preview;
+            }
+        }
         for sprite in &objects {
             let center = origin
                 + Vec2::new(
@@ -1741,6 +1812,17 @@ impl EditorApp {
             let object_rect = Rect::from_center_size(center, extent);
             if self.selected == Some(sprite.object_guid) {
                 painter.rect_filled(object_rect.expand(4.0), 0.0, Color32::YELLOW);
+                if self.runtime.is_none() {
+                    painter.line_segment(
+                        [center, center + Vec2::new(30.0, 0.0)],
+                        Stroke::new(2.5, Color32::from_rgb(240, 90, 80)),
+                    );
+                    painter.line_segment(
+                        [center, center + Vec2::new(0.0, 30.0)],
+                        Stroke::new(2.5, Color32::from_rgb(90, 220, 130)),
+                    );
+                    painter.circle_filled(center, 4.0, Color32::WHITE);
+                }
             }
             if let Some(texture) = sprite.asset.and_then(|asset| self.textures.get(&asset)) {
                 let [u, v, width, height] = sprite.uv_rect;
@@ -1769,7 +1851,7 @@ impl EditorApp {
             rect.right_top() + Vec2::new(-12.0, 12.0),
             egui::Align2::RIGHT_TOP,
             format!(
-                "{:.0}%  •  drag to pan, wheel to zoom",
+                "{:.0}%  •  drag objects to move, empty space to pan",
                 self.canvas_zoom * 100.0
             ),
             egui::FontId::proportional(13.0),
@@ -1796,6 +1878,26 @@ impl EditorApp {
                         Rect::from_center_size(center, extent).contains(pointer)
                     })
                     .map(|sprite| sprite.object_guid);
+            }
+        }
+        if response.drag_stopped() {
+            if let Some(drag) = self.move_gizmo_drag.take() {
+                if drag.translation_preview != drag.translation_start {
+                    if let Some(mut replacement) = self
+                        .scene
+                        .objects
+                        .iter()
+                        .find(|object| object.object_guid == drag.object_guid)
+                        .cloned()
+                    {
+                        replacement.transform.translation = drag.translation_preview;
+                        if let Err(error) =
+                            self.history.replace_object(&mut self.scene, replacement)
+                        {
+                            self.status = error.to_string();
+                        }
+                    }
+                }
             }
         }
     }
@@ -2042,6 +2144,7 @@ impl eframe::App for EditorApp {
                         self.canvas_offset = Vec2::ZERO;
                         self.canvas_zoom = 1.0;
                     }
+                    ui.checkbox(&mut self.snap_to_grid, "Snap to 0.5");
                 }
                 ui.separator();
                 if !self.tilemap_mode {
