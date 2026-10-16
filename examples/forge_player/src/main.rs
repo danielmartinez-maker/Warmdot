@@ -14,7 +14,7 @@ use forge_core::{ActionId, DiagnosticLevel, DiagnosticRecord, Guid};
 use forge_input::InputMap;
 use forge_project::{PROJECT_FILE_NAME, Project, SceneCatalog};
 use forge_renderer::{GpuRenderer, RenderOutcome, SpriteInstance, TexturedSprite};
-use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
+use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand, ScriptUiCommand};
 use forge_scene::{
     AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
@@ -293,6 +293,15 @@ impl ApplicationHandler for PlayerApp {
                     &self.assets,
                     self.runtime.take_audio_commands(),
                 );
+                for error in
+                    apply_script_ui_commands(&mut self.ui, self.runtime.take_ui_commands())
+                {
+                    emit_message(
+                        DiagnosticLevel::Error,
+                        "player.ui_command_failed",
+                        error,
+                    );
+                }
                 let scene_requests = self.runtime.take_scene_transition_requests();
                 process_scene_transition_requests(
                     &self.project_root,
@@ -549,6 +558,26 @@ fn load_scene_ui(
     let ui = UiRuntime::new(document)?;
     ui.validate_assets(assets)?;
     Ok(ui)
+}
+
+fn apply_script_ui_commands(
+    ui: &mut UiRuntime,
+    commands: Vec<ScriptUiCommand>,
+) -> Vec<String> {
+    commands
+        .into_iter()
+        .filter_map(|command| match command {
+            ScriptUiCommand::SetText { element_guid, text } => {
+                match ui.set_text(element_guid, &text) {
+                    Ok(true) => None,
+                    Ok(false) => Some(format!(
+                        "script UI target {element_guid} is missing or is not a text widget"
+                    )),
+                    Err(error) => Some(format!("script UI target {element_guid}: {error}")),
+                }
+            },
+        })
+        .collect()
 }
 
 fn ui_commands_to_sprites(commands: Vec<UiDrawCommand>) -> Vec<TexturedSprite> {

@@ -18,6 +18,7 @@ use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument, ScriptPropertyValue};
 pub use forge_scripting::{
     ScriptAudioCommand, ScriptBreakpointHit, ScriptDefinition, ScriptDiagnostic, ScriptError,
+    ScriptUiCommand,
 };
 use forge_scripting::{ScriptEventValue, ScriptHost};
 use forge_world::{RuntimeWorld, WorldError};
@@ -653,6 +654,10 @@ impl GameRuntime {
 
     pub fn take_audio_commands(&mut self) -> Vec<ScriptAudioCommand> {
         self.script_host.take_audio_commands()
+    }
+
+    pub fn take_ui_commands(&mut self) -> Vec<ScriptUiCommand> {
+        self.script_host.take_ui_commands()
     }
 
     /// Queues a UI event for delivery to script callbacks on the next fixed tick.

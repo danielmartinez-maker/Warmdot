@@ -34,6 +34,9 @@ const MAX_AUDIO_GUID_BYTES: usize = 64;
 const MAX_SCENE_GUID_BYTES: usize = 64;
 const MAX_SCENE_REQUESTS_PER_CALLBACK: usize = 16;
 const MAX_SCENE_REQUESTS_PER_TICK: usize = 64;
+const MAX_UI_COMMANDS_PER_CALLBACK: usize = 32;
+const MAX_QUEUED_UI_COMMANDS: usize = 512;
+const MAX_UI_TEXT_BYTES: usize = 4096;
 
 #[derive(Clone, Debug)]
 pub struct ScriptDefinition {
@@ -75,6 +78,11 @@ pub enum ScriptAudioCommand {
     PlayEffect { asset_guid: Guid, bus: String },
     PlayMusic { asset_guid: Guid, looping: bool },
     SetBusVolume { bus: String, decibels: f64 },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ScriptUiCommand {
+    SetText { element_guid: Guid, text: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -139,12 +147,14 @@ struct ScriptCallContext {
     emitted_events: Vec<ScriptEvent>,
     audio_commands: Vec<ScriptAudioCommand>,
     scene_requests: Vec<Guid>,
+    ui_commands: Vec<ScriptUiCommand>,
 }
 
 type SharedContext = Rc<RefCell<Option<ScriptCallContext>>>;
 type SharedEvents = Rc<RefCell<Vec<ScriptEvent>>>;
 type SharedAudioCommands = Rc<RefCell<Vec<ScriptAudioCommand>>>;
 type SharedSceneRequests = Rc<RefCell<Vec<Guid>>>;
+type SharedUiCommands = Rc<RefCell<Vec<ScriptUiCommand>>>;
 
 struct ScriptInstance {
     _lua: Lua,
@@ -182,6 +192,7 @@ impl ScriptInstance {
         pending_events: SharedEvents,
         pending_audio_commands: SharedAudioCommands,
         pending_scene_requests: SharedSceneRequests,
+        pending_ui_commands: SharedUiCommands,
     ) -> Result<Self, ScriptError> {
         if definition.source.len() > MAX_SCRIPT_SOURCE_BYTES {
             return Err(ScriptError::SourceTooLarge(definition.source.len()));
@@ -209,6 +220,7 @@ impl ScriptInstance {
             pending_events.clone(),
             pending_audio_commands,
             pending_scene_requests,
+            pending_ui_commands,
         )?;
         lua.sandbox(true)?;
 
@@ -258,6 +270,7 @@ impl ScriptInstance {
             emitted_events: Vec::new(),
             audio_commands: Vec::new(),
             scene_requests: Vec::new(),
+            ui_commands: Vec::new(),
         };
         *self.context.borrow_mut() = Some(fallback.clone());
         self.interrupt_checkpoints.set(0);
@@ -403,6 +416,7 @@ pub struct ScriptHost {
     pending_events: SharedEvents,
     pending_audio_commands: SharedAudioCommands,
     pending_scene_requests: SharedSceneRequests,
+    pending_ui_commands: SharedUiCommands,
     pending_callbacks: VecDeque<QueuedScriptCallback>,
     pending_update: Option<PendingScriptUpdate>,
     current_breakpoint: Option<ScriptBreakpointHit>,
@@ -423,6 +437,7 @@ impl ScriptHost {
             pending_events: Rc::new(RefCell::new(Vec::new())),
             pending_audio_commands: Rc::new(RefCell::new(Vec::new())),
             pending_scene_requests: Rc::new(RefCell::new(Vec::new())),
+            pending_ui_commands: Rc::new(RefCell::new(Vec::new())),
             pending_callbacks: VecDeque::new(),
             pending_update: None,
             current_breakpoint: None,
@@ -450,6 +465,7 @@ impl ScriptHost {
             self.pending_events.clone(),
             self.pending_audio_commands.clone(),
             self.pending_scene_requests.clone(),
+            self.pending_ui_commands.clone(),
         )?;
         self.instances.insert(definition.object_guid, instance);
         Ok(())
@@ -661,16 +677,25 @@ impl ScriptHost {
             ScriptInvocation::Completed(context) => {
                 let audio_commands = context.audio_commands.clone();
                 let scene_requests = context.scene_requests.clone();
-                let (instances, diagnostics, pending_audio_commands, pending_scene_requests) = (
+                let ui_commands = context.ui_commands.clone();
+                let (
+                    instances,
+                    diagnostics,
+                    pending_audio_commands,
+                    pending_scene_requests,
+                    pending_ui_commands,
+                ) = (
                     &mut self.instances,
                     &mut self.diagnostics,
                     &self.pending_audio_commands,
                     &self.pending_scene_requests,
+                    &self.pending_ui_commands,
                 );
                 if let Some(instance) = instances.get_mut(&object_guid) {
                     if apply_callback_result(instance, world, Ok(context), tick, diagnostics) {
                         pending_audio_commands.borrow_mut().extend(audio_commands);
                         pending_scene_requests.borrow_mut().extend(scene_requests);
+                        pending_ui_commands.borrow_mut().extend(ui_commands);
                     }
                 }
                 None
@@ -737,6 +762,7 @@ impl ScriptHost {
                 self.pending_events.clone(),
                 self.pending_audio_commands.clone(),
                 self.pending_scene_requests.clone(),
+                self.pending_ui_commands.clone(),
             ) {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
@@ -859,6 +885,10 @@ impl ScriptHost {
 
     pub fn take_scene_transition_requests(&mut self) -> Vec<Guid> {
         std::mem::take(&mut *self.pending_scene_requests.borrow_mut())
+    }
+
+    pub fn take_ui_commands(&mut self) -> Vec<ScriptUiCommand> {
+        std::mem::take(&mut *self.pending_ui_commands.borrow_mut())
     }
 
     pub fn record_diagnostic(
@@ -1005,6 +1035,7 @@ fn install_forge_api(
     pending_events: SharedEvents,
     pending_audio_commands: SharedAudioCommands,
     pending_scene_requests: SharedSceneRequests,
+    pending_ui_commands: SharedUiCommands,
 ) -> Result<(), LuaError> {
     let input = lua.create_table()?;
 
@@ -1185,11 +1216,45 @@ fn install_forge_api(
         })?,
     )?;
 
+    let ui = lua.create_table()?;
+    let ui_context = context.clone();
+    let ui_queue = pending_ui_commands;
+    ui.set(
+        "set_text",
+        lua.create_function(move |_, (guid, text): (String, String)| {
+            if guid.len() > MAX_SCENE_GUID_BYTES
+                || text.len() > MAX_UI_TEXT_BYTES
+                || text.contains('\0')
+            {
+                return Ok(false);
+            }
+            let Ok(element_guid) = Guid::from_str(&guid) else {
+                return Ok(false);
+            };
+            let mut slot = ui_context.borrow_mut();
+            let context = slot.as_mut().ok_or_else(inactive_context_error)?;
+            if context.ui_commands.len() >= MAX_UI_COMMANDS_PER_CALLBACK
+                || ui_queue
+                    .borrow()
+                    .len()
+                    .saturating_add(context.ui_commands.len())
+                    >= MAX_QUEUED_UI_COMMANDS
+            {
+                return Ok(false);
+            }
+            context
+                .ui_commands
+                .push(ScriptUiCommand::SetText { element_guid, text });
+            Ok(true)
+        })?,
+    )?;
+
     let forge = lua.create_table()?;
     forge.set("Input", input)?;
     forge.set("Events", events)?;
     forge.set("Audio", audio)?;
     forge.set("Scene", scene)?;
+    forge.set("UI", ui)?;
     lua.globals().set("Forge", forge)?;
     Ok(())
 }
@@ -1669,6 +1734,63 @@ mod tests {
         host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1);
 
         assert!(host.take_audio_commands().is_empty());
+        assert_eq!(host.take_diagnostics().len(), 1);
+    }
+
+    #[test]
+    fn ui_text_commands_commit_only_after_successful_callbacks() {
+        let mut world = RuntimeWorld::new();
+        let first_object = Guid::new();
+        let failed_object = Guid::new();
+        world
+            .spawn(first_object, Transform2D::default(), None)
+            .expect("spawn first scripted object");
+        world
+            .spawn(failed_object, Transform2D::default(), None)
+            .expect("spawn failing scripted object");
+        let element_guid = Guid::new();
+        let mut host = ScriptHost::new();
+        host.attach(
+            ScriptDefinition {
+                object_guid: first_object,
+                asset_guid: Guid::new(),
+                source_path: "Assets/UiCommand.luau".into(),
+                source: format!(
+                    r#"return {{ on_fixed_update = function()
+                        assert(Forge.UI.set_text("{element_guid}", "SCORE 7"))
+                    end }}"#
+                ),
+                properties: BTreeMap::new(),
+            },
+            &mut world,
+        )
+        .expect("attach command script");
+        host.attach(
+            ScriptDefinition {
+                object_guid: failed_object,
+                asset_guid: Guid::new(),
+                source_path: "Assets/FailingUiCommand.luau".into(),
+                source: format!(
+                    r#"return {{ on_fixed_update = function()
+                        Forge.UI.set_text("{element_guid}", "SCORE 99")
+                        error("rollback UI command")
+                    end }}"#
+                ),
+                properties: BTreeMap::new(),
+            },
+            &mut world,
+        )
+        .expect("attach failing command script");
+
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1);
+
+        assert_eq!(
+            host.take_ui_commands(),
+            vec![ScriptUiCommand::SetText {
+                element_guid,
+                text: "SCORE 7".into(),
+            }]
+        );
         assert_eq!(host.take_diagnostics().len(), 1);
     }
 

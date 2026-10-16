@@ -17,6 +17,10 @@ declare namespace Forge
     declare namespace Scene
         function load(sceneGuid: string): boolean
     end
+
+    declare namespace UI
+        function set_text(elementGuid: string, text: string): boolean
+    end
 end
 
 export type ForgeObject = {

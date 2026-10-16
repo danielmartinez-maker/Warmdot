@@ -13,7 +13,9 @@ use forge_audio::{AudioBus, AudioEngine};
 use forge_core::{ActionId, DiagnosticBuffer, DiagnosticLevel, DiagnosticRecord, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::{Project, SceneCatalog};
-use forge_runtime::{BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand};
+use forge_runtime::{
+    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand, ScriptUiCommand,
+};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
@@ -873,6 +875,7 @@ impl EditorApp {
         }
         self.collect_script_diagnostics();
         self.process_preview_audio();
+        self.process_preview_ui_commands();
         self.process_runtime_scene_transitions();
         if self
             .runtime
@@ -900,6 +903,35 @@ impl EditorApp {
         });
         for error in errors {
             self.log_event(DiagnosticLevel::Error, "audio.command_failed", error);
+        }
+    }
+
+    fn process_preview_ui_commands(&mut self) {
+        let commands = self
+            .runtime
+            .as_mut()
+            .map(GameRuntime::take_ui_commands)
+            .unwrap_or_default();
+        let mut errors = Vec::new();
+        if let Some(ui) = self.preview_ui.as_mut() {
+            for command in commands {
+                match command {
+                    ScriptUiCommand::SetText { element_guid, text } => {
+                        match ui.set_text(element_guid, &text) {
+                            Ok(true) => {}
+                            Ok(false) => errors.push(format!(
+                                "script UI target {element_guid} is missing or is not a text widget"
+                            )),
+                            Err(error) => {
+                                errors.push(format!("script UI target {element_guid}: {error}"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for error in errors {
+            self.log_event(DiagnosticLevel::Error, "editor.ui_command_failed", error);
         }
     }
 

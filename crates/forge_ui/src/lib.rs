@@ -418,6 +418,31 @@ impl UiRuntime {
         &self.document
     }
 
+    /// Updates a text widget or button label by its stable authored element ID.
+    ///
+    /// Returns false when the element is missing or is not a text-bearing widget.
+    /// Invalid text and aggregate document-limit violations leave the previous text intact.
+    pub fn set_text(&mut self, element_id: Guid, text: &str) -> Result<bool, UiError> {
+        if text.len() > MAX_UI_TEXT_ELEMENT_BYTES || text.contains('\0') {
+            return Err(UiError(format!(
+                "UI text must not contain NUL and must be at most {MAX_UI_TEXT_ELEMENT_BYTES} bytes"
+            )));
+        }
+        let previous = {
+            let Some(target) = find_text_mut(&mut self.document.elements, element_id) else {
+                return Ok(false);
+            };
+            std::mem::replace(target, text.to_owned())
+        };
+        if let Err(error) = self.document.validate() {
+            if let Some(target) = find_text_mut(&mut self.document.elements, element_id) {
+                *target = previous;
+            }
+            return Err(error);
+        }
+        Ok(true)
+    }
+
     pub fn validate_assets(&self, assets: &AssetCatalog) -> Result<(), UiError> {
         for guid in &self.document.dependencies {
             let record = assets.get(*guid).ok_or_else(|| {
@@ -617,6 +642,22 @@ impl UiRuntime {
         self.button_bounds = buttons;
         Ok(commands)
     }
+}
+
+fn find_text_mut(elements: &mut [UiElement], element_id: Guid) -> Option<&mut String> {
+    for element in elements {
+        if element.id == element_id {
+            return match &mut element.widget {
+                UiWidget::Text { text } => Some(text),
+                UiWidget::Button { label, .. } => Some(label),
+                UiWidget::Panel | UiWidget::Image { .. } => None,
+            };
+        }
+        if let Some(text) = find_text_mut(&mut element.children, element_id) {
+            return Some(text);
+        }
+    }
+    None
 }
 
 fn layout_children(
@@ -1100,6 +1141,51 @@ mod tests {
         assert!(!commands.is_empty());
         assert_eq!(commands[0].rect.width, 1264.0);
         assert!(commands.iter().all(|command| command.rect.x >= 0.0));
+    }
+
+    #[test]
+    fn updates_text_widgets_by_id_and_rolls_back_invalid_replacements() {
+        let mut text = UiElement {
+            id: Guid::new(),
+            widget: UiWidget::Text {
+                text: "SCORE 0".into(),
+            },
+            layout: UiLayout::default(),
+            style: UiStyle::default(),
+            children: Vec::new(),
+        };
+        let id = text.id;
+        let mut runtime = UiRuntime::new(document(vec![text.clone()])).expect("create UI runtime");
+
+        assert!(runtime.set_text(id, "SCORE 12").expect("update score text"));
+        assert!(matches!(
+            &runtime.document().elements[0].widget,
+            UiWidget::Text { text } if text == "SCORE 12"
+        ));
+        assert!(!runtime
+            .set_text(Guid::new(), "missing")
+            .expect("missing UI ID is ignored"));
+        assert!(runtime
+            .set_text(id, &"x".repeat(MAX_UI_TEXT_ELEMENT_BYTES + 1))
+            .is_err());
+        assert!(matches!(
+            &runtime.document().elements[0].widget,
+            UiWidget::Text { text } if text == "SCORE 12"
+        ));
+
+        text.widget = UiWidget::Button {
+            label: "START".into(),
+            event: "start".into(),
+        };
+        let button_id = text.id;
+        let mut runtime = UiRuntime::new(document(vec![text])).expect("create button UI runtime");
+        assert!(runtime
+            .set_text(button_id, "CONTINUE")
+            .expect("update button label"));
+        assert!(matches!(
+            &runtime.document().elements[0].widget,
+            UiWidget::Button { label, .. } if label == "CONTINUE"
+        ));
     }
 
     #[test]
