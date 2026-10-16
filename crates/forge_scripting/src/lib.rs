@@ -1434,7 +1434,7 @@ mod tests {
     use forge_scene::ScriptPropertyValue;
     use forge_world::{RuntimeWorld, Transform2D};
 
-    use super::{ScriptAudioCommand, ScriptDefinition, ScriptHost};
+    use super::{ScriptAudioCommand, ScriptDefinition, ScriptHost, ScriptUiCommand};
 
     #[test]
     fn fixed_update_changes_only_its_authored_object_and_reads_properties() {
