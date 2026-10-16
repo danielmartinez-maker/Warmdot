@@ -72,12 +72,23 @@ struct CanvasSprite {
     order: i32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TransformGizmoMode {
+    Move,
+    Rotate,
+    Scale,
+}
+
 #[derive(Clone, Copy)]
-struct MoveGizmoDrag {
+struct TransformGizmoDrag {
     object_guid: Guid,
     pointer_start: Pos2,
-    translation_start: [f32; 2],
-    translation_preview: [f32; 2],
+    pointer_center: Pos2,
+    pointer_start_angle: f32,
+    pointer_start_radius: f32,
+    transform_start: AuthoredTransform,
+    transform_preview: AuthoredTransform,
+    mode: TransformGizmoMode,
 }
 
 struct EditorApp {
@@ -104,7 +115,8 @@ struct EditorApp {
     hidden_layers: BTreeSet<i32>,
     canvas_offset: Vec2,
     canvas_zoom: f32,
-    move_gizmo_drag: Option<MoveGizmoDrag>,
+    transform_gizmo_drag: Option<TransformGizmoDrag>,
+    gizmo_mode: TransformGizmoMode,
     snap_to_grid: bool,
 }
 
@@ -149,7 +161,8 @@ impl EditorApp {
             hidden_layers: BTreeSet::new(),
             canvas_offset: Vec2::ZERO,
             canvas_zoom: 1.0,
-            move_gizmo_drag: None,
+            transform_gizmo_drag: None,
+            gizmo_mode: TransformGizmoMode::Move,
             snap_to_grid: false,
         }
     }
@@ -1987,7 +2000,7 @@ impl EditorApp {
     fn show_canvas(&mut self, ui: &mut egui::Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         if self.runtime.is_some() {
-            self.move_gizmo_drag = None;
+            self.transform_gizmo_drag = None;
         }
         let pixels_per_unit = 24.0 * self.canvas_zoom;
         let origin_before_drag = rect.center() + self.canvas_offset;
@@ -2016,40 +2029,73 @@ impl EditorApp {
                             .contains(pointer)
                             .then_some((
                                 (sprite.layer, sprite.order, object.object_guid),
-                                (object.object_guid, transform.translation),
+                                (object.object_guid, transform, center),
                             ))
                     })
                     .max_by_key(|(draw_order, _)| *draw_order)
                     .map(|(_, target)| target)
             });
-            self.move_gizmo_drag = target.map(|(object_guid, translation)| {
+            self.transform_gizmo_drag = target.map(|(object_guid, transform, pointer_center)| {
                 self.selected = Some(object_guid);
                 self.selected_asset = None;
                 let pointer_start = response
                     .interact_pointer_pos()
                     .unwrap_or(origin_before_drag);
-                MoveGizmoDrag {
+                let pointer_offset = pointer_start - pointer_center;
+                TransformGizmoDrag {
                     object_guid,
                     pointer_start,
-                    translation_start: translation,
-                    translation_preview: translation,
+                    pointer_center,
+                    pointer_start_angle: pointer_offset.y.atan2(pointer_offset.x),
+                    pointer_start_radius: pointer_offset.length().max(1.0),
+                    transform_start: transform,
+                    transform_preview: transform,
+                    mode: self.gizmo_mode,
                 }
             });
         }
         if response.dragged() {
             if let Some(pointer) = response.interact_pointer_pos() {
-                if let Some(drag) = self.move_gizmo_drag.as_mut() {
-                    let delta = (pointer - drag.pointer_start) / pixels_per_unit;
-                    let mut translation = [
-                        drag.translation_start[0] + delta.x,
-                        drag.translation_start[1] + delta.y,
-                    ];
-                    if self.snap_to_grid {
-                        for value in &mut translation {
-                            *value = (*value / 0.5).round() * 0.5;
+                if let Some(drag) = self.transform_gizmo_drag.as_mut() {
+                    let mut preview = drag.transform_start;
+                    match drag.mode {
+                        TransformGizmoMode::Move => {
+                            let delta = (pointer - drag.pointer_start) / pixels_per_unit;
+                            preview.translation = [
+                                drag.transform_start.translation[0] + delta.x,
+                                drag.transform_start.translation[1] + delta.y,
+                            ];
+                            if self.snap_to_grid {
+                                for value in &mut preview.translation {
+                                    *value = (*value / 0.5).round() * 0.5;
+                                }
+                            }
+                        }
+                        TransformGizmoMode::Rotate => {
+                            let pointer_offset = pointer - drag.pointer_center;
+                            let angle = pointer_offset.y.atan2(pointer_offset.x);
+                            preview.rotation_radians = drag.transform_start.rotation_radians
+                                + wrap_radians(angle - drag.pointer_start_angle);
+                            if self.snap_to_grid {
+                                let step = std::f32::consts::PI / 12.0;
+                                preview.rotation_radians =
+                                    (preview.rotation_radians / step).round() * step;
+                            }
+                        }
+                        TransformGizmoMode::Scale => {
+                            let pointer_offset = pointer - drag.pointer_center;
+                            let factor =
+                                (pointer_offset.length() / drag.pointer_start_radius).clamp(0.01, 100.0);
+                            for value in &mut preview.scale {
+                                let sign = value.signum();
+                                *value = (value.abs() * factor).clamp(0.01, 10_000.0) * sign;
+                                if self.snap_to_grid {
+                                    *value = (*value * 10.0).round() / 10.0;
+                                }
+                            }
                         }
                     }
-                    drag.translation_preview = translation;
+                    drag.transform_preview = preview;
                 } else {
                     self.canvas_offset += ui.input(|input| input.pointer.delta());
                 }
@@ -2120,12 +2166,13 @@ impl EditorApp {
         if self.runtime.is_none() {
             objects.retain(|sprite| !self.hidden_layers.contains(&sprite.layer));
         }
-        if let Some(drag) = self.move_gizmo_drag {
+        if let Some(drag) = self.transform_gizmo_drag {
             if let Some(sprite) = objects
                 .iter_mut()
                 .find(|sprite| sprite.object_guid == drag.object_guid)
             {
-                sprite.translation = drag.translation_preview;
+                sprite.translation = drag.transform_preview.translation;
+                sprite.scale = drag.transform_preview.scale;
             }
         }
         for sprite in &objects {
@@ -2143,14 +2190,44 @@ impl EditorApp {
             if self.selected == Some(sprite.object_guid) {
                 painter.rect_filled(object_rect.expand(4.0), 0.0, Color32::YELLOW);
                 if self.runtime.is_none() {
-                    painter.line_segment(
-                        [center, center + Vec2::new(30.0, 0.0)],
-                        Stroke::new(2.5, Color32::from_rgb(240, 90, 80)),
-                    );
-                    painter.line_segment(
-                        [center, center + Vec2::new(0.0, 30.0)],
-                        Stroke::new(2.5, Color32::from_rgb(90, 220, 130)),
-                    );
+                    match self.gizmo_mode {
+                        TransformGizmoMode::Move => {
+                            painter.line_segment(
+                                [center, center + Vec2::new(30.0, 0.0)],
+                                Stroke::new(2.5, Color32::from_rgb(240, 90, 80)),
+                            );
+                            painter.line_segment(
+                                [center, center + Vec2::new(0.0, 30.0)],
+                                Stroke::new(2.5, Color32::from_rgb(90, 220, 130)),
+                            );
+                        }
+                        TransformGizmoMode::Rotate => {
+                            let radius = extent.length() * 0.55 + 12.0;
+                            painter.circle_stroke(
+                                center,
+                                radius,
+                                Stroke::new(2.0, Color32::from_rgb(100, 170, 255)),
+                            );
+                            painter.circle_filled(
+                                center + Vec2::new(0.0, -radius),
+                                5.0,
+                                Color32::from_rgb(100, 170, 255),
+                            );
+                        }
+                        TransformGizmoMode::Scale => {
+                            painter.rect_stroke(
+                                object_rect.expand(8.0),
+                                0.0,
+                                Stroke::new(2.0, Color32::from_rgb(255, 180, 70)),
+                                egui::StrokeKind::Middle,
+                            );
+                            painter.rect_filled(
+                                object_rect.right_bottom() + Vec2::splat(8.0),
+                                0.0,
+                                Color32::from_rgb(255, 180, 70),
+                            );
+                        }
+                    }
                     painter.circle_filled(center, 4.0, Color32::WHITE);
                 }
             }
@@ -2181,8 +2258,9 @@ impl EditorApp {
             rect.right_top() + Vec2::new(-12.0, 12.0),
             egui::Align2::RIGHT_TOP,
             format!(
-                "{:.0}%  •  drag objects to move, empty space to pan",
-                self.canvas_zoom * 100.0
+                "{:.0}%  •  drag the selected object to {:?}, empty space to pan",
+                self.canvas_zoom * 100.0,
+                self.gizmo_mode
             ),
             egui::FontId::proportional(13.0),
             Color32::LIGHT_GRAY,
@@ -2211,8 +2289,8 @@ impl EditorApp {
             }
         }
         if response.drag_stopped() {
-            if let Some(drag) = self.move_gizmo_drag.take() {
-                if drag.translation_preview != drag.translation_start {
+            if let Some(drag) = self.transform_gizmo_drag.take() {
+                if drag.transform_preview != drag.transform_start {
                     if let Some(mut replacement) = self
                         .scene
                         .objects
@@ -2220,12 +2298,14 @@ impl EditorApp {
                         .find(|object| object.object_guid == drag.object_guid)
                         .cloned()
                     {
-                        if let Some(local_translation) = world_translation_to_local(
+                        let before = replacement.clone();
+                        if let Some(local_transform) = world_transform_to_local(
                             &self.scene,
                             drag.object_guid,
-                            drag.translation_preview,
+                            drag.transform_preview,
                         ) {
-                            replacement.transform.translation = local_translation;
+                            replacement.transform = local_transform;
+                            record_prefab_overrides(&before, &mut replacement);
                             if let Err(error) =
                                 self.history.replace_object(&mut self.scene, replacement)
                             {
@@ -2233,7 +2313,7 @@ impl EditorApp {
                             }
                         } else {
                             self.status =
-                                "Cannot move this object through a singular parent transform."
+                                "This transform cannot be represented in the selected parent."
                                     .into();
                         }
                     }
@@ -2372,31 +2452,79 @@ fn scene_hierarchy_rows(scene: &SceneDocument) -> Vec<(Guid, String, usize)> {
     rows
 }
 
-fn world_translation_to_local(
+fn world_transform_to_local(
     scene: &SceneDocument,
     object_guid: Guid,
-    world_translation: [f32; 2],
-) -> Option<[f32; 2]> {
+    world: AuthoredTransform,
+) -> Option<AuthoredTransform> {
     let object = scene
         .objects
         .iter()
         .find(|object| object.object_guid == object_guid)?;
     let Some(parent_guid) = object.parent_guid else {
-        return Some(world_translation);
+        return Some(world);
     };
     let parent = scene.world_transform(parent_guid)?;
     if parent.scale.iter().any(|value| value.abs() <= f32::EPSILON) {
         return None;
     }
-    let (sin, cos) = parent.rotation_radians.sin_cos();
+    let (parent_sin, parent_cos) = parent.rotation_radians.sin_cos();
     let delta = [
-        world_translation[0] - parent.translation[0],
-        world_translation[1] - parent.translation[1],
+        world.translation[0] - parent.translation[0],
+        world.translation[1] - parent.translation[1],
     ];
-    Some([
-        (cos * delta[0] + sin * delta[1]) / parent.scale[0],
-        (-sin * delta[0] + cos * delta[1]) / parent.scale[1],
-    ])
+    let translation = [
+        (parent_cos * delta[0] + parent_sin * delta[1]) / parent.scale[0],
+        (-parent_sin * delta[0] + parent_cos * delta[1]) / parent.scale[1],
+    ];
+    let (world_sin, world_cos) = world.rotation_radians.sin_cos();
+    let world_x = [world_cos * world.scale[0], world_sin * world.scale[0]];
+    let world_y = [-world_sin * world.scale[1], world_cos * world.scale[1]];
+    let local_x = [
+        (parent_cos * world_x[0] + parent_sin * world_x[1]) / parent.scale[0],
+        (-parent_sin * world_x[0] + parent_cos * world_x[1]) / parent.scale[1],
+    ];
+    let local_y = [
+        (parent_cos * world_y[0] + parent_sin * world_y[1]) / parent.scale[0],
+        (-parent_sin * world_y[0] + parent_cos * world_y[1]) / parent.scale[1],
+    ];
+    let x_length = local_x[0].hypot(local_x[1]);
+    let y_length = local_y[0].hypot(local_y[1]);
+    let dot = local_x[0] * local_y[0] + local_x[1] * local_y[1];
+    if x_length > f32::EPSILON
+        && y_length > f32::EPSILON
+        && dot.abs() > 1.0e-4 * x_length * y_length
+    {
+        return None;
+    }
+    let determinant = local_x[0] * local_y[1] - local_x[1] * local_y[0];
+    let (rotation_radians, scale) = if x_length > f32::EPSILON {
+        (
+            local_x[1].atan2(local_x[0]),
+            [x_length, determinant / x_length],
+        )
+    } else if y_length > f32::EPSILON {
+        (
+            local_y[1].atan2(local_y[0]) - std::f32::consts::FRAC_PI_2,
+            [0.0, y_length],
+        )
+    } else {
+        (0.0, [0.0, 0.0])
+    };
+    let local = AuthoredTransform {
+        translation,
+        rotation_radians,
+        scale,
+    };
+    (local.translation.iter().all(|value| value.is_finite())
+        && local.scale.iter().all(|value| value.is_finite())
+        && local.rotation_radians.is_finite())
+    .then_some(local)
+}
+
+fn wrap_radians(angle: f32) -> f32 {
+    (angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI
 }
 
 fn object_asset_dependencies(object: &SceneObject) -> Vec<Guid> {
@@ -2750,7 +2878,10 @@ impl eframe::App for EditorApp {
                         self.canvas_offset = Vec2::ZERO;
                         self.canvas_zoom = 1.0;
                     }
-                    ui.checkbox(&mut self.snap_to_grid, "Snap to 0.5");
+                    ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Move, "Move");
+                    ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Rotate, "Rotate");
+                    ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Scale, "Scale");
+                    ui.checkbox(&mut self.snap_to_grid, "Snap");
                 }
                 ui.separator();
                 if !self.tilemap_mode {
