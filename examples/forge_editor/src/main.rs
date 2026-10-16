@@ -254,12 +254,9 @@ impl EditorApp {
                 }
                 let name = record.relative_path.clone();
                 match catalog.load_png(guid) {
-                    Ok(texture) => updates.push((
-                        guid,
-                        name,
-                        [texture.width, texture.height],
-                        texture,
-                    )),
+                    Ok(texture) => {
+                        updates.push((guid, name, [texture.width, texture.height], texture))
+                    },
                     Err(error) => errors.push(error.to_string()),
                 }
             }
@@ -753,7 +750,11 @@ impl EditorApp {
             .as_ref()
             .map(|tilemap| tilemap.document.tileset_guid)
             .expect("tilemap is present");
-        let texture_size = self.texture_sizes.get(&texture_guid).copied().unwrap_or([0, 0]);
+        let texture_size = self
+            .texture_sizes
+            .get(&texture_guid)
+            .copied()
+            .unwrap_or([0, 0]);
         let source_tile_size = self
             .tilemap
             .as_ref()
@@ -825,10 +826,7 @@ impl EditorApp {
             tilemap.selected_tile = tilemap.selected_tile.min(tile_count - 1);
             ui.horizontal(|ui| {
                 ui.label("Tile index");
-                ui.add(
-                    egui::DragValue::new(&mut tilemap.selected_tile)
-                        .range(0..=tile_count - 1),
-                );
+                ui.add(egui::DragValue::new(&mut tilemap.selected_tile).range(0..=tile_count - 1));
             });
             ui.label(format!("{tile_count} tiles in the selected PNG."));
         } else {
@@ -862,7 +860,11 @@ impl EditorApp {
         };
         let tileset_guid = tilemap_state.document.tileset_guid;
         let texture_id = self.textures.get(&tileset_guid).map(|texture| texture.id());
-        let texture_size = self.texture_sizes.get(&tileset_guid).copied().unwrap_or([0, 0]);
+        let texture_size = self
+            .texture_sizes
+            .get(&tileset_guid)
+            .copied()
+            .unwrap_or([0, 0]);
         let tilemap = self.tilemap.as_mut().expect("tilemap was checked above");
         let cell_size = tilemap.document.tile_size;
         let texture_tile_size = tilemap.document.texture_tile_size;
@@ -927,7 +929,12 @@ impl EditorApp {
                     ((column + 1) * texture_tile_size[0]) as f32 / texture_size[0] as f32,
                     ((row + 1) * texture_tile_size[1]) as f32 / texture_size[1] as f32,
                 );
-                painter.image(texture_id, tile_rect, Rect::from_min_max(uv_min, uv_max), Color32::WHITE);
+                painter.image(
+                    texture_id,
+                    tile_rect,
+                    Rect::from_min_max(uv_min, uv_max),
+                    Color32::WHITE,
+                );
             } else {
                 let fill = if cell.solid {
                     Color32::from_rgb(170, 116, 50)
@@ -938,10 +945,22 @@ impl EditorApp {
             }
             if cell.solid {
                 let color = Color32::from_rgba_unmultiplied(255, 190, 70, 160);
-                painter.line_segment([tile_rect.left_top(), tile_rect.right_top()], Stroke::new(2.0, color));
-                painter.line_segment([tile_rect.right_top(), tile_rect.right_bottom()], Stroke::new(2.0, color));
-                painter.line_segment([tile_rect.right_bottom(), tile_rect.left_bottom()], Stroke::new(2.0, color));
-                painter.line_segment([tile_rect.left_bottom(), tile_rect.left_top()], Stroke::new(2.0, color));
+                painter.line_segment(
+                    [tile_rect.left_top(), tile_rect.right_top()],
+                    Stroke::new(2.0, color),
+                );
+                painter.line_segment(
+                    [tile_rect.right_top(), tile_rect.right_bottom()],
+                    Stroke::new(2.0, color),
+                );
+                painter.line_segment(
+                    [tile_rect.right_bottom(), tile_rect.left_bottom()],
+                    Stroke::new(2.0, color),
+                );
+                painter.line_segment(
+                    [tile_rect.left_bottom(), tile_rect.left_top()],
+                    Stroke::new(2.0, color),
+                );
             }
         }
         for (coordinate, cell) in &tilemap.pending_stroke {
@@ -983,8 +1002,10 @@ impl EditorApp {
                     x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
                     y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
                 };
-                let primary_down = ui.input(|input| input.pointer.button_down(egui::PointerButton::Primary));
-                let secondary_down = ui.input(|input| input.pointer.button_down(egui::PointerButton::Secondary));
+                let primary_down =
+                    ui.input(|input| input.pointer.button_down(egui::PointerButton::Primary));
+                let secondary_down =
+                    ui.input(|input| input.pointer.button_down(egui::PointerButton::Secondary));
                 if primary_down {
                     let cell = if tilemap.erase_mode {
                         None
@@ -1285,11 +1306,7 @@ impl eframe::App for EditorApp {
                 } else {
                     self.history.is_dirty()
                 };
-                ui.label(if changed {
-                    "Unsaved changes"
-                } else {
-                    "Saved"
-                });
+                ui.label(if changed { "Unsaved changes" } else { "Saved" });
                 if !self.status.is_empty() {
                     ui.separator();
                     ui.label(&self.status);
