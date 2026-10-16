@@ -191,6 +191,7 @@ fn scene_sprite(
         },
         sprite: Some(AuthoredSprite {
             asset: None,
+            animation_clip: None,
             size,
             tint,
             uv_rect: [0.0, 0.0, 1.0, 1.0],
