@@ -752,3 +752,38 @@ fn default_pivot() -> [f32; 2] {
 fn default_looping() -> bool {
     true
 }
+
+
+#[cfg(test)]
+mod script_asset_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn catalogs_and_reloads_luau_assets_without_changing_their_guid() {
+        let project = tempfile::tempdir().expect("temporary project");
+        let assets_dir = project.path().join("Assets");
+        fs::create_dir_all(&assets_dir).expect("Assets folder");
+        let script_path = assets_dir.join("Player.luau");
+        fs::write(&script_path, "return { on_fixed_update = function() end }")
+            .expect("write first script");
+
+        let mut catalog = AssetCatalog::open(project.path()).expect("open asset catalog");
+        let record = catalog
+            .entries()
+            .find(|record| record.relative_path == "Assets/Player.luau")
+            .expect("script asset is indexed");
+        assert_eq!(record.kind, AssetKind::Script);
+        let guid = record.guid;
+        let loaded = catalog.load_script(guid).expect("load script source");
+        assert_eq!(loaded.guid, guid);
+        assert_eq!(loaded.relative_path, "Assets/Player.luau");
+        assert_eq!(loaded.source, "return { on_fixed_update = function() end }");
+
+        fs::write(&script_path, "return { on_fixed_update = function(self, dt) end }")
+            .expect("write updated script");
+        let changes = catalog.refresh().expect("refresh asset catalog");
+        assert!(changes.iter().any(|change| change.guid == guid));
+        assert_eq!(catalog.load_script(guid).expect("reload source").guid, guid);
+    }
+}

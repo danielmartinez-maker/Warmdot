@@ -18,3 +18,5 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Type-check workspace
         run: cargo check --workspace
+      - name: Run workspace tests
+        run: cargo test --workspace
