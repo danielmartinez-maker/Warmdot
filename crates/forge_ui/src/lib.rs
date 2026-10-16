@@ -223,11 +223,19 @@ impl UiDocument {
             )));
         }
         if self.name.trim().is_empty() || self.name.len() > 256 {
-            return Err(UiError("UI document name must be non-empty and at most 256 bytes".into()));
+            return Err(UiError(
+                "UI document name must be non-empty and at most 256 bytes".into(),
+            ));
         }
         let mut dependencies = BTreeSet::new();
-        if self.dependencies.iter().any(|guid| !dependencies.insert(*guid)) {
-            return Err(UiError("UI document has a duplicate asset dependency".into()));
+        if self
+            .dependencies
+            .iter()
+            .any(|guid| !dependencies.insert(*guid))
+        {
+            return Err(UiError(
+                "UI document has a duplicate asset dependency".into(),
+            ));
         }
         validate_layout(&self.root_layout)?;
         let mut state = ValidationState {
@@ -256,7 +264,9 @@ fn validate_elements(
         return Ok(());
     }
     if depth > MAX_UI_DEPTH {
-        return Err(UiError(format!("UI tree exceeds the {MAX_UI_DEPTH}-level depth limit")));
+        return Err(UiError(format!(
+            "UI tree exceeds the {MAX_UI_DEPTH}-level depth limit"
+        )));
     }
     for element in elements {
         state.count = state.count.saturating_add(1);
@@ -266,7 +276,10 @@ fn validate_elements(
             )));
         }
         if !state.ids.insert(element.id) {
-            return Err(UiError(format!("UI element ID {} is duplicated", element.id)));
+            return Err(UiError(format!(
+                "UI element ID {} is duplicated",
+                element.id
+            )));
         }
         validate_layout(&element.layout)?;
         validate_style(&element.style)?;
@@ -312,9 +325,7 @@ fn validate_text(text: &str, state: &mut ValidationState<'_>) -> Result<(), UiEr
 fn validate_layout(layout: &UiLayout) -> Result<(), UiError> {
     let valid_unit = |value: f32| value.is_finite() && (0.0..=1.0).contains(&value);
     let valid_offset = |value: f32| value.is_finite() && value.abs() <= MAX_UI_COORDINATE;
-    let valid_size = |value: f32| {
-        value.is_finite() && (0.0..=MAX_UI_COORDINATE).contains(&value)
-    };
+    let valid_size = |value: f32| value.is_finite() && (0.0..=MAX_UI_COORDINATE).contains(&value);
     if !layout.anchor_min.iter().copied().all(valid_unit)
         || !layout.anchor_max.iter().copied().all(valid_unit)
         || layout.anchor_min[0] > layout.anchor_max[0]
@@ -410,7 +421,9 @@ impl UiRuntime {
     pub fn validate_assets(&self, assets: &AssetCatalog) -> Result<(), UiError> {
         for guid in &self.document.dependencies {
             let record = assets.get(*guid).ok_or_else(|| {
-                UiError(format!("UI dependency {guid} is not in the project asset catalog"))
+                UiError(format!(
+                    "UI dependency {guid} is not in the project asset catalog"
+                ))
             })?;
             if record.kind != AssetKind::Png {
                 return Err(UiError(format!(
@@ -418,9 +431,9 @@ impl UiRuntime {
                     record.kind
                 )));
             }
-            assets
-                .load_png(*guid)
-                .map_err(|error| UiError(format!("UI image {guid} could not be loaded: {error}")))?;
+            assets.load_png(*guid).map_err(|error| {
+                UiError(format!("UI image {guid} could not be loaded: {error}"))
+            })?;
         }
         Ok(())
     }
@@ -623,7 +636,9 @@ fn layout_children(
         return Ok(());
     }
     if depth > MAX_UI_DEPTH {
-        return Err(UiError(format!("UI tree exceeds the {MAX_UI_DEPTH}-level depth limit")));
+        return Err(UiError(format!(
+            "UI tree exceeds the {MAX_UI_DEPTH}-level depth limit"
+        )));
     }
     let horizontal = direction == UiLayoutDirection::Horizontal;
     let vertical = direction == UiLayoutDirection::Vertical;
@@ -642,7 +657,10 @@ fn layout_children(
             element.layout.preferred_size[axis].max(element.layout.min_size[axis])
         })
         .sum::<f32>();
-    let total_grow = elements.iter().map(|element| element.layout.grow).sum::<f32>();
+    let total_grow = elements
+        .iter()
+        .map(|element| element.layout.grow)
+        .sum::<f32>();
     let grow_space = (available_main - base_total).max(0.0);
 
     let mut cursor = if horizontal {
@@ -774,12 +792,7 @@ fn append_element_draw(
         height: (rect.height - element.layout.padding * 2.0).max(0.0),
     };
     match &element.widget {
-        UiWidget::Panel => add(
-            commands,
-            rect,
-            element.style.background_color,
-            None,
-        )?,
+        UiWidget::Panel => add(commands, rect, element.style.background_color, None)?,
         UiWidget::Image { asset } => add(
             commands,
             rect,
@@ -819,11 +832,7 @@ fn append_element_draw(
 }
 
 fn visible_color(color: [f32; 4]) -> [f32; 4] {
-    if color[3] > 0.0 {
-        color
-    } else {
-        [1.0; 4]
-    }
+    if color[3] > 0.0 { color } else { [1.0; 4] }
 }
 
 fn draw_text(
@@ -1008,7 +1017,10 @@ mod tests {
         let loaded = UiDocument::from_json(&json).expect("load UI document");
         assert_eq!(loaded.schema_version, CURRENT_UI_SCHEMA);
         assert_eq!(loaded.elements.len(), 1);
-        assert!(matches!(&loaded.elements[0].widget, UiWidget::Button { .. }));
+        assert!(matches!(
+            &loaded.elements[0].widget,
+            UiWidget::Button { .. }
+        ));
     }
 
     #[test]
@@ -1037,7 +1049,13 @@ mod tests {
         let click = runtime
             .route_pointer_up([24.0, 24.0], 640, 360)
             .expect("route pointer up");
-        assert_eq!(click.event, Some(UiButtonEvent { source_id: id, name: "start".into() }));
+        assert_eq!(
+            click.event,
+            Some(UiButtonEvent {
+                source_id: id,
+                name: "start".into()
+            })
+        );
 
         let keyboard = runtime
             .route_key(UiKey::Activate, 640, 360)
@@ -1065,7 +1083,9 @@ mod tests {
             },
             children: vec![UiElement {
                 id: Guid::new(),
-                widget: UiWidget::Text { text: "HP 3/3".into() },
+                widget: UiWidget::Text {
+                    text: "HP 3/3".into(),
+                },
                 layout: UiLayout {
                     preferred_size: [120.0, 24.0],
                     ..UiLayout::default()

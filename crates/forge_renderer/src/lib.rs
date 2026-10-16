@@ -244,7 +244,12 @@ impl GpuRenderer {
         let ui_camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("forge2d-ui-camera-uniform"),
             contents: bytemuck::bytes_of(&CameraUniform {
-                viewport: [configuration.width as f32, configuration.height as f32, 1.0, 1.0],
+                viewport: [
+                    configuration.width as f32,
+                    configuration.height as f32,
+                    1.0,
+                    1.0,
+                ],
                 camera: [
                     configuration.width as f32 * 0.5,
                     configuration.height as f32 * 0.5,
@@ -630,10 +635,7 @@ impl GpuRenderer {
             .transpose()?
             .unwrap_or(0);
         if let Some(ui_sprites) = ui_sprites {
-            for asset in ui_sprites
-                .iter()
-                .filter_map(|sprite| sprite.texture_asset)
-            {
+            for asset in ui_sprites.iter().filter_map(|sprite| sprite.texture_asset) {
                 if !self.textures.contains_key(&asset) {
                     return Err(RendererError::UnknownTexture(asset));
                 }
@@ -666,8 +668,11 @@ impl GpuRenderer {
             self.instance_capacity = capacity;
         }
         if required_bytes != 0 {
-            self.queue
-                .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&all_instances));
+            self.queue.write_buffer(
+                &self.instance_buffer,
+                0,
+                bytemuck::cast_slice(&all_instances),
+            );
         }
         let uniform = CameraUniform {
             viewport: [
@@ -699,11 +704,8 @@ impl GpuRenderer {
                 1.0,
             ],
         };
-        self.queue.write_buffer(
-            &self.ui_camera_buffer,
-            0,
-            bytemuck::bytes_of(&ui_uniform),
-        );
+        self.queue
+            .write_buffer(&self.ui_camera_buffer, 0, bytemuck::bytes_of(&ui_uniform));
 
         let surface_texture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture) => texture,
@@ -768,14 +770,16 @@ impl GpuRenderer {
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
             let mut start = 0;
             while start < world_instance_count {
-                let asset = texture_assets
-                    .and_then(|assets| assets.get(start as usize).copied().flatten());
+                let asset =
+                    texture_assets.and_then(|assets| assets.get(start as usize).copied().flatten());
                 let bind_group = match asset {
-                    Some(guid) => &self
-                        .textures
-                        .get(&guid)
-                        .expect("texture assets were validated before rendering")
-                        .bind_group,
+                    Some(guid) => {
+                        &self
+                            .textures
+                            .get(&guid)
+                            .expect("texture assets were validated before rendering")
+                            .bind_group
+                    },
                     None => &self.white_bind_group,
                 };
                 pass.set_bind_group(1, bind_group, &[]);
@@ -797,11 +801,13 @@ impl GpuRenderer {
                 while ui_start < ui_instance_count {
                     let asset = ui_sprites[ui_start as usize].texture_asset;
                     let bind_group = match asset {
-                        Some(guid) => &self
-                            .textures
-                            .get(&guid)
-                            .expect("UI textures were validated before rendering")
-                            .bind_group,
+                        Some(guid) => {
+                            &self
+                                .textures
+                                .get(&guid)
+                                .expect("UI textures were validated before rendering")
+                                .bind_group
+                        },
                         None => &self.white_bind_group,
                     };
                     pass.set_bind_group(1, bind_group, &[]);

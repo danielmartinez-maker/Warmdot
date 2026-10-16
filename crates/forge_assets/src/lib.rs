@@ -1019,7 +1019,6 @@ mod audio_asset_tests {
     }
 }
 
-
 #[cfg(test)]
 mod ui_asset_tests {
     use super::*;
@@ -1049,6 +1048,12 @@ mod ui_asset_tests {
             .expect("write updated UI document");
         let changes = catalog.refresh().expect("refresh UI catalog");
         assert!(changes.iter().any(|change| change.guid == guid));
-        assert!(catalog.load_ui_source(guid).unwrap().source.contains("HUD v2"));
+        assert!(
+            catalog
+                .load_ui_source(guid)
+                .unwrap()
+                .source
+                .contains("HUD v2")
+        );
     }
 }

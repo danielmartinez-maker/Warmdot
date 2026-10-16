@@ -13,12 +13,12 @@ use forge_core::Guid;
 use forge_project::{PROJECT_FILE_NAME, Project, SceneCatalog};
 use forge_renderer::{GpuRenderer, RenderOutcome, SpriteInstance, TexturedSprite};
 use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
-use forge_ui::{UiButtonEvent, UiDrawCommand, UiInputResult, UiKey, UiRuntime};
 use forge_scene::{
     AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
 };
 use forge_tilemap::{TileCell, TileMapDocument};
+use forge_ui::{UiButtonEvent, UiDrawCommand, UiInputResult, UiKey, UiRuntime};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -128,11 +128,10 @@ impl ApplicationHandler for PlayerApp {
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = [position.x as f32, position.y as f32];
                 let size = state.window.inner_size();
-                match self.ui.route_pointer_move(
-                    self.cursor_position,
-                    size.width,
-                    size.height,
-                ) {
+                match self
+                    .ui
+                    .route_pointer_move(self.cursor_position, size.width, size.height)
+                {
                     Ok(result) => submit_ui_event(&mut self.runtime, result),
                     Err(error) => eprintln!("game UI pointer move failed: {error}"),
                 }
@@ -149,17 +148,11 @@ impl ApplicationHandler for PlayerApp {
             } => {
                 let size = state.window.inner_size();
                 let result = if button_state == winit::event::ElementState::Pressed {
-                    self.ui.route_pointer_down(
-                        self.cursor_position,
-                        size.width,
-                        size.height,
-                    )
+                    self.ui
+                        .route_pointer_down(self.cursor_position, size.width, size.height)
                 } else {
-                    self.ui.route_pointer_up(
-                        self.cursor_position,
-                        size.width,
-                        size.height,
-                    )
+                    self.ui
+                        .route_pointer_up(self.cursor_position, size.width, size.height)
                 };
                 match result {
                     Ok(result) => submit_ui_event(&mut self.runtime, result),
@@ -228,10 +221,7 @@ impl ApplicationHandler for PlayerApp {
                     );
                 }
                 let window_size = state.window.inner_size();
-                let ui_sprites = match self
-                    .ui
-                    .draw_commands(window_size.width, window_size.height)
-                {
+                let ui_sprites = match self.ui.draw_commands(window_size.width, window_size.height) {
                     Ok(commands) => ui_commands_to_sprites(commands),
                     Err(error) => {
                         eprintln!("game UI draw extraction failed: {error}");
@@ -384,7 +374,10 @@ fn validate_scene_dependencies(
     Ok(())
 }
 
-fn load_scene_ui(scene: &SceneDocument, assets: &AssetCatalog) -> Result<UiRuntime, Box<dyn Error>> {
+fn load_scene_ui(
+    scene: &SceneDocument,
+    assets: &AssetCatalog,
+) -> Result<UiRuntime, Box<dyn Error>> {
     let Some(guid) = scene.ui_document else {
         return Ok(UiRuntime::empty());
     };

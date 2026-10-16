@@ -823,10 +823,7 @@ impl ScriptHost {
             ScriptEventValue::String(text) => text.len() <= MAX_SCRIPT_EVENT_PAYLOAD_BYTES,
             _ => true,
         };
-        if name.trim().is_empty()
-            || name.len() > MAX_SCRIPT_EVENT_NAME_BYTES
-            || !valid_value
-        {
+        if name.trim().is_empty() || name.len() > MAX_SCRIPT_EVENT_NAME_BYTES || !valid_value {
             return false;
         }
         let mut pending = self.pending_events.borrow_mut();
@@ -1713,7 +1710,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod external_event_tests {
     use super::*;
@@ -1728,12 +1724,7 @@ mod external_event_tests {
             sender,
             7
         ));
-        assert!(!host.queue_external_event(
-            " ",
-            ScriptEventValue::Nil,
-            sender,
-            7
-        ));
+        assert!(!host.queue_external_event(" ", ScriptEventValue::Nil, sender, 7));
         assert!(!host.queue_external_event(
             "menu.invalid",
             ScriptEventValue::Number(f64::NAN),
@@ -1748,11 +1739,6 @@ mod external_event_tests {
                 7
             ));
         }
-        assert!(!host.queue_external_event(
-            "menu.overflow",
-            ScriptEventValue::Nil,
-            sender,
-            7
-        ));
+        assert!(!host.queue_external_event("menu.overflow", ScriptEventValue::Nil, sender, 7));
     }
 }
