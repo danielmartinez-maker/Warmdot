@@ -28,7 +28,7 @@ impl fmt::Display for SpriteAnimationError {
             Self::MissingObject(guid) => write!(
                 f,
                 "sprite animation object {guid} does not exist in this scene"
-            )
+            ),
             Self::World(error) => {
                 write!(f, "sprite animation could not update the world: {error}")
             }
