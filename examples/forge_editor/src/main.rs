@@ -1459,7 +1459,7 @@ impl EditorApp {
             self.canvas_offset += ui.input(|input| input.pointer.delta());
         }
         if response.hovered() {
-            let scroll = ui.input(|input| input.raw_scroll_delta.y);
+            let scroll = ui.input(|input| input.smooth_scroll_delta.y);
             if scroll != 0.0 {
                 self.canvas_zoom = (self.canvas_zoom * (scroll * 0.001).exp()).clamp(0.25, 8.0);
             }
