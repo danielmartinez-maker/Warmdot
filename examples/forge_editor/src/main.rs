@@ -727,6 +727,322 @@ impl EditorApp {
         }
     }
 
+    fn show_tilemap_inspector(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Tilemap");
+        if self.tilemap.is_none() {
+            ui.label("Create a map from one of the project's PNG tilesets.");
+            if ui.button("Create tilemap").clicked() {
+                self.create_tilemap();
+            }
+            return;
+        }
+
+        let available_images = self
+            .catalog
+            .as_ref()
+            .map(|catalog| {
+                catalog
+                    .entries()
+                    .filter(|record| record.kind == AssetKind::Png)
+                    .map(|record| (record.guid, record.relative_path.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let texture_guid = self
+            .tilemap
+            .as_ref()
+            .map(|tilemap| tilemap.document.tileset_guid)
+            .expect("tilemap is present");
+        let texture_size = self.texture_sizes.get(&texture_guid).copied().unwrap_or([0, 0]);
+        let source_tile_size = self
+            .tilemap
+            .as_ref()
+            .map(|tilemap| tilemap.document.texture_tile_size)
+            .expect("tilemap is present");
+        let tile_count = if source_tile_size[0] == 0 || source_tile_size[1] == 0 {
+            0
+        } else {
+            (texture_size[0] / source_tile_size[0])
+                .saturating_mul(texture_size[1] / source_tile_size[1])
+        };
+
+        let tilemap = self.tilemap.as_mut().expect("tilemap is present");
+        let current_name = available_images
+            .iter()
+            .find(|(guid, _)| *guid == tilemap.document.tileset_guid)
+            .map(|(_, path)| path.clone())
+            .unwrap_or_else(|| "Missing PNG tileset".into());
+        let response = egui::ComboBox::from_id_salt("tilemap_tileset")
+            .selected_text(current_name)
+            .show_ui(ui, |ui| {
+                for (guid, path) in &available_images {
+                    ui.selectable_value(&mut tilemap.document.tileset_guid, *guid, path);
+                }
+            });
+        if response.response.changed() {
+            tilemap.metadata_dirty = true;
+            tilemap.selected_tile = 0;
+        }
+
+        ui.horizontal(|ui| {
+            ui.label("Cell size");
+            let changed_x = ui
+                .add(
+                    egui::DragValue::new(&mut tilemap.document.tile_size[0])
+                        .speed(0.05)
+                        .range(0.01..=10000.0),
+                )
+                .changed();
+            let changed_y = ui
+                .add(
+                    egui::DragValue::new(&mut tilemap.document.tile_size[1])
+                        .speed(0.05)
+                        .range(0.01..=10000.0),
+                )
+                .changed();
+            tilemap.metadata_dirty |= changed_x || changed_y;
+        });
+        ui.horizontal(|ui| {
+            ui.label("PNG tile px");
+            let changed_x = ui
+                .add(
+                    egui::DragValue::new(&mut tilemap.document.texture_tile_size[0])
+                        .speed(1)
+                        .range(1..=4096),
+                )
+                .changed();
+            let changed_y = ui
+                .add(
+                    egui::DragValue::new(&mut tilemap.document.texture_tile_size[1])
+                        .speed(1)
+                        .range(1..=4096),
+                )
+                .changed();
+            tilemap.metadata_dirty |= changed_x || changed_y;
+        });
+
+        if tile_count > 0 {
+            tilemap.selected_tile = tilemap.selected_tile.min(tile_count - 1);
+            ui.horizontal(|ui| {
+                ui.label("Tile index");
+                ui.add(
+                    egui::DragValue::new(&mut tilemap.selected_tile)
+                        .range(0..=tile_count - 1),
+                );
+            });
+            ui.label(format!("{tile_count} tiles in the selected PNG."));
+        } else {
+            ui.label("No complete tiles fit the PNG tile size.");
+        }
+        ui.checkbox(&mut tilemap.paint_solid, "Paint cells as solid");
+        ui.checkbox(&mut tilemap.erase_mode, "Erase with left drag");
+        ui.label("Left drag paints. Right drag erases.");
+        ui.separator();
+        ui.label(format!("{} occupied cells", tilemap.map.tile_count()));
+        ui.label(format!(
+            "{} undo and {} redo strokes",
+            tilemap.history.undo_depth(),
+            tilemap.history.redo_depth()
+        ));
+    }
+
+    fn show_tilemap_canvas(&mut self, ui: &mut egui::Ui) {
+        let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 0.0, Color32::from_rgb(20, 24, 31));
+        let Some(tilemap_state) = self.tilemap.as_ref() else {
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Create a tilemap and choose a PNG tileset in the inspector.",
+                egui::FontId::proportional(16.0),
+                Color32::LIGHT_GRAY,
+            );
+            return;
+        };
+        let tileset_guid = tilemap_state.document.tileset_guid;
+        let texture_id = self.textures.get(&tileset_guid).map(|texture| texture.id());
+        let texture_size = self.texture_sizes.get(&tileset_guid).copied().unwrap_or([0, 0]);
+        let tilemap = self.tilemap.as_mut().expect("tilemap was checked above");
+        let cell_size = tilemap.document.tile_size;
+        let texture_tile_size = tilemap.document.texture_tile_size;
+        let pixels_per_unit = 24.0;
+        let cell_pixels = Vec2::new(
+            cell_size[0] * pixels_per_unit,
+            cell_size[1] * pixels_per_unit,
+        );
+        if cell_pixels.x > 1.0 && cell_pixels.y > 1.0 {
+            for index in -64..=64 {
+                let offset_x = index as f32 * cell_pixels.x;
+                let offset_y = index as f32 * cell_pixels.y;
+                let x = rect.center().x + offset_x;
+                let y = rect.center().y + offset_y;
+                if x >= rect.left() && x <= rect.right() {
+                    painter.line_segment(
+                        [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
+                        Stroke::new(1.0, Color32::from_gray(37)),
+                    );
+                }
+                if y >= rect.top() && y <= rect.bottom() {
+                    painter.line_segment(
+                        [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
+                        Stroke::new(1.0, Color32::from_gray(37)),
+                    );
+                }
+            }
+        }
+        let cell_rect = |coordinate: TileCoord| {
+            let center = rect.center()
+                + Vec2::new(
+                    (coordinate.x as f32 + 0.5) * cell_pixels.x,
+                    -(coordinate.y as f32 + 0.5) * cell_pixels.y,
+                );
+            Rect::from_center_size(center, cell_pixels)
+        };
+        let columns = if texture_tile_size[0] == 0 {
+            0
+        } else {
+            texture_size[0] / texture_tile_size[0]
+        };
+        let rows = if texture_tile_size[1] == 0 {
+            0
+        } else {
+            texture_size[1] / texture_tile_size[1]
+        };
+        let tile_count = columns.saturating_mul(rows);
+        for (coordinate, cell) in tilemap.map.iter() {
+            let tile_rect = cell_rect(coordinate);
+            if !tile_rect.intersects(rect) {
+                continue;
+            }
+            if let Some(texture_id) = texture_id.filter(|_| tile_count > 0) {
+                let tile_index = cell.tile_index.min(tile_count - 1);
+                let column = tile_index % columns;
+                let row = tile_index / columns;
+                let uv_min = Pos2::new(
+                    (column * texture_tile_size[0]) as f32 / texture_size[0] as f32,
+                    (row * texture_tile_size[1]) as f32 / texture_size[1] as f32,
+                );
+                let uv_max = Pos2::new(
+                    ((column + 1) * texture_tile_size[0]) as f32 / texture_size[0] as f32,
+                    ((row + 1) * texture_tile_size[1]) as f32 / texture_size[1] as f32,
+                );
+                painter.image(texture_id, tile_rect, Rect::from_min_max(uv_min, uv_max), Color32::WHITE);
+            } else {
+                let fill = if cell.solid {
+                    Color32::from_rgb(170, 116, 50)
+                } else {
+                    Color32::from_rgb(70, 115, 150)
+                };
+                painter.rect_filled(tile_rect.shrink(1.0), 0.0, fill);
+            }
+            if cell.solid {
+                let color = Color32::from_rgba_unmultiplied(255, 190, 70, 160);
+                painter.line_segment([tile_rect.left_top(), tile_rect.right_top()], Stroke::new(2.0, color));
+                painter.line_segment([tile_rect.right_top(), tile_rect.right_bottom()], Stroke::new(2.0, color));
+                painter.line_segment([tile_rect.right_bottom(), tile_rect.left_bottom()], Stroke::new(2.0, color));
+                painter.line_segment([tile_rect.left_bottom(), tile_rect.left_top()], Stroke::new(2.0, color));
+            }
+        }
+        for (coordinate, cell) in &tilemap.pending_stroke {
+            let tile_rect = cell_rect(*coordinate);
+            if !tile_rect.intersects(rect) {
+                continue;
+            }
+            if let Some(cell) = cell {
+                painter.rect_filled(
+                    tile_rect.shrink(2.0),
+                    0.0,
+                    if cell.solid {
+                        Color32::from_rgb(170, 116, 50)
+                    } else {
+                        Color32::from_rgb(70, 115, 150)
+                    },
+                );
+            } else {
+                painter.rect_filled(
+                    tile_rect.shrink(2.0),
+                    0.0,
+                    Color32::from_rgba_unmultiplied(200, 70, 70, 150),
+                );
+            }
+        }
+        painter.text(
+            rect.left_top() + Vec2::new(12.0, 12.0),
+            egui::Align2::LEFT_TOP,
+            "Tilemap paint canvas",
+            egui::FontId::proportional(16.0),
+            Color32::LIGHT_GRAY,
+        );
+
+        let mut finish_stroke = false;
+        let pointer = response.interact_pointer_pos();
+        if response.hovered() {
+            if let Some(pointer) = pointer {
+                let coordinate = TileCoord {
+                    x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
+                    y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
+                };
+                let primary_down = ui.input(|input| input.pointer.button_down(egui::PointerButton::Primary));
+                let secondary_down = ui.input(|input| input.pointer.button_down(egui::PointerButton::Secondary));
+                if primary_down {
+                    let cell = if tilemap.erase_mode {
+                        None
+                    } else {
+                        Some(TileCell {
+                            tile_index: tilemap.selected_tile,
+                            flip_x: false,
+                            flip_y: false,
+                            rotation_quarters: 0,
+                            solid: tilemap.paint_solid,
+                        })
+                    };
+                    tilemap.pending_stroke.insert(coordinate, cell);
+                } else if secondary_down {
+                    tilemap.pending_stroke.insert(coordinate, None);
+                }
+            }
+        }
+        if response.clicked_by(egui::PointerButton::Primary) {
+            if let Some(pointer) = pointer {
+                let coordinate = TileCoord {
+                    x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
+                    y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
+                };
+                let cell = if tilemap.erase_mode {
+                    None
+                } else {
+                    Some(TileCell {
+                        tile_index: tilemap.selected_tile,
+                        flip_x: false,
+                        flip_y: false,
+                        rotation_quarters: 0,
+                        solid: tilemap.paint_solid,
+                    })
+                };
+                tilemap.pending_stroke.insert(coordinate, cell);
+            }
+            finish_stroke = true;
+        }
+        if response.clicked_by(egui::PointerButton::Secondary) {
+            if let Some(pointer) = pointer {
+                let coordinate = TileCoord {
+                    x: ((pointer.x - rect.center().x) / cell_pixels.x).floor() as i32,
+                    y: ((rect.center().y - pointer.y) / cell_pixels.y).floor() as i32,
+                };
+                tilemap.pending_stroke.insert(coordinate, None);
+            }
+            finish_stroke = true;
+        }
+        if response.drag_stopped() {
+            finish_stroke = true;
+        }
+        if finish_stroke && !tilemap.pending_stroke.is_empty() {
+            let cells = std::mem::take(&mut tilemap.pending_stroke);
+            tilemap.history.execute_stroke(&mut tilemap.map, cells);
+        }
+    }
+
     fn show_canvas(&mut self, ui: &mut egui::Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click());
         let painter = ui.painter_at(rect);
@@ -820,6 +1136,65 @@ impl EditorApp {
     }
 }
 
+fn tilemap_resource_path(project_root: &Path) -> Result<PathBuf, String> {
+    let project_root = project_root
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve project root: {error}"))?;
+    let assets_root = project_root.join("Assets");
+    fs::create_dir_all(&assets_root)
+        .map_err(|error| format!("Cannot create project Assets folder: {error}"))?;
+    let assets_root = assets_root
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve project Assets folder: {error}"))?;
+    if !assets_root.starts_with(&project_root) {
+        return Err("Project Assets folder resolves outside the project.".into());
+    }
+    let path = assets_root.join("Default.forgetilemap.json");
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err("Tilemap file must not be a symbolic link.".into());
+        }
+        Ok(_) => {
+            let canonical_path = path
+                .canonicalize()
+                .map_err(|error| format!("Cannot resolve tilemap file: {error}"))?;
+            if !canonical_path.starts_with(&assets_root) {
+                return Err("Tilemap file resolves outside the Assets folder.".into());
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("Cannot inspect tilemap file: {error}")),
+    }
+    Ok(path)
+}
+
+fn load_saved_tilemap(project_root: &Path) -> Result<Option<EditorTileMap>, String> {
+    let path = tilemap_resource_path(project_root)?;
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("Cannot read tilemap: {error}")),
+    };
+    let document = TileMapDocument::from_json(&source)
+        .map_err(|error| format!("Tilemap is invalid: {error}"))?;
+    let map = document
+        .instantiate()
+        .map_err(|error| format!("Tilemap cannot be opened: {error}"))?;
+    let mut history = TileMapHistory::new(256);
+    history.mark_saved();
+    Ok(Some(EditorTileMap {
+        document,
+        map,
+        history,
+        selected_tile: 0,
+        paint_solid: false,
+        erase_mode: false,
+        metadata_dirty: false,
+        resource_unsaved: false,
+        pending_stroke: BTreeMap::new(),
+    }))
+}
+
 fn tint_color(tint: [f32; 4]) -> Color32 {
     Color32::from_rgba_unmultiplied(
         (tint[0].clamp(0.0, 1.0) * 255.0) as u8,
@@ -834,36 +1209,83 @@ impl eframe::App for EditorApp {
         self.refresh_assets(ui.ctx());
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("Add sprite").clicked() {
-                    self.add_sprite();
-                }
-                if ui.button("Delete").clicked() {
-                    self.delete_selected();
-                }
+                ui.selectable_value(&mut self.tilemap_mode, false, "Scene");
+                ui.selectable_value(&mut self.tilemap_mode, true, "Tilemap");
                 ui.separator();
-                if ui
-                    .add_enabled(self.history.undo_depth() > 0, egui::Button::new("Undo"))
-                    .clicked()
-                {
-                    match self.history.undo(&mut self.scene) {
-                        Ok(_) => self.status.clear(),
-                        Err(error) => self.status = error.to_string(),
+                if self.tilemap_mode {
+                    if ui.button("New tilemap").clicked() {
+                        self.create_tilemap();
                     }
-                }
-                if ui
-                    .add_enabled(self.history.redo_depth() > 0, egui::Button::new("Redo"))
-                    .clicked()
-                {
-                    match self.history.redo(&mut self.scene) {
-                        Ok(_) => self.status.clear(),
-                        Err(error) => self.status = error.to_string(),
+                    if ui
+                        .add_enabled(self.tilemap.is_some(), egui::Button::new("Save tilemap"))
+                        .clicked()
+                    {
+                        self.save_tilemap();
+                    }
+                } else {
+                    if ui.button("Add sprite").clicked() {
+                        self.add_sprite();
+                    }
+                    if ui.button("Delete").clicked() {
+                        self.delete_selected();
                     }
                 }
                 ui.separator();
-                if ui.button("Save").clicked() {
-                    self.save();
+                let can_undo = if self.tilemap_mode {
+                    self.tilemap
+                        .as_ref()
+                        .is_some_and(|tilemap| tilemap.history.undo_depth() > 0)
+                } else {
+                    self.history.undo_depth() > 0
+                };
+                if ui
+                    .add_enabled(can_undo, egui::Button::new("Undo"))
+                    .clicked()
+                {
+                    if self.tilemap_mode {
+                        if let Some(tilemap) = self.tilemap.as_mut() {
+                            tilemap.history.undo(&mut tilemap.map);
+                        }
+                    } else {
+                        match self.history.undo(&mut self.scene) {
+                            Ok(_) => self.status.clear(),
+                            Err(error) => self.status = error.to_string(),
+                        }
+                    }
                 }
-                ui.label(if self.history.is_dirty() {
+                let can_redo = if self.tilemap_mode {
+                    self.tilemap
+                        .as_ref()
+                        .is_some_and(|tilemap| tilemap.history.redo_depth() > 0)
+                } else {
+                    self.history.redo_depth() > 0
+                };
+                if ui
+                    .add_enabled(can_redo, egui::Button::new("Redo"))
+                    .clicked()
+                {
+                    if self.tilemap_mode {
+                        if let Some(tilemap) = self.tilemap.as_mut() {
+                            tilemap.history.redo(&mut tilemap.map);
+                        }
+                    } else {
+                        match self.history.redo(&mut self.scene) {
+                            Ok(_) => self.status.clear(),
+                            Err(error) => self.status = error.to_string(),
+                        }
+                    }
+                }
+                ui.separator();
+                let changed = if self.tilemap_mode {
+                    self.tilemap.as_ref().is_some_and(|tilemap| {
+                        tilemap.resource_unsaved
+                            || tilemap.metadata_dirty
+                            || tilemap.history.is_dirty()
+                    })
+                } else {
+                    self.history.is_dirty()
+                };
+                ui.label(if changed {
                     "Unsaved changes"
                 } else {
                     "Saved"
@@ -879,8 +1301,20 @@ impl eframe::App for EditorApp {
             .show(ui, |ui| self.show_hierarchy(ui));
         egui::Panel::right("inspector")
             .default_size(320.0)
-            .show(ui, |ui| self.show_inspector(ui));
-        egui::CentralPanel::default().show(ui, |ui| self.show_canvas(ui));
+            .show(ui, |ui| {
+                if self.tilemap_mode {
+                    self.show_tilemap_inspector(ui);
+                } else {
+                    self.show_inspector(ui);
+                }
+            });
+        egui::CentralPanel::default().show(ui, |ui| {
+            if self.tilemap_mode {
+                self.show_tilemap_canvas(ui);
+            } else {
+                self.show_canvas(ui);
+            }
+        });
     }
 }
 
