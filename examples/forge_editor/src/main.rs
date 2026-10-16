@@ -256,7 +256,7 @@ impl EditorApp {
                 match catalog.load_png(guid) {
                     Ok(texture) => {
                         updates.push((guid, name, [texture.width, texture.height], texture))
-                    },
+                    }
                     Err(error) => errors.push(error.to_string()),
                 }
             }
