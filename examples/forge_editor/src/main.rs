@@ -7,7 +7,7 @@ use std::{
 };
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
+use forge_assets::{AssetCatalog, AssetKind};
 use forge_core::Guid;
 use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
