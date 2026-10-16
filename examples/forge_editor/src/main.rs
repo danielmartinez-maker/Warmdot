@@ -4301,4 +4301,50 @@ mod tests {
             "Play in Editor should include the current project tilemap"
         );
     }
+    #[test]
+    fn editor_preview_accepts_movement_when_canvas_has_keyboard_focus() {
+        let project_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../action_arena/project.forgeproj");
+        let project = super::Project::open(project_path).expect("Action Arena project opens");
+        let mut app = super::EditorApp::new(project);
+        app.start_runtime();
+        assert!(app.runtime.is_some(), "editor preview starts");
+
+        let context = egui::Context::default();
+        let canvas_id = egui::Id::new("runtime_preview_canvas");
+        context.memory_mut(|memory| memory.request_focus(canvas_id));
+        let _ = context.run(
+            egui::RawInput {
+                focused: true,
+                events: vec![egui::Event::Key {
+                    key: egui::Key::D,
+                    physical_key: Some(egui::Key::D),
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |context| {
+                egui::CentralPanel::default().show(context, |ui| {
+                    let _ = ui.interact(
+                        ui.max_rect(),
+                        canvas_id,
+                        egui::Sense::click_and_drag(),
+                    );
+                });
+            },
+        );
+
+        assert!(context.egui_wants_keyboard_input());
+        assert!(!context.text_edit_focused());
+        app.advance_runtime(&context);
+
+        assert_eq!(
+            app.preview_actions[0],
+            1.0,
+            "the focused runtime canvas should receive D movement input"
+        );
+    }
+
 }
