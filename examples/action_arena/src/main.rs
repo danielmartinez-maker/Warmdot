@@ -103,18 +103,22 @@ mod tests {
         assert!(after > before, "Luau controller should move the player");
         assert!(runtime.take_script_diagnostics().is_empty());
         let ui_commands = runtime.take_ui_commands();
-        assert!(ui_commands.contains(&ScriptUiCommand::SetText {
-            element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030013"
-                .parse()
-                .expect("score UI GUID"),
-            text: "SCORE 0".into(),
-        }));
-        assert!(ui_commands.contains(&ScriptUiCommand::SetText {
-            element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030014"
-                .parse()
-                .expect("lives UI GUID"),
-            text: "LIVES 3".into(),
-        }));
+        assert!(
+            ui_commands.contains(&ScriptUiCommand::SetText {
+                element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030013"
+                    .parse()
+                    .expect("score UI GUID"),
+                text: "SCORE 0".into(),
+            })
+        );
+        assert!(
+            ui_commands.contains(&ScriptUiCommand::SetText {
+                element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030014"
+                    .parse()
+                    .expect("lives UI GUID"),
+                text: "LIVES 3".into(),
+            })
+        );
         let audio_commands = runtime.take_audio_commands();
         assert!(audio_commands.iter().any(|command| matches!(
             command,
@@ -170,12 +174,14 @@ mod tests {
         );
         assert!(runtime.take_script_diagnostics().is_empty());
         assert!(
-            runtime.take_ui_commands().contains(&ScriptUiCommand::SetText {
-                element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030013"
-                    .parse()
-                    .expect("score UI GUID"),
-                text: "SCORE 1".into(),
-            }),
+            runtime
+                .take_ui_commands()
+                .contains(&ScriptUiCommand::SetText {
+                    element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030013"
+                        .parse()
+                        .expect("score UI GUID"),
+                    text: "SCORE 1".into(),
+                }),
             "the collision should award one point and update the authored HUD"
         );
     }
@@ -213,14 +219,15 @@ mod tests {
         }));
         assert!(runtime.take_script_diagnostics().is_empty());
         assert!(
-            runtime.take_ui_commands().contains(&ScriptUiCommand::SetText {
-                element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030014"
-                    .parse()
-                    .expect("lives UI GUID"),
-                text: "LIVES 2".into(),
-            }),
+            runtime
+                .take_ui_commands()
+                .contains(&ScriptUiCommand::SetText {
+                    element_guid: "a1d999a0-d8d1-4a1e-a700-4c49ed030014"
+                        .parse()
+                        .expect("lives UI GUID"),
+                    text: "LIVES 2".into(),
+                }),
             "player contact should consume one life and update the HUD"
         );
     }
-
 }
