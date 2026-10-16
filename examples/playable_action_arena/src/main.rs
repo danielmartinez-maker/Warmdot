@@ -108,13 +108,21 @@ impl GameState {
         let score = self.score.load(Ordering::Relaxed);
         let lives = self.lives.load(Ordering::Relaxed);
         let game_over = self.game_over.load(Ordering::Relaxed);
-        if score != self.shown_score || lives != self.shown_lives || game_over != self.shown_game_over {
+        if score != self.shown_score
+            || lives != self.shown_lives
+            || game_over != self.shown_game_over
+        {
             self.shown_score = score;
             self.shown_lives = lives;
             self.shown_game_over = game_over;
-            let state = if game_over { "GAME OVER | R restarts" } else { "WASD move | Space/click fire | R restart" };
-            self.window
-                .set_title(&format!("Forge 2D Action Arena | Score {score} | Lives {lives} | {state}"));
+            let state = if game_over {
+                "GAME OVER | R restarts"
+            } else {
+                "WASD move | Space/click fire | R restart"
+            };
+            self.window.set_title(&format!(
+                "Forge 2D Action Arena | Score {score} | Lives {lives} | {state}"
+            ));
         }
         self.renderer
             .render_world(self.runtime.world_mut(), [0.018, 0.028, 0.050, 1.0])?;
