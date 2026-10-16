@@ -394,12 +394,23 @@ fn export_project(project_path: PathBuf, output_path: PathBuf) -> Result<(), Box
         }
         copy_tree_without_symlinks(&canonical_assets, &game_root.join("Assets"))?;
     }
-    let asset_index = project_root.join(".forge").join("asset-index.json");
-    if asset_index.exists() {
-        copy_regular_file(
-            &asset_index,
-            &game_root.join(".forge").join("asset-index.json"),
-        )?;
+    let metadata_root = project_root.join(".forge");
+    if metadata_root.exists() {
+        let canonical_metadata_root = metadata_root.canonicalize()?;
+        if !canonical_metadata_root.starts_with(&project_root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "project metadata folder resolves outside the source project",
+            )
+            .into());
+        }
+        let asset_index = canonical_metadata_root.join("asset-index.json");
+        if asset_index.exists() {
+            copy_regular_file(
+                &asset_index,
+                &game_root.join(".forge").join("asset-index.json"),
+            )?;
+        }
     }
 
     let executable_name = if cfg!(windows) {
@@ -413,8 +424,19 @@ fn export_project(project_path: PathBuf, output_path: PathBuf) -> Result<(), Box
     } else {
         "#!/bin/sh\nDIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n\"$DIR/Forge2DPlayer\" \"$DIR/Game/project.forgeproj\" \"$@\"\n"
     };
-    let launcher_name = if cfg!(windows) { "run-game.bat" } else { "run-game.sh" };
-    fs::write(output_root.join(launcher_name), launcher)?;
+    let launcher_path = output_root.join(if cfg!(windows) {
+        "run-game.bat"
+    } else {
+        "run-game.sh"
+    });
+    fs::write(&launcher_path, launcher)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&launcher_path)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&launcher_path, permissions)?;
+    }
     Ok(())
 }
 
