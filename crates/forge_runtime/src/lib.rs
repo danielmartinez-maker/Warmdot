@@ -665,3 +665,125 @@ impl GameRuntime {
         self.world.entity_for_guid(guid)
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use forge_core::Guid;
+    use forge_scene::{
+        AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
+        AuthoredTransform, SceneObject, CURRENT_SCENE_SCHEMA,
+    };
+
+    use super::*;
+
+    fn physics_object(
+        object_guid: Guid,
+        name: &str,
+        position: [f32; 2],
+        body_kind: AuthoredRigidBodyKind,
+    ) -> SceneObject {
+        SceneObject {
+            object_guid,
+            name: name.into(),
+            parent_guid: None,
+            prefab_instance: None,
+            transform: AuthoredTransform {
+                translation: position,
+                ..AuthoredTransform::default()
+            },
+            sprite: None,
+            camera: None,
+            rigid_body: Some(AuthoredRigidBody {
+                kind: body_kind,
+                gravity_scale: 0.0,
+                lock_rotation: true,
+                ..AuthoredRigidBody::default()
+            }),
+            collider: Some(AuthoredCollider {
+                shape: AuthoredColliderShape::Circle { radius: 1.0 },
+                offset: [0.0, 0.0],
+                rotation_radians: 0.0,
+                density: 1.0,
+                friction: 0.0,
+                restitution: 0.0,
+                sensor: true,
+            }),
+            script: None,
+        }
+    }
+
+    #[test]
+    fn physics_collision_events_reach_luau_with_both_object_guids() {
+        let player_guid = Guid::new();
+        let target_guid = Guid::new();
+        let sound_guid = Guid::new();
+        let scene = SceneDocument {
+            schema_version: CURRENT_SCENE_SCHEMA,
+            resource_guid: Guid::new(),
+            name: "Script collision events".into(),
+            ui_document: None,
+            dependencies: Vec::new(),
+            objects: vec![
+                physics_object(
+                    player_guid,
+                    "Player",
+                    [0.0, 0.0],
+                    AuthoredRigidBodyKind::Dynamic,
+                ),
+                physics_object(
+                    target_guid,
+                    "Target",
+                    [0.5, 0.0],
+                    AuthoredRigidBodyKind::Fixed,
+                ),
+            ],
+        };
+        let mut runtime =
+            GameRuntime::from_scene(&scene, RuntimeConfig::default()).expect("valid scene");
+        runtime
+            .attach_script(ScriptDefinition {
+                object_guid: player_guid,
+                asset_guid: Guid::new(),
+                source_path: "Assets/CollisionListener.luau".into(),
+                source: format!(
+                    r#"
+                        return {{
+                            on_event = function(self, event_name, value, sender_guid, tick)
+                                if event_name == "physics.collision.started"
+                                    and sender_guid == self:get_guid()
+                                    and value == "{target_guid}" then
+                                    Forge.Audio.play("{sound_guid}", "sfx")
+                                end
+                            end,
+                        }}
+                    "#
+                ),
+                properties: BTreeMap::new(),
+            })
+            .expect("attach collision listener");
+
+        let frame = runtime.advance_frame(Duration::from_millis(50));
+        assert!(
+            frame.physics_events.iter().any(|event| {
+                event.started
+                    && ((event.object_a == player_guid && event.object_b == target_guid)
+                        || (event.object_a == target_guid && event.object_b == player_guid))
+            }),
+            "overlapping sensor colliders should report a contact"
+        );
+        assert!(
+            runtime
+                .take_audio_commands()
+                .iter()
+                .any(|command| matches!(
+                    command,
+                    ScriptAudioCommand::PlayEffect { asset_guid, bus }
+                        if *asset_guid == sound_guid && bus == "sfx"
+                )),
+            "the contact event should reach Luau with its sender and other-object GUIDs"
+        );
+    }
+}
