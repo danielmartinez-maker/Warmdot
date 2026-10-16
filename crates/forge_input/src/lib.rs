@@ -40,7 +40,9 @@ impl fmt::Display for InputBindingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonFiniteOrZeroValue => f.write_str("binding values must be finite and non-zero"),
-            Self::DuplicateBinding => f.write_str("the same input source is already bound to this action"),
+            Self::DuplicateBinding => {
+                f.write_str("the same input source is already bound to this action")
+            }
         }
     }
 }
