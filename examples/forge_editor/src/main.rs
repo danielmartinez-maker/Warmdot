@@ -2115,10 +2115,7 @@ fn import_asset_file(project_root: &Path, source: &Path) -> Result<String, Strin
     let source_metadata = fs::symlink_metadata(source)
         .map_err(|error| format!("Cannot inspect {}: {error}", source.display()))?;
     if source_metadata.file_type().is_symlink() || !source_metadata.is_file() {
-        return Err(format!(
-            "{} is not a regular file",
-            source.display()
-        ));
+        return Err(format!("{} is not a regular file", source.display()));
     }
     let file_name = source
         .file_name()
