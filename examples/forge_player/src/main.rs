@@ -217,18 +217,26 @@ fn append_tilemap_to_scene(
             texture_tile_size,
         )?;
         let object_guid = Guid::new();
+        let rotated_size = if cell.rotation_quarters % 2 == 0 {
+            document.tile_size
+        } else {
+            [document.tile_size[1], document.tile_size[0]]
+        };
         let transform = AuthoredTransform {
             translation: [
                 (coordinate.x as f32 + 0.5) * document.tile_size[0],
                 (coordinate.y as f32 + 0.5) * document.tile_size[1],
             ],
-            rotation_radians: 0.0,
-            scale: [1.0, 1.0],
+            rotation_radians: f32::from(cell.rotation_quarters) * std::f32::consts::FRAC_PI_2,
+            scale: [
+                if cell.flip_x { -1.0 } else { 1.0 },
+                if cell.flip_y { -1.0 } else { 1.0 },
+            ],
         };
         let sprite = AuthoredSprite {
             asset: Some(document.tileset_guid),
             animation_clip: None,
-            size: document.tile_size,
+            size: rotated_size,
             tint: [1.0; 4],
             uv_rect,
             layer: i32::MIN,
@@ -242,7 +250,7 @@ fn append_tilemap_to_scene(
                 }),
                 Some(AuthoredCollider {
                     shape: AuthoredColliderShape::Box {
-                        half_extents: [document.tile_size[0] * 0.5, document.tile_size[1] * 0.5],
+                        half_extents: [rotated_size[0] * 0.5, rotated_size[1] * 0.5],
                     },
                     offset: [0.0, 0.0],
                     rotation_radians: 0.0,
