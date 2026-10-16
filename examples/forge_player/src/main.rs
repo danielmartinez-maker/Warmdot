@@ -293,12 +293,9 @@ impl ApplicationHandler for PlayerApp {
                     &self.assets,
                     self.runtime.take_audio_commands(),
                 );
-                for error in apply_script_ui_commands(&mut self.ui, self.runtime.take_ui_commands()) {
-                    emit_message(
-                        DiagnosticLevel::Error,
-                        "player.ui_command_failed",
-                        error,
-                    );
+                for error in apply_script_ui_commands(&mut self.ui, self.runtime.take_ui_commands())
+                {
+                    emit_message(DiagnosticLevel::Error, "player.ui_command_failed", error);
                 }
                 let scene_requests = self.runtime.take_scene_transition_requests();
                 process_scene_transition_requests(
