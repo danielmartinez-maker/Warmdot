@@ -7,6 +7,8 @@ license.workspace = true
 description = "Windowed worker-colony simulation sample for Forge 2D"
 
 [dependencies]
+forge_assets = { path = "../../crates/forge_assets" }
+forge_project = { path = "../../crates/forge_project" }
 forge_core = { path = "../../crates/forge_core" }
 forge_input = { path = "../../crates/forge_input" }
 forge_renderer = { path = "../../crates/forge_renderer" }

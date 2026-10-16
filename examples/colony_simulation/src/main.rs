@@ -813,4 +813,77 @@ mod navigation_tests {
         }
         assert!(!grid.is_protected(GridCell { x: 1, y: 1 }));
     }
+
+    #[test]
+    fn editor_authored_colony_routes_workers_and_updates_the_hud() {
+        use forge_assets::AssetCatalog;
+        use forge_project::Project;
+        use forge_runtime::ScriptUiCommand;
+
+        let project_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../colony_project");
+        let project = Project::open(project_path).expect("open editor-authored colony project");
+        let assets = AssetCatalog::open(project.root()).expect("open colony assets");
+        let mut runtime = GameRuntime::from_scene_with_assets(
+            project.default_scene(),
+            RuntimeConfig::default(),
+            &assets,
+        )
+        .expect("load editor-authored colony scene");
+
+        assert_eq!(
+            runtime.sprite_animation_count(),
+            8,
+            "each colony worker should load the authored walk clip"
+        );
+        runtime.advance_frame(Duration::from_millis(50));
+        let simulation_time = runtime.simulation_time();
+        runtime.push_action(simulation_time, ActionId(3), 1.0, true);
+        for _ in 0..3000 {
+            runtime.advance_frame(Duration::from_nanos(16_666_667));
+        }
+
+        let diagnostics = runtime.take_script_diagnostics();
+        assert!(
+            diagnostics.is_empty(),
+            "colony scripts should remain healthy: {diagnostics:?}"
+        );
+        let ui_commands = runtime.take_ui_commands();
+        let food_guid = "e055c011-0a71-4e5e-bc01-000000000002"
+            .parse::<Guid>()
+            .expect("parse food label GUID");
+        let deliveries = ui_commands
+            .iter()
+            .filter_map(|command| match command {
+                ScriptUiCommand::SetText { element_guid, text } if *element_guid == food_guid => {
+                    text.strip_prefix("FOOD ")
+                        .and_then(|value| value.parse::<u32>().ok())
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or_default();
+        assert!(deliveries > 0, "a routed worker should deliver food");
+
+        let (_, _, grid) = make_scene();
+        for index in 1..=8 {
+            let worker_guid = format!("d055c011-0a71-4e5e-bc01-{index:012}")
+                .parse::<Guid>()
+                .expect("parse worker GUID");
+            let entity = runtime
+                .entity_for_guid(worker_guid)
+                .expect("authored worker should remain in the scene");
+            let transform = runtime
+                .world()
+                .transform(entity)
+                .expect("worker transform");
+            let cell = grid
+                .cell_at(transform.translation)
+                .expect("worker stays within the navigable grid");
+            assert!(
+                !grid.blocked.contains_key(&cell),
+                "worker {index} crossed a blocked tile"
+            );
+        }
+    }
 }
