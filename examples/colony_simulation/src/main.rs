@@ -745,10 +745,7 @@ mod navigation_tests {
         let cell = GridCell { x: 0, y: 0 };
         assert_eq!(grid.cell_at(grid.cell_center(cell)), Some(cell));
         assert_eq!(grid.cell_at([f32::NAN, -15.0]), None);
-        assert_eq!(
-            grid.cell_at([GRID_ORIGIN[0] - 0.01, GRID_ORIGIN[1]]),
-            None
-        );
+        assert_eq!(grid.cell_at([GRID_ORIGIN[0] - 0.01, GRID_ORIGIN[1]]), None);
         assert_eq!(
             grid.cell_at([
                 GRID_ORIGIN[0] + GRID_WIDTH as f32 * GRID_CELL_SIZE,
@@ -763,10 +760,8 @@ mod navigation_tests {
         let mut grid = NavigationGrid::new();
         let start = GridCell { x: 5, y: 5 };
         let goal = GridCell { x: 8, y: 5 };
-        grid.blocked
-            .insert(GridCell { x: 6, y: 5 }, Guid::new());
-        grid.blocked
-            .insert(GridCell { x: 7, y: 5 }, Guid::new());
+        grid.blocked.insert(GridCell { x: 6, y: 5 }, Guid::new());
+        grid.blocked.insert(GridCell { x: 7, y: 5 }, Guid::new());
 
         let path = grid.find_path(start, goal).expect("route around blockers");
         assert_eq!(path.len(), 5);
