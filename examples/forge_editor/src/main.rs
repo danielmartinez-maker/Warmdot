@@ -587,7 +587,10 @@ impl EditorApp {
                 }
                 for layer in &layers {
                     let mut visible = !self.hidden_layers.contains(layer);
-                    if ui.checkbox(&mut visible, format!("Layer {layer}")).changed() {
+                    if ui
+                        .checkbox(&mut visible, format!("Layer {layer}"))
+                        .changed()
+                    {
                         if visible {
                             self.hidden_layers.remove(layer);
                         } else {
@@ -1714,22 +1717,33 @@ impl EditorApp {
         let origin_before_drag = rect.center() + self.canvas_offset;
         if response.drag_started() && self.runtime.is_none() {
             let target = response.interact_pointer_pos().and_then(|pointer| {
-                self.scene.objects.iter().rev().find_map(|object| {
-                    let sprite = object.sprite?;
-                    let center = origin_before_drag
-                        + Vec2::new(
-                            object.transform.translation[0] * pixels_per_unit,
-                            object.transform.translation[1] * pixels_per_unit,
-                        );
-                    let extent = Vec2::new(
-                        (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
-                        (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
-                    )
-                    .max(Vec2::splat(2.0));
-                    Rect::from_center_size(center, extent)
-                        .contains(pointer)
-                        .then_some((object.object_guid, object.transform.translation))
-                })
+                self.scene
+                    .objects
+                    .iter()
+                    .filter_map(|object| {
+                        let sprite = object.sprite?;
+                        if self.hidden_layers.contains(&sprite.layer) {
+                            return None;
+                        }
+                        let center = origin_before_drag
+                            + Vec2::new(
+                                object.transform.translation[0] * pixels_per_unit,
+                                object.transform.translation[1] * pixels_per_unit,
+                            );
+                        let extent = Vec2::new(
+                            (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
+                            (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
+                        )
+                        .max(Vec2::splat(2.0));
+                        Rect::from_center_size(center, extent)
+                            .contains(pointer)
+                            .then_some((
+                                (sprite.layer, sprite.order, object.object_guid),
+                                (object.object_guid, object.transform.translation),
+                            ))
+                    })
+                    .max_by_key(|(draw_order, _)| *draw_order)
+                    .map(|(_, target)| target)
             });
             self.move_gizmo_drag = target.map(|(object_guid, translation)| {
                 self.selected = Some(object_guid);
