@@ -277,6 +277,7 @@ impl EditorApp {
             self.status = "Prefab creation needs an available asset catalog.".into();
             return;
         }
+        object.parent_guid = None;
         object.prefab_instance = None;
         let prefab = PrefabDocument {
             schema_version: CURRENT_PREFAB_SCHEMA,
@@ -345,6 +346,7 @@ impl EditorApp {
         let mut instance = prefab.object.clone();
         instance.object_guid = Guid::new();
         instance.name = format!("{} Instance", prefab.name);
+        instance.parent_guid = None;
         instance.prefab_instance = Some(PrefabInstance {
             prefab_asset: prefab_guid,
             overrides: BTreeSet::new(),
@@ -715,14 +717,17 @@ impl EditorApp {
         egui::ScrollArea::vertical()
             .max_height(360.0)
             .show(ui, |ui| {
-                for object in &self.scene.objects {
-                    if ui
-                        .selectable_label(self.selected == Some(object.object_guid), &object.name)
-                        .clicked()
-                    {
-                        self.selected = Some(object.object_guid);
-                        self.selected_asset = None;
-                    }
+                for (object_guid, name, depth) in scene_hierarchy_rows(&self.scene) {
+                    ui.horizontal(|ui| {
+                        ui.add_space(depth as f32 * 14.0);
+                        if ui
+                            .selectable_label(self.selected == Some(object_guid), name)
+                            .clicked()
+                        {
+                            self.selected = Some(object_guid);
+                            self.selected_asset = None;
+                        }
+                    });
                 }
             });
         if self.runtime.is_none() {
@@ -1002,6 +1007,37 @@ impl EditorApp {
         let mut selected_animation_changed = false;
         ui.small(guid.to_string());
         changed |= ui.text_edit_singleline(&mut replacement.name).changed();
+        ui.horizontal(|ui| {
+            ui.label("Parent");
+            let selected_parent = replacement
+                .parent_guid
+                .and_then(|parent_guid| {
+                    self.scene
+                        .objects
+                        .iter()
+                        .find(|object| object.object_guid == parent_guid)
+                        .map(|object| object.name.clone())
+                })
+                .unwrap_or_else(|| "None".into());
+            let response = egui::ComboBox::from_id_salt(("parent_object", guid))
+                .selected_text(selected_parent)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut replacement.parent_guid, None, "None");
+                    for object in self
+                        .scene
+                        .objects
+                        .iter()
+                        .filter(|object| object.object_guid != guid)
+                    {
+                        ui.selectable_value(
+                            &mut replacement.parent_guid,
+                            Some(object.object_guid),
+                            &object.name,
+                        );
+                    }
+                });
+            changed |= response.response.changed();
+        });
 
         ui.collapsing("Transform", |ui| {
             ui.horizontal(|ui| {
@@ -1953,21 +1989,22 @@ impl EditorApp {
                         if self.hidden_layers.contains(&sprite.layer) {
                             return None;
                         }
+                        let transform = self.scene.world_transform(object.object_guid)?;
                         let center = origin_before_drag
                             + Vec2::new(
-                                object.transform.translation[0] * pixels_per_unit,
-                                object.transform.translation[1] * pixels_per_unit,
+                                transform.translation[0] * pixels_per_unit,
+                                transform.translation[1] * pixels_per_unit,
                             );
                         let extent = Vec2::new(
-                            (sprite.size[0] * object.transform.scale[0]).abs() * pixels_per_unit,
-                            (sprite.size[1] * object.transform.scale[1]).abs() * pixels_per_unit,
+                            (sprite.size[0] * transform.scale[0]).abs() * pixels_per_unit,
+                            (sprite.size[1] * transform.scale[1]).abs() * pixels_per_unit,
                         )
                         .max(Vec2::splat(2.0));
                         Rect::from_center_size(center, extent)
                             .contains(pointer)
                             .then_some((
                                 (sprite.layer, sprite.order, object.object_guid),
-                                (object.object_guid, object.transform.translation),
+                                (object.object_guid, transform.translation),
                             ))
                     })
                     .max_by_key(|(draw_order, _)| *draw_order)
@@ -2052,11 +2089,12 @@ impl EditorApp {
                 .objects
                 .iter()
                 .filter_map(|object| {
+                    let transform = self.scene.world_transform(object.object_guid)?;
                     object.sprite.map(|sprite| CanvasSprite {
                         object_guid: object.object_guid,
                         asset: sprite.asset,
-                        translation: object.transform.translation,
-                        scale: object.transform.scale,
+                        translation: transform.translation,
+                        scale: transform.scale,
                         size: sprite.size,
                         tint: sprite.tint,
                         uv_rect: sprite.uv_rect,
@@ -2170,11 +2208,21 @@ impl EditorApp {
                         .find(|object| object.object_guid == drag.object_guid)
                         .cloned()
                     {
-                        replacement.transform.translation = drag.translation_preview;
-                        if let Err(error) =
-                            self.history.replace_object(&mut self.scene, replacement)
-                        {
-                            self.status = error.to_string();
+                        if let Some(local_translation) = world_translation_to_local(
+                            &self.scene,
+                            drag.object_guid,
+                            drag.translation_preview,
+                        ) {
+                            replacement.transform.translation = local_translation;
+                            if let Err(error) =
+                                self.history.replace_object(&mut self.scene, replacement)
+                            {
+                                self.status = error.to_string();
+                            }
+                        } else {
+                            self.status =
+                                "Cannot move this object through a singular parent transform."
+                                    .into();
                         }
                     }
                 }
@@ -2286,6 +2334,59 @@ fn connected_tile_fill(
     Ok(changes)
 }
 
+fn scene_hierarchy_rows(scene: &SceneDocument) -> Vec<(Guid, String, usize)> {
+    let mut children = BTreeMap::<Option<Guid>, Vec<(Guid, String)>>::new();
+    for object in &scene.objects {
+        children
+            .entry(object.parent_guid)
+            .or_default()
+            .push((object.object_guid, object.name.clone()));
+    }
+    fn append_rows(
+        parent_guid: Option<Guid>,
+        depth: usize,
+        children: &BTreeMap<Option<Guid>, Vec<(Guid, String)>>,
+        rows: &mut Vec<(Guid, String, usize)>,
+    ) {
+        if let Some(objects) = children.get(&parent_guid) {
+            for (object_guid, name) in objects {
+                rows.push((*object_guid, name.clone(), depth));
+                append_rows(Some(*object_guid), depth + 1, children, rows);
+            }
+        }
+    }
+    let mut rows = Vec::with_capacity(scene.objects.len());
+    append_rows(None, 0, &children, &mut rows);
+    rows
+}
+
+fn world_translation_to_local(
+    scene: &SceneDocument,
+    object_guid: Guid,
+    world_translation: [f32; 2],
+) -> Option<[f32; 2]> {
+    let object = scene
+        .objects
+        .iter()
+        .find(|object| object.object_guid == object_guid)?;
+    let Some(parent_guid) = object.parent_guid else {
+        return Some(world_translation);
+    };
+    let parent = scene.world_transform(parent_guid)?;
+    if parent.scale.iter().any(|value| value.abs() <= f32::EPSILON) {
+        return None;
+    }
+    let (sin, cos) = parent.rotation_radians.sin_cos();
+    let delta = [
+        world_translation[0] - parent.translation[0],
+        world_translation[1] - parent.translation[1],
+    ];
+    Some([
+        (cos * delta[0] + sin * delta[1]) / parent.scale[0],
+        (-sin * delta[0] + cos * delta[1]) / parent.scale[1],
+    ])
+}
+
 fn object_asset_dependencies(object: &SceneObject) -> Vec<Guid> {
     let mut dependencies = BTreeSet::new();
     if let Some(sprite) = object.sprite {
@@ -2304,6 +2405,9 @@ fn record_prefab_overrides(before: &SceneObject, after: &mut SceneObject) {
     let overrides = &mut instance.overrides;
     if before.name != after.name {
         overrides.insert("object.name".into());
+    }
+    if before.parent_guid != after.parent_guid {
+        overrides.insert("object.parent".into());
     }
     for (changed, identifier) in [
         (
@@ -2354,6 +2458,9 @@ fn merge_prefab_overrides(template: &SceneObject, instance: &SceneObject) -> Sce
     let mut merged = template.clone();
     merged.object_guid = instance.object_guid;
     merged.prefab_instance = Some(link.clone());
+    if link.overrides.contains("object.parent") {
+        merged.parent_guid = instance.parent_guid;
+    }
     for (identifier, field) in [
         ("object.name", 0),
         ("transform.translation.x", 1),
