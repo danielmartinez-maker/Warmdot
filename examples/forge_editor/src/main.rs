@@ -392,7 +392,12 @@ impl EditorApp {
             }
         };
         let replacement = merge_prefab_overrides(&prefab.object, &current);
-        let mut dependencies = self.scene.dependencies.iter().copied().collect::<BTreeSet<_>>();
+        let mut dependencies = self
+            .scene
+            .dependencies
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
         dependencies.extend(prefab.dependencies.iter().copied());
         self.scene.dependencies = dependencies.into_iter().collect();
         match self.history.replace_object(&mut self.scene, replacement) {
