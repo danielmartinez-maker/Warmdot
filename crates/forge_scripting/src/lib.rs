@@ -31,6 +31,9 @@ const MAX_QUEUED_SCRIPT_EVENTS: usize = 1024;
 const MAX_AUDIO_COMMANDS_PER_CALLBACK: usize = 16;
 const MAX_QUEUED_AUDIO_COMMANDS: usize = 512;
 const MAX_AUDIO_GUID_BYTES: usize = 64;
+const MAX_SCENE_GUID_BYTES: usize = 64;
+const MAX_SCENE_REQUESTS_PER_CALLBACK: usize = 16;
+const MAX_SCENE_REQUESTS_PER_TICK: usize = 64;
 
 #[derive(Clone, Debug)]
 pub struct ScriptDefinition {
@@ -135,11 +138,13 @@ struct ScriptCallContext {
     tick: u64,
     emitted_events: Vec<ScriptEvent>,
     audio_commands: Vec<ScriptAudioCommand>,
+    scene_requests: Vec<Guid>,
 }
 
 type SharedContext = Rc<RefCell<Option<ScriptCallContext>>>;
 type SharedEvents = Rc<RefCell<Vec<ScriptEvent>>>;
 type SharedAudioCommands = Rc<RefCell<Vec<ScriptAudioCommand>>>;
+type SharedSceneRequests = Rc<RefCell<Vec<Guid>>>;
 
 struct ScriptInstance {
     _lua: Lua,
@@ -176,6 +181,7 @@ impl ScriptInstance {
         context: SharedContext,
         pending_events: SharedEvents,
         pending_audio_commands: SharedAudioCommands,
+        pending_scene_requests: SharedSceneRequests,
     ) -> Result<Self, ScriptError> {
         if definition.source.len() > MAX_SCRIPT_SOURCE_BYTES {
             return Err(ScriptError::SourceTooLarge(definition.source.len()));
@@ -202,6 +208,7 @@ impl ScriptInstance {
             context.clone(),
             pending_events.clone(),
             pending_audio_commands,
+            pending_scene_requests,
         )?;
         lua.sandbox(true)?;
 
@@ -250,6 +257,7 @@ impl ScriptInstance {
             tick,
             emitted_events: Vec::new(),
             audio_commands: Vec::new(),
+            scene_requests: Vec::new(),
         };
         *self.context.borrow_mut() = Some(fallback.clone());
         self.interrupt_checkpoints.set(0);
@@ -376,6 +384,7 @@ pub struct ScriptHost {
     diagnostics: Vec<ScriptDiagnostic>,
     pending_events: SharedEvents,
     pending_audio_commands: SharedAudioCommands,
+    pending_scene_requests: SharedSceneRequests,
     pending_callbacks: VecDeque<QueuedScriptCallback>,
     pending_update: Option<PendingScriptUpdate>,
     current_breakpoint: Option<ScriptBreakpointHit>,
@@ -395,6 +404,7 @@ impl ScriptHost {
             diagnostics: Vec::new(),
             pending_events: Rc::new(RefCell::new(Vec::new())),
             pending_audio_commands: Rc::new(RefCell::new(Vec::new())),
+            pending_scene_requests: Rc::new(RefCell::new(Vec::new())),
             pending_callbacks: VecDeque::new(),
             pending_update: None,
             current_breakpoint: None,
@@ -421,6 +431,7 @@ impl ScriptHost {
             context,
             self.pending_events.clone(),
             self.pending_audio_commands.clone(),
+            self.pending_scene_requests.clone(),
         )?;
         self.instances.insert(definition.object_guid, instance);
         Ok(())
@@ -508,6 +519,7 @@ impl ScriptHost {
         if self.pending_update.is_some() {
             return self.current_breakpoint.clone();
         }
+        self.pending_scene_requests.borrow_mut().clear();
         let pending_events = std::mem::take(&mut *self.pending_events.borrow_mut());
         let mut orphaned = Vec::new();
         for (object_guid, instance) in &mut self.instances {
@@ -630,14 +642,17 @@ impl ScriptHost {
         match invocation {
             ScriptInvocation::Completed(context) => {
                 let audio_commands = context.audio_commands.clone();
-                let (instances, diagnostics, pending_audio_commands) = (
+                let scene_requests = context.scene_requests.clone();
+                let (instances, diagnostics, pending_audio_commands, pending_scene_requests) = (
                     &mut self.instances,
                     &mut self.diagnostics,
                     &self.pending_audio_commands,
+                    &self.pending_scene_requests,
                 );
                 if let Some(instance) = instances.get_mut(&object_guid) {
                     if apply_callback_result(instance, world, Ok(context), tick, diagnostics) {
                         pending_audio_commands.borrow_mut().extend(audio_commands);
+                        pending_scene_requests.borrow_mut().extend(scene_requests);
                     }
                 }
                 None
@@ -703,6 +718,7 @@ impl ScriptHost {
                 context,
                 self.pending_events.clone(),
                 self.pending_audio_commands.clone(),
+                self.pending_scene_requests.clone(),
             ) {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
@@ -791,6 +807,10 @@ impl ScriptHost {
 
     pub fn take_audio_commands(&mut self) -> Vec<ScriptAudioCommand> {
         std::mem::take(&mut *self.pending_audio_commands.borrow_mut())
+    }
+
+    pub fn take_scene_transition_requests(&mut self) -> Vec<Guid> {
+        std::mem::take(&mut *self.pending_scene_requests.borrow_mut())
     }
 
     pub fn record_diagnostic(
@@ -936,6 +956,7 @@ fn install_forge_api(
     context: SharedContext,
     pending_events: SharedEvents,
     pending_audio_commands: SharedAudioCommands,
+    pending_scene_requests: SharedSceneRequests,
 ) -> Result<(), LuaError> {
     let input = lua.create_table()?;
 
@@ -1058,7 +1079,7 @@ fn install_forge_api(
         })?,
     )?;
 
-    let volume_context = context;
+    let volume_context = context.clone();
     let volume_pending = pending_audio_commands;
     audio.set(
         "set_bus_volume",
@@ -1088,10 +1109,39 @@ fn install_forge_api(
         })?,
     )?;
 
+    let scene = lua.create_table()?;
+    let scene_context = context.clone();
+    let scene_queue = pending_scene_requests;
+    scene.set(
+        "load",
+        lua.create_function(move |_, guid: String| {
+            if guid.len() > MAX_SCENE_GUID_BYTES {
+                return Ok(false);
+            }
+            let Ok(scene_guid) = Guid::from_str(&guid) else {
+                return Ok(false);
+            };
+            let mut slot = scene_context.borrow_mut();
+            let context = slot.as_mut().ok_or_else(inactive_context_error)?;
+            if context.scene_requests.len() >= MAX_SCENE_REQUESTS_PER_CALLBACK
+                || scene_queue
+                    .borrow()
+                    .len()
+                    .saturating_add(context.scene_requests.len())
+                    >= MAX_SCENE_REQUESTS_PER_TICK
+            {
+                return Ok(false);
+            }
+            context.scene_requests.push(scene_guid);
+            Ok(true)
+        })?,
+    )?;
+
     let forge = lua.create_table()?;
     forge.set("Input", input)?;
     forge.set("Events", events)?;
     forge.set("Audio", audio)?;
+    forge.set("Scene", scene)?;
     lua.globals().set("Forge", forge)?;
     Ok(())
 }

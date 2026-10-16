@@ -1,6 +1,7 @@
 //! Project creation and loading with scene paths confined to the project root.
 
 use std::{
+    collections::BTreeMap,
     error::Error,
     fmt, fs,
     path::{Component, Path, PathBuf},
@@ -12,6 +13,11 @@ use serde::{Deserialize, Serialize};
 
 pub const CURRENT_PROJECT_SCHEMA: u32 = 1;
 pub const PROJECT_FILE_NAME: &str = "project.forgeproj";
+const MAX_SCENE_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_SCENE_INDEX_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_SCENE_FILES: usize = 1024;
+const MAX_SCENE_DIRECTORY_ENTRIES: usize = 16_384;
+const MAX_SCENE_DIRECTORY_DEPTH: usize = 32;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -29,6 +35,8 @@ pub enum ProjectError {
     Json(serde_json::Error),
     Invalid(String),
     Scene(Vec<SceneDiagnostic>),
+    SceneNotFound(Guid),
+    DuplicateSceneGuid(Guid),
 }
 
 impl fmt::Display for ProjectError {
@@ -39,6 +47,10 @@ impl fmt::Display for ProjectError {
             Self::Invalid(message) => f.write_str(message),
             Self::Scene(diagnostics) => {
                 write!(f, "scene has {} diagnostic(s)", diagnostics.len())
+            }
+            Self::SceneNotFound(guid) => write!(f, "scene {guid} was not found below Scenes"),
+            Self::DuplicateSceneGuid(guid) => {
+                write!(f, "multiple scene files declare resource GUID {guid}")
             }
         }
     }
@@ -366,6 +378,190 @@ impl Project {
     }
 }
 
+
+/// A bounded, cached lookup of scene files beneath one project's Scenes folder.
+pub struct SceneCatalog {
+    scenes_root: PathBuf,
+    paths_by_guid: BTreeMap<Guid, PathBuf>,
+}
+
+impl SceneCatalog {
+    pub fn open(project_root: impl AsRef<Path>) -> Result<Self, ProjectError> {
+        let root = project_root.as_ref().canonicalize()?;
+        let scenes_path = root.join("Scenes");
+        let scenes_metadata = fs::symlink_metadata(&scenes_path)?;
+        if scenes_metadata.file_type().is_symlink() || !scenes_metadata.is_dir() {
+            return Err(ProjectError::Invalid(
+                "Scenes must be a regular project folder".into(),
+            ));
+        }
+        let scenes_root = scenes_path.canonicalize()?;
+        if !scenes_root.starts_with(&root) {
+            return Err(ProjectError::Invalid(
+                "Scenes folder resolves outside the project folder".into(),
+            ));
+        }
+
+        let mut scene_files = Vec::new();
+        let mut entries_seen = 0;
+        collect_scene_files(
+            &scenes_root,
+            &scenes_root,
+            0,
+            &mut entries_seen,
+            &mut scene_files,
+        )?;
+        let mut indexed_bytes = 0_u64;
+        let mut paths_by_guid = BTreeMap::new();
+        for path in scene_files {
+            let metadata = fs::metadata(&path)?;
+            if metadata.len() > MAX_SCENE_FILE_BYTES {
+                return Err(ProjectError::Invalid(format!(
+                    "scene file {} exceeds the {} MiB loading limit",
+                    path.display(),
+                    MAX_SCENE_FILE_BYTES / (1024 * 1024)
+                )));
+            }
+            indexed_bytes = indexed_bytes.saturating_add(metadata.len());
+            if indexed_bytes > MAX_SCENE_INDEX_BYTES {
+                return Err(ProjectError::Invalid(format!(
+                    "Scenes exceeds the {} MiB indexing limit",
+                    MAX_SCENE_INDEX_BYTES / (1024 * 1024)
+                )));
+            }
+            let bytes = fs::read(&path)?;
+            let declared_guid = serde_json::from_slice::<serde_json::Value>(&bytes)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("resource_guid")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(|value| value.parse::<Guid>().ok())
+                });
+            let Some(guid) = declared_guid else {
+                continue;
+            };
+            if paths_by_guid.insert(guid, path).is_some() {
+                return Err(ProjectError::DuplicateSceneGuid(guid));
+            }
+        }
+
+        Ok(Self {
+            scenes_root,
+            paths_by_guid,
+        })
+    }
+
+    pub fn load_scene(&self, scene_guid: Guid) -> Result<SceneDocument, ProjectError> {
+        let path = self
+            .paths_by_guid
+            .get(&scene_guid)
+            .ok_or(ProjectError::SceneNotFound(scene_guid))?;
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(ProjectError::Invalid(
+                "scene file must remain a regular file".into(),
+            ));
+        }
+        let canonical = path.canonicalize()?;
+        if !canonical.starts_with(&self.scenes_root) {
+            return Err(ProjectError::Invalid(
+                "scene file resolves outside Scenes".into(),
+            ));
+        }
+        if metadata.len() > MAX_SCENE_FILE_BYTES {
+            return Err(ProjectError::Invalid(format!(
+                "scene file {} exceeds the {} MiB loading limit",
+                canonical.display(),
+                MAX_SCENE_FILE_BYTES / (1024 * 1024)
+            )));
+        }
+        let bytes = fs::read(&canonical)?;
+        let source = String::from_utf8(bytes).map_err(|error| {
+            ProjectError::Invalid(format!(
+                "scene file {} is not UTF-8: {error}",
+                canonical.display()
+            ))
+        })?;
+        let scene = SceneDocument::from_json(&source).map_err(ProjectError::Scene)?;
+        if scene.resource_guid != scene_guid {
+            return Err(ProjectError::Invalid(format!(
+                "scene file {} changed its resource GUID after the scene index was built",
+                canonical.display()
+            )));
+        }
+        Ok(scene)
+    }
+}
+
+/// Loads one scene by stable GUID from the project's Scenes folder.
+pub fn load_scene_by_guid(
+    project_root: impl AsRef<Path>,
+    scene_guid: Guid,
+) -> Result<SceneDocument, ProjectError> {
+    SceneCatalog::open(project_root)?.load_scene(scene_guid)
+}
+
+fn collect_scene_files(
+    current: &Path,
+    scenes_root: &Path,
+    depth: usize,
+    entries_seen: &mut usize,
+    scene_files: &mut Vec<PathBuf>,
+) -> Result<(), ProjectError> {
+    if depth > MAX_SCENE_DIRECTORY_DEPTH {
+        return Err(ProjectError::Invalid(format!(
+            "Scenes exceeds the {MAX_SCENE_DIRECTORY_DEPTH}-directory depth limit"
+        )));
+    }
+    let mut entries = fs::read_dir(current)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        *entries_seen = (*entries_seen).saturating_add(1);
+        if *entries_seen > MAX_SCENE_DIRECTORY_ENTRIES {
+            return Err(ProjectError::Invalid(format!(
+                "Scenes exceeds the {MAX_SCENE_DIRECTORY_ENTRIES}-entry loading limit"
+            )));
+        }
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            let canonical = path.canonicalize()?;
+            if !canonical.starts_with(scenes_root) {
+                return Err(ProjectError::Invalid(
+                    "scene directory resolves outside Scenes".into(),
+                ));
+            }
+            collect_scene_files(
+                &canonical,
+                scenes_root,
+                depth + 1,
+                entries_seen,
+                scene_files,
+            )?;
+        } else if metadata.is_file()
+            && path.extension().is_some_and(|extension| extension == "forgescene")
+        {
+            if scene_files.len() >= MAX_SCENE_FILES {
+                return Err(ProjectError::Invalid(format!(
+                    "Scenes exceeds the {MAX_SCENE_FILES}-file loading limit"
+                )));
+            }
+            let canonical = path.canonicalize()?;
+            if !canonical.starts_with(scenes_root) {
+                return Err(ProjectError::Invalid(
+                    "scene file resolves outside Scenes".into(),
+                ));
+            }
+            scene_files.push(canonical);
+        }
+    }
+    Ok(())
+}
+
 fn create_confined_scene_parent(root: &Path, parent: &Path) -> Result<(), ProjectError> {
     let relative_parent = parent
         .strip_prefix(root)
@@ -429,7 +625,10 @@ mod tests {
 
     #[test]
     fn scene_lookup_resolves_nested_scene_by_stable_guid() {
-        let root = std::env::temp_dir().join(format!("forge-project-scene-lookup-{}", Guid::new()));
+        let root = std::env::temp_dir().join(format!(
+            "forge-project-scene-lookup-{}",
+            Guid::new()
+        ));
         let project = Project::create(&root, "Scene lookup").expect("create project");
         let scene_guid = Guid::new();
         let scene = SceneDocument {

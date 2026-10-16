@@ -10,7 +10,7 @@ use std::{
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
 use forge_audio::{AudioBus, AudioEngine};
 use forge_core::Guid;
-use forge_project::{PROJECT_FILE_NAME, Project};
+use forge_project::{Project, SceneCatalog, PROJECT_FILE_NAME};
 use forge_renderer::{GpuRenderer, RenderOutcome};
 use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
 use forge_scene::{
@@ -33,9 +33,11 @@ struct RunState {
 
 struct PlayerApp {
     project_name: String,
+    project_root: PathBuf,
     runtime: GameRuntime,
     assets: AssetCatalog,
     audio: Option<AudioEngine>,
+    scene_catalog: Option<Result<SceneCatalog, String>>,
     state: Option<RunState>,
     last_frame: Instant,
     next_asset_refresh: Instant,
@@ -44,6 +46,7 @@ struct PlayerApp {
 impl PlayerApp {
     fn new(
         project_name: String,
+        project_root: PathBuf,
         runtime: GameRuntime,
         assets: AssetCatalog,
         audio: Option<AudioEngine>,
@@ -51,9 +54,11 @@ impl PlayerApp {
         let now = Instant::now();
         Self {
             project_name,
+            project_root,
             runtime,
             assets,
             audio,
+            scene_catalog: None,
             state: None,
             last_frame: now,
             next_asset_refresh: now + Duration::from_millis(500),
@@ -130,6 +135,14 @@ impl ApplicationHandler for PlayerApp {
                     &self.assets,
                     self.runtime.take_audio_commands(),
                 );
+                let scene_requests = self.runtime.take_scene_transition_requests();
+                process_scene_transition_requests(
+                    &self.project_root,
+                    &self.assets,
+                    &mut self.runtime,
+                    &mut self.scene_catalog,
+                    scene_requests,
+                );
                 for diagnostic in self.runtime.take_script_diagnostics() {
                     eprintln!(
                         "Luau {} at tick {}: {}",
@@ -185,6 +198,86 @@ fn process_audio_commands(
             eprintln!("audio command failed: {error}");
         }
     }
+}
+
+fn process_scene_transition_requests(
+    project_root: &Path,
+    assets: &AssetCatalog,
+    runtime: &mut GameRuntime,
+    scene_catalog: &mut Option<Result<SceneCatalog, String>>,
+    requests: Vec<Guid>,
+) {
+    if requests.is_empty() {
+        return;
+    }
+    if scene_catalog.is_none() {
+        let catalog = SceneCatalog::open(project_root).map_err(|error| error.to_string());
+        if let Err(error) = &catalog {
+            eprintln!("scene catalog is unavailable: {error}");
+        }
+        *scene_catalog = Some(catalog);
+    }
+    let Some(Ok(catalog)) = scene_catalog.as_ref() else {
+        return;
+    };
+    for scene_guid in requests {
+        let scene = match catalog.load_scene(scene_guid) {
+            Ok(scene) => scene,
+            Err(error) => {
+                eprintln!("scene transition to {scene_guid} was rejected: {error}");
+                continue;
+            }
+        };
+        if let Err(error) = validate_scene_dependencies(&scene, assets) {
+            eprintln!("scene transition to {scene_guid} was rejected: {error}");
+            continue;
+        }
+        match GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets) {
+            Ok(replacement) => {
+                eprintln!("entered scene {} ({scene_guid})", scene.name);
+                *runtime = replacement;
+                return;
+            }
+            Err(error) => {
+                eprintln!("scene transition to {scene_guid} could not prepare: {error}");
+            }
+        }
+    }
+}
+
+fn validate_scene_dependencies(
+    scene: &SceneDocument,
+    assets: &AssetCatalog,
+) -> Result<(), Box<dyn Error>> {
+    for guid in scene.dependencies.iter().copied() {
+        let record = assets.get(guid).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("scene dependency {guid} is not in the project asset catalog"),
+            )
+        })?;
+        match record.kind {
+            AssetKind::Png => {
+                assets.load_png(guid)?;
+            }
+            AssetKind::SpriteSheet => {
+                assets.load_sprite_sheet(guid)?;
+            }
+            AssetKind::AnimationClip => {
+                assets.load_animation_clip(guid)?;
+            }
+            AssetKind::Script => {
+                assets.load_script(guid)?;
+            }
+            AssetKind::Prefab => {
+                assets.load_prefab(guid)?;
+            }
+            AssetKind::Audio => {
+                assets.load_audio(guid)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn load_project_tilemap(project_root: &Path) -> Result<Option<TileMapDocument>, Box<dyn Error>> {
@@ -603,6 +696,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop.run_app(&mut PlayerApp::new(project_name, runtime, assets, audio))?;
+    event_loop.run_app(&mut PlayerApp::new(
+        project_name,
+        project_root,
+        runtime,
+        assets,
+        audio,
+    ))?;
     Ok(())
 }

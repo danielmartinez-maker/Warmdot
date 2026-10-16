@@ -13,6 +13,10 @@ declare namespace Forge
         function play_music(assetGuid: string, loop: boolean?): boolean
         function set_bus_volume(bus: ("master" | "music" | "sfx" | "ui"), decibels: number): boolean
     end
+
+    declare namespace Scene
+        function load(sceneGuid: string): boolean
+    end
 end
 
 export type ForgeObject = {

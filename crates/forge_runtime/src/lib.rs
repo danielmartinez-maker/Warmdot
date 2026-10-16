@@ -1,6 +1,11 @@
 //! Headless-capable runtime kernel with fixed-step input and physics barriers.
 
-use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    error::Error,
+    fmt,
+    time::Duration,
+};
 
 use forge_assets::{
     AnimationClipDocument, AnimationPlayer, AssetCatalog, AssetError, LoadedScriptAsset,
@@ -16,6 +21,8 @@ pub use forge_scripting::{
     ScriptAudioCommand, ScriptBreakpointHit, ScriptDefinition, ScriptDiagnostic, ScriptError,
 };
 use forge_world::{RuntimeWorld, WorldError};
+
+const MAX_QUEUED_SCENE_TRANSITION_REQUESTS: usize = 512;
 
 #[derive(Debug)]
 pub enum SpriteAnimationError {
@@ -160,6 +167,7 @@ pub struct GameRuntime {
     pending_debug_frame: Option<PendingRuntimeFrame>,
     sprite_animations: BTreeMap<Guid, RuntimeSpriteAnimation>,
     script_host: ScriptHost,
+    pending_scene_transitions: VecDeque<Guid>,
 }
 
 impl GameRuntime {
@@ -183,6 +191,7 @@ impl GameRuntime {
             pending_debug_frame: None,
             sprite_animations: BTreeMap::new(),
             script_host: ScriptHost::new(),
+            pending_scene_transitions: VecDeque::new(),
         })
     }
 
@@ -247,6 +256,7 @@ impl GameRuntime {
         self.world = scene.instantiate().map_err(RuntimeError::Scene)?;
         self.sprite_animations.clear();
         self.script_host = ScriptHost::new();
+        self.pending_scene_transitions.clear();
         self.debugger_paused = false;
         self.pending_debug_frame = None;
         self.clock.reset();
@@ -471,12 +481,24 @@ impl GameRuntime {
                 return true;
             }
 
+            self.collect_scene_transition_requests();
             self.finish_script_tick(&mut pending.physics_events);
             pending.completed_steps = pending.completed_steps.saturating_add(1);
             pending.remaining_steps = pending.remaining_steps.saturating_sub(1);
             pending.next_tick = pending.next_tick.saturating_add(1);
         }
         false
+    }
+
+    fn collect_scene_transition_requests(&mut self) {
+        let available = MAX_QUEUED_SCENE_TRANSITION_REQUESTS
+            .saturating_sub(self.pending_scene_transitions.len());
+        self.pending_scene_transitions.extend(
+            self.script_host
+                .take_scene_transition_requests()
+                .into_iter()
+                .take(available),
+        );
     }
 
     fn finish_script_tick(&mut self, frame_physics_events: &mut Vec<CollisionEvent2D>) {
@@ -526,6 +548,7 @@ impl GameRuntime {
             self.pending_debug_frame = Some(pending);
             return BreakpointContinueResult::Hit(hit);
         }
+        self.collect_scene_transition_requests();
         if self.process_pending_frame(&mut pending) {
             let hit = self
                 .script_host
@@ -570,6 +593,10 @@ impl GameRuntime {
 
     pub fn take_audio_commands(&mut self) -> Vec<ScriptAudioCommand> {
         self.script_host.take_audio_commands()
+    }
+
+    pub fn take_scene_transition_requests(&mut self) -> Vec<Guid> {
+        self.pending_scene_transitions.drain(..).collect()
     }
 
     pub fn world(&self) -> &RuntimeWorld {
