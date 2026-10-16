@@ -17,7 +17,11 @@ impl fmt::Display for EditorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Scene(diagnostics) => {
-                write!(f, "scene edit produced {} validation diagnostic(s)", diagnostics.len())
+                write!(
+                    f,
+                    "scene edit produced {} validation diagnostic(s)",
+                    diagnostics.len()
+                )
             }
             Self::ObjectNotFound(guid) => write!(f, "scene object {guid} was not found"),
             Self::DuplicateObject(guid) => write!(f, "scene already contains object {guid}"),
@@ -30,8 +34,14 @@ impl Error for EditorError {}
 
 #[derive(Clone, Debug)]
 enum SceneCommand {
-    Insert { index: usize, object: SceneObject },
-    Remove { index: usize, object: SceneObject },
+    Insert {
+        index: usize,
+        object: SceneObject,
+    },
+    Remove {
+        index: usize,
+        object: SceneObject,
+    },
     Replace {
         index: usize,
         before: SceneObject,
@@ -43,11 +53,17 @@ impl SceneCommand {
     fn apply(&self, scene: &mut SceneDocument) -> Result<(), EditorError> {
         match self {
             Self::Insert { index, object } => {
-                if scene.objects.iter().any(|item| item.object_guid == object.object_guid) {
+                if scene
+                    .objects
+                    .iter()
+                    .any(|item| item.object_guid == object.object_guid)
+                {
                     return Err(EditorError::DuplicateObject(object.object_guid));
                 }
                 if *index > scene.objects.len() {
-                    return Err(EditorError::InvalidCommand("insert position is outside the scene"));
+                    return Err(EditorError::InvalidCommand(
+                        "insert position is outside the scene",
+                    ));
                 }
                 scene.objects.insert(*index, object.clone());
                 validate_or_restore(scene, |scene| {
@@ -90,11 +106,17 @@ impl SceneCommand {
                 })
             }
             Self::Remove { index, object } => {
-                if scene.objects.iter().any(|item| item.object_guid == object.object_guid) {
+                if scene
+                    .objects
+                    .iter()
+                    .any(|item| item.object_guid == object.object_guid)
+                {
                     return Err(EditorError::DuplicateObject(object.object_guid));
                 }
                 if *index > scene.objects.len() {
-                    return Err(EditorError::InvalidCommand("restore position is outside the scene"));
+                    return Err(EditorError::InvalidCommand(
+                        "restore position is outside the scene",
+                    ));
                 }
                 scene.objects.insert(*index, object.clone());
                 validate_or_restore(scene, || {
