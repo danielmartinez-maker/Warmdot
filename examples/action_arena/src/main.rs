@@ -218,6 +218,8 @@ mod tests {
                 && ((event.object_a == player_guid && event.object_b == enemy_guid)
                     || (event.object_a == enemy_guid && event.object_b == player_guid))
         }));
+        // Collision callbacks are delivered to Luau on the next fixed tick.
+        runtime.advance_frame(Duration::from_millis(50));
         assert!(runtime.take_script_diagnostics().is_empty());
         assert!(
             runtime
