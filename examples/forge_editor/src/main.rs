@@ -922,43 +922,48 @@ impl EditorApp {
                 return;
             }
         };
-        let Some(assets) = self.catalog.as_ref() else {
-            self.set_error_status(
-                "editor.scene_transition_failed",
-                "Scene transition failed: the asset catalog is unavailable.".into(),
-            );
-            return;
-        };
         for scene_guid in requests {
-            let scene = match scene_catalog.load_scene(scene_guid) {
-                Ok(scene) => scene,
-                Err(error) => {
-                    self.set_error_status(
+            let attempt = (|| {
+                let scene = scene_catalog.load_scene(scene_guid).map_err(|error| {
+                    (
                         "editor.scene_transition_rejected",
                         format!("Scene transition to {scene_guid} was rejected: {error}"),
-                    );
-                    continue;
-                }
-            };
-            if let Err(error) = validate_scene_dependencies(&scene, assets) {
-                self.set_error_status(
-                    "editor.scene_transition_rejected",
-                    format!("Scene transition to {scene_guid} was rejected: {error}"),
-                );
-                continue;
-            }
-            let preview_ui = match load_preview_ui(&scene, assets) {
-                Ok(ui) => ui,
-                Err(error) => {
-                    self.status = format!(
-                        "Scene transition to {} has invalid game UI: {error}",
-                        scene.resource_guid
-                    );
-                    continue;
-                }
-            };
-            match GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets) {
-                Ok(runtime) => {
+                    )
+                })?;
+                let assets = self.catalog.as_ref().ok_or((
+                    "editor.scene_transition_failed",
+                    "Scene transition failed: the asset catalog is unavailable.".to_owned(),
+                ))?;
+                validate_scene_dependencies(&scene, assets).map_err(|error| {
+                    (
+                        "editor.scene_transition_rejected",
+                        format!("Scene transition to {scene_guid} was rejected: {error}"),
+                    )
+                })?;
+                let preview_ui = load_preview_ui(&scene, assets).map_err(|error| {
+                    (
+                        "editor.scene_transition_invalid_ui",
+                        format!(
+                            "Scene transition to {} has invalid game UI: {error}",
+                            scene.resource_guid
+                        ),
+                    )
+                })?;
+                let runtime =
+                    GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), assets)
+                        .map_err(|error| {
+                            (
+                                "editor.scene_transition_failed",
+                                format!(
+                                    "Scene transition to {} could not prepare: {error}",
+                                    scene.resource_guid
+                                ),
+                            )
+                        })?;
+                Ok::<_, (&str, String)>((scene, preview_ui, runtime))
+            })();
+            match attempt {
+                Ok((scene, preview_ui, runtime)) => {
                     self.runtime = Some(runtime);
                     self.preview_ui = Some(preview_ui);
                     self.preview_tick = 0;
@@ -968,12 +973,7 @@ impl EditorApp {
                     self.status = format!("Editor preview entered scene {}.", scene.name);
                     return;
                 }
-                Err(error) => {
-                    self.status = format!(
-                        "Scene transition to {} could not prepare: {error}",
-                        scene.resource_guid
-                    );
-                }
+                Err((event, message)) => self.set_error_status(event, message),
             }
         }
     }
