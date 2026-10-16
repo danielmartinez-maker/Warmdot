@@ -2046,7 +2046,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{connected_tile_fill, ChunkedTileMap, TileCell, TileCoord, TileMapHistory};
+    use super::{ChunkedTileMap, TileCell, TileCoord, TileMapHistory, connected_tile_fill};
 
     #[test]
     fn connected_tile_fill_respects_solid_boundaries_and_is_undoable() {
@@ -2081,9 +2081,14 @@ mod tests {
         let mut history = TileMapHistory::new(8);
         assert!(history.execute_stroke(&mut map, changes));
         assert_eq!(map.get(TileCoord { x: -1, y: 0 }), Some(replacement));
-        assert_eq!(map.get(TileCoord { x: 2, y: 0 }), Some(TileCell { solid: true, ..seed }));
+        assert_eq!(
+            map.get(TileCoord { x: 2, y: 0 }),
+            Some(TileCell {
+                solid: true,
+                ..seed
+            })
+        );
         assert!(history.undo(&mut map));
         assert_eq!(map.get(TileCoord { x: 0, y: 0 }), Some(seed));
     }
 }
-
