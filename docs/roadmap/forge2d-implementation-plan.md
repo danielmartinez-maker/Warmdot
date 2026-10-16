@@ -35,7 +35,7 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Verified code snapshot `d34a4835157ba07beb0f54377b5036e8058a6485`; Windows run `38875425714` passed formatting, workspace type-check, and workspace tests. The latest documentation-only commits follow that verified code snapshot.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1, draft and unmerged. Verified code snapshot `faeaa9679bfd2d497f6acddbf943fd37b73cd895`; Windows run `38879901911` passed formatting, workspace type-check, and workspace tests.
 
 ### Present in the branch
 
@@ -52,8 +52,8 @@ Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1
 
 ### Confirmed gaps or partial coverage
 
-- The native Luau integration still lacks script-line breakpoints; typed events and compatible scalar state migration are implemented.
-- The editor preview still needs player-facing verification for focus loss, pause/step, live changes, and last-good behavior.
+- Luau line breakpoints now suspend and resume the current callback, preserve the fixed tick, and surface hit metadata. The editor preview has line selection, Set/Remove, accepted-line feedback, and Continue controls.
+- The editor preview still needs a player-facing desktop session for focus loss, pause/step, live changes, last-good behavior, and breakpoint interaction.
 - No game audio runtime, retained game UI, scene-transition flow, profiler/logging overlay, or newcomer tutorial.
 - Current tilemaps are chunked in storage, but rendering/collision are expanded per tile; large-map incremental rendering/collision and navigation are not implemented.
 - The action and colony samples are early gameplay slices, not the complete P0 vertical slices. The renderer benchmark has not been run on a desktop GPU, so no performance results are claimed.
@@ -83,11 +83,11 @@ Windows formatting, workspace type-check, and workspace tests passed on commit `
 - [x] Bound source size (1 MiB), VM memory (4 MiB), scene instances (64), and callback interrupt checkpoints (20,000); isolate errors with source path, object GUID, and tick.
 - [x] Support transactional source compilation reloads and retain the last working VM when replacement compilation fails.
 - [x] Add an editor runtime script diagnostics console and fixed-tick pause/step controls.
-- [ ] Add script-line breakpoints with resumable callback execution and a breakpoint hit result.
+- [x] Add script-line breakpoints with resumable callback execution and a breakpoint hit result. `ScriptHost` retains the loaded source chunk so breakpoints apply to nested callbacks; the runtime resumes the paused call at the same fixed tick and reports object, asset, source, line, and tick.
 - [x] Broadcast bounded scalar events on the next fixed tick with deterministic delivery ordering.
 - [x] Migrate same-name boolean, integer, number, and string state fields on successful reload; preserve on_start completion and diagnose fields that reset.
 
-The existing suite covers asset GUID stability/reload, old-scene compatibility and script round-tripping, property/input updates, runaway isolation, last-good source reload, live property updates without VM recompilation, state migration, and typed-event ordering/bounds. Windows formatting, workspace type-checking, and workspace tests passed on `d34a4835157ba07beb0f54377b5036e8058a6485` (run `38875425714`).
+The existing suite covers asset GUID stability/reload, old-scene compatibility and script round-tripping, property/input updates, runaway isolation, last-good source reload, live property updates without VM recompilation, state migration, typed-event ordering/bounds, and the integrated breakpoint/editor API. Windows formatting, workspace type-checking, and workspace tests passed on `faeaa9679bfd2d497f6acddbf943fd37b73cd895` (run `38879901911`).
 
 **Exit:** The action sample's player behavior is authored in Luau, edits are reflected safely in play mode when compatible, and invalid/runaway scripts report diagnostics without terminating the editor or last-good game state.
 
@@ -97,7 +97,8 @@ The existing suite covers asset GUID stability/reload, old-scene compatibility a
 - [x] Keep editor selection available while playing and resolve rendered runtime sprites by stable authored GUID.
 - [x] Apply compatible script-property, PNG texture, and Luau source updates transactionally; incompatible property/source changes retain their prior working value/VM and report diagnostics.
 - [x] Define pause accumulator reset, stop/discard behavior, and prevent scene switching during a preview.
-**Exit:** A project can run inside the editor; compatible property/asset/script changes visibly update the live game, while rejected updates retain the last-good state.
+- [x] Add source-line breakpoint Set/Remove controls, accepted-line feedback, hit metadata, and Continue in the editor preview.
+**Exit:** A project can run inside the editor; compatible property/asset/script changes visibly update the live game, while rejected updates retain the last-good state. Code and CI are verified; player-facing desktop acceptance remains open.
 
 ### P0.4 — Audio, transitions, and game UI
 
@@ -164,4 +165,5 @@ The existing suite covers asset GUID stability/reload, old-scene compatibility a
 - 2026-10-16: Added a stable-GUID asset browser/resource validator, project name/default-scene settings, and explicit undoable collision-only tile painting; bounded connected fill and viewport pan/zoom are also complete. Windows formatting, workspace type-checking, and workspace tests passed on `6865d674` (run `38864521933`). The asset browser commit `89bd190` passed the same Windows checks on run `38863863484`.
 - 2026-10-16: Completed the P0.1 authoring-model slice on `aa6173577d4116defac860a406ea1e2ab8a04ea4`: bounded drag/drop asset import; parent hierarchy and world transforms; prefab instances with granular sprite property overrides; move/rotate/scale/anchor gizmos with snapping; selectable render layers; and validated history/save handling. Windows run `38873215811` passed formatting, workspace type-check, and workspace tests.
 - 2026-10-16: Added compatible scalar state migration and typed next-tick events to P0.2, then fixed event docs/types and bounded editor preview input while paused with window-focus/text-input gating. Windows formatting, type-check, and workspace tests passed on `d34a4835157ba07beb0f54377b5036e8058a6485` (run `38875425714`). Line breakpoints remain the P0.2 code gap; P0.3 still needs player-facing verification.
-- Next: implement resumable line breakpoints, then finish the player-facing P0.3 verification, P0.4 audio/UI/transitions, P0.5 diagnostics/shipping/tutorial, and P0.6 sample exits before opening P1.
+- 2026-10-16: Added resumable Luau line breakpoints, deterministic callback queue suspension, fixed-tick Continue semantics, and editor Set/Remove/Continue controls with accepted-line and hit feedback. Windows formatting, workspace type-check, and workspace tests passed on `faeaa9679bfd2d497f6acddbf943fd37b73cd895` (run `38879901911`). P0.3 still needs a player-facing desktop acceptance session.
+- Next: deliver P0.4 audio, transitions, and retained game UI, then P0.5 diagnostics/shipping/tutorial and P0.6 sample exits before opening P1.
