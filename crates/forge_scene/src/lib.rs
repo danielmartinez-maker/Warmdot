@@ -508,7 +508,8 @@ impl SceneDocument {
 
         if hierarchy_valid {
             for object in &self.objects {
-                if object.parent_guid.is_some() && self.world_transform(object.object_guid).is_none()
+                if object.parent_guid.is_some()
+                    && self.world_transform(object.object_guid).is_none()
                 {
                     hierarchy_valid = false;
                     diagnostics.push(SceneDiagnostic::error(
@@ -702,8 +703,12 @@ fn compose_authored_transform(
         (parent.rotation_radians + local.rotation_radians, [0.0, 0.0])
     };
     let translation = [
-        parent.translation[0] + parent_x[0] * local.translation[0] + parent_y[0] * local.translation[1],
-        parent.translation[1] + parent_x[1] * local.translation[0] + parent_y[1] * local.translation[1],
+        parent.translation[0]
+            + parent_x[0] * local.translation[0]
+            + parent_y[0] * local.translation[1],
+        parent.translation[1]
+            + parent_x[1] * local.translation[0]
+            + parent_y[1] * local.translation[1],
     ];
     let world = AuthoredTransform {
         translation,

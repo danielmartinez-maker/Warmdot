@@ -15,9 +15,9 @@ use forge_project::Project;
 use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
-    AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform, CURRENT_SCENE_SCHEMA,
-    PrefabDocument, PrefabInstance, SceneDocument, SceneObject, ScriptPropertyValue,
-    CURRENT_PREFAB_SCHEMA,
+    AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
+    CURRENT_PREFAB_SCHEMA, CURRENT_SCENE_SCHEMA, PrefabDocument, PrefabInstance, SceneDocument,
+    SceneObject, ScriptPropertyValue,
 };
 use forge_tilemap::{ChunkedTileMap, TileCell, TileCoord, TileMapDocument, TileMapHistory};
 

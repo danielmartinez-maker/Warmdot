@@ -115,9 +115,11 @@ fn compose_transform(
     let (rotation_radians, scale) = decompose_basis(world_x, world_y, object_guid)?;
     let transform = Transform2D {
         translation: [
-            parent.translation[0] + parent_x[0] * local.translation[0]
+            parent.translation[0]
+                + parent_x[0] * local.translation[0]
                 + parent_y[0] * local.translation[1],
-            parent.translation[1] + parent_x[1] * local.translation[0]
+            parent.translation[1]
+                + parent_x[1] * local.translation[0]
                 + parent_y[1] * local.translation[1],
         ],
         rotation_radians,
