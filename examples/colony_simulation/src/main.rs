@@ -28,8 +28,7 @@ const MAX_WORKERS: usize = 256;
 const WORKER_SPEED: f32 = 3.2;
 const ARRIVAL_RADIUS: f32 = 0.8;
 const HOME: [f32; 2] = [0.0, 0.0];
-const RESOURCE_NODES: [[f32; 2]; 4] =
-    [[-22.0, -11.0], [22.0, -11.0], [-22.0, 11.0], [22.0, 11.0]];
+const RESOURCE_NODES: [[f32; 2]; 4] = [[-22.0, -11.0], [22.0, -11.0], [-22.0, 11.0], [22.0, 11.0]];
 const GRID_WIDTH: i32 = 30;
 const GRID_HEIGHT: i32 = 16;
 const GRID_ORIGIN: [f32; 2] = [-30.0, -16.0];
@@ -560,10 +559,7 @@ fn make_colony_system(
                 layer: 3,
                 ..Sprite::default()
             };
-            let position = [
-                HOME[0] + angle.cos() * 0.55,
-                HOME[1] + angle.sin() * 0.55,
-            ];
+            let position = [HOME[0] + angle.cos() * 0.55, HOME[1] + angle.sin() * 0.55];
             if world
                 .spawn(
                     guid,
