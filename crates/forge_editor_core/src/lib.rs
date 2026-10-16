@@ -101,7 +101,7 @@ impl SceneCommand {
             Self::Insert { index, object } => {
                 ensure_object_at(scene, *index, object.object_guid)?;
                 let removed = scene.objects.remove(*index);
-                validate_or_restore(scene, || {
+                validate_or_restore(scene, |scene| {
                     scene.objects.insert(*index, removed);
                 })
             }
@@ -119,7 +119,7 @@ impl SceneCommand {
                     ));
                 }
                 scene.objects.insert(*index, object.clone());
-                validate_or_restore(scene, || {
+                validate_or_restore(scene, |scene| {
                     scene.objects.remove(*index);
                 })
             }
@@ -130,7 +130,7 @@ impl SceneCommand {
             } => {
                 ensure_object_at(scene, *index, after.object_guid)?;
                 let original = std::mem::replace(&mut scene.objects[*index], before.clone());
-                validate_or_restore(scene, || {
+                validate_or_restore(scene, |scene| {
                     scene.objects[*index] = original;
                 })
             }
