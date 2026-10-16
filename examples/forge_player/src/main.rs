@@ -1415,3 +1415,83 @@ fn main() -> Result<(), Box<dyn Error>> {
     ))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scene_transition_restores_project_tilemap_only_for_default_scene() {
+        let project_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../action_arena/project.forgeproj");
+        let project = Project::open(project_file).expect("Action Arena project opens");
+        let project_root = project.root().to_path_buf();
+        let default_scene_guid = project.document().default_scene_guid;
+        let assets = AssetCatalog::open(project_root.clone()).expect("Action Arena assets open");
+        let mut default_scene = project.default_scene().clone();
+        let tilemap = load_project_tilemap(&project_root)
+            .expect("project tilemap loads")
+            .expect("Action Arena has a project tilemap");
+        append_tilemap_to_scene(&mut default_scene, &tilemap, &assets)
+            .expect("project tilemap is appended to the default scene");
+        let default_ui = load_scene_ui(&default_scene, &assets).expect("default UI loads");
+        let mut runtime = GameRuntime::from_scene_with_assets(
+            &default_scene,
+            RuntimeConfig::default(),
+            &assets,
+        )
+        .expect("default scene runtime loads");
+        let default_sprite_count = runtime.world_mut().extract_sprites().len();
+
+        let catalog = SceneCatalog::open(&project_root).expect("scene catalog opens");
+        let menu_guid = catalog
+            .scene_guids()
+            .find(|guid| {
+                catalog
+                    .load_scene(*guid)
+                    .is_ok_and(|scene| scene.name == "Menu")
+            })
+            .expect("Menu scene is indexed");
+        let menu_scene = catalog.load_scene(menu_guid).expect("Menu scene loads");
+        let mut menu_runtime = GameRuntime::from_scene_with_assets(
+            &menu_scene,
+            RuntimeConfig::default(),
+            &assets,
+        )
+        .expect("Menu runtime loads");
+        let menu_sprite_count = menu_runtime.world_mut().extract_sprites().len();
+
+        let mut current_scene = default_scene;
+        let mut ui = default_ui;
+        let mut scene_catalog = None;
+        process_scene_transition_requests(
+            &project_root,
+            &assets,
+            &mut runtime,
+            &mut current_scene,
+            &mut ui,
+            &mut scene_catalog,
+            vec![menu_guid],
+        );
+        assert_eq!(
+            runtime.world_mut().extract_sprites().len(),
+            menu_sprite_count,
+            "project tilemap should not be appended to the authored menu scene"
+        );
+
+        process_scene_transition_requests(
+            &project_root,
+            &assets,
+            &mut runtime,
+            &mut current_scene,
+            &mut ui,
+            &mut scene_catalog,
+            vec![default_scene_guid],
+        );
+        assert_eq!(
+            runtime.world_mut().extract_sprites().len(),
+            default_sprite_count,
+            "returning to the project default scene should restore its project tilemap"
+        );
+    }
+}
