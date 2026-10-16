@@ -79,6 +79,7 @@ enum TransformGizmoMode {
     Move,
     Rotate,
     Scale,
+    Anchor,
 }
 
 #[derive(Clone, Copy)]
@@ -90,6 +91,9 @@ struct TransformGizmoDrag {
     pointer_start_radius: f32,
     transform_start: AuthoredTransform,
     transform_preview: AuthoredTransform,
+    anchor_start: [f32; 2],
+    anchor_preview: [f32; 2],
+    sprite_size: [f32; 2],
     mode: TransformGizmoMode,
 }
 
@@ -2062,17 +2066,27 @@ impl EditorApp {
                                 let handle = object_rect.right_bottom() + Vec2::splat(8.0);
                                 Rect::from_center_size(handle, Vec2::splat(20.0)).contains(pointer)
                             }
+                            TransformGizmoMode::Anchor if is_selected => {
+                                pointer.distance(pivot) <= 10.0
+                            }
                             _ => false,
                         };
                         hit.then_some((
                             (sprite.layer, sprite.order, object.object_guid),
-                            (object.object_guid, transform, pivot),
+                            (
+                                object.object_guid,
+                                transform,
+                                pivot,
+                                sprite.anchor,
+                                sprite.size,
+                            ),
                         ))
                     })
                     .max_by_key(|(draw_order, _)| *draw_order)
                     .map(|(_, target)| target)
             });
-            self.transform_gizmo_drag = target.map(|(object_guid, transform, pointer_center)| {
+            self.transform_gizmo_drag = target.map(
+                |(object_guid, transform, pointer_center, anchor, sprite_size)| {
                 self.selected = Some(object_guid);
                 self.selected_asset = None;
                 let pointer_start = response
@@ -2087,6 +2101,9 @@ impl EditorApp {
                     pointer_start_radius: pointer_offset.length().max(1.0),
                     transform_start: transform,
                     transform_preview: transform,
+                    anchor_start: anchor,
+                    anchor_preview: anchor,
+                    sprite_size,
                     mode: self.gizmo_mode,
                 }
             });
@@ -2130,6 +2147,42 @@ impl EditorApp {
                                     *value = (*value * 10.0).round() / 10.0;
                                 }
                             }
+                        }
+                        TransformGizmoMode::Anchor => {
+                            let screen_delta = (pointer - drag.pointer_start) / pixels_per_unit;
+                            let (sin, cos) = drag.transform_start.rotation_radians.sin_cos();
+                            let local_delta = Vec2::new(
+                                cos * screen_delta.x + sin * screen_delta.y,
+                                -sin * screen_delta.x + cos * screen_delta.y,
+                            );
+                            let size = Vec2::new(
+                                drag.sprite_size[0] * drag.transform_start.scale[0],
+                                drag.sprite_size[1] * drag.transform_start.scale[1],
+                            );
+                            let mut anchor = drag.anchor_start;
+                            for (index, delta) in
+                                [local_delta.x, local_delta.y].into_iter().enumerate()
+                            {
+                                let divisor = if size[index].abs() < 0.0001 {
+                                    0.0001_f32.copysign(size[index])
+                                } else {
+                                    size[index]
+                                };
+                                anchor[index] =
+                                    (drag.anchor_start[index] + delta / divisor).clamp(0.0, 1.0);
+                                if self.snap_to_grid {
+                                    anchor[index] = (anchor[index] * 20.0).round() / 20.0;
+                                }
+                            }
+                            let anchor_delta = Vec2::new(
+                                anchor[0] - drag.anchor_start[0],
+                                anchor[1] - drag.anchor_start[1],
+                            );
+                            let local_offset =
+                                Vec2::new(anchor_delta.x * size.x, anchor_delta.y * size.y);
+                            preview.translation[0] += cos * local_offset.x - sin * local_offset.y;
+                            preview.translation[1] += sin * local_offset.x + cos * local_offset.y;
+                            drag.anchor_preview = anchor;
                         }
                     }
                     drag.transform_preview = preview;
@@ -2215,6 +2268,7 @@ impl EditorApp {
                 sprite.translation = drag.transform_preview.translation;
                 sprite.scale = drag.transform_preview.scale;
                 sprite.rotation_radians = drag.transform_preview.rotation_radians;
+                sprite.anchor = drag.anchor_preview;
             }
         }
         for sprite in &objects {
@@ -2237,58 +2291,6 @@ impl EditorApp {
                 corners.iter().map(|point| point.x).sum::<f32>() / 4.0,
                 corners.iter().map(|point| point.y).sum::<f32>() / 4.0,
             );
-            if self.selected == Some(sprite.object_guid) {
-                for index in 0..4 {
-                    painter.line_segment(
-                        [corners[index], corners[(index + 1) % 4]],
-                        Stroke::new(2.0, Color32::YELLOW),
-                    );
-                }
-                if self.runtime.is_none() {
-                    match self.gizmo_mode {
-                        TransformGizmoMode::Move => {
-                            painter.line_segment(
-                                [pivot, pivot + Vec2::new(30.0, 0.0)],
-                                Stroke::new(2.5, Color32::from_rgb(240, 90, 80)),
-                            );
-                            painter.line_segment(
-                                [pivot, pivot + Vec2::new(0.0, 30.0)],
-                                Stroke::new(2.5, Color32::from_rgb(90, 220, 130)),
-                            );
-                        }
-                        TransformGizmoMode::Rotate => {
-                            let radius = object_rect.size().length() * 0.55 + 12.0;
-                            painter.circle_stroke(
-                                pivot,
-                                radius,
-                                Stroke::new(2.0, Color32::from_rgb(100, 170, 255)),
-                            );
-                            painter.circle_filled(
-                                pivot + Vec2::new(0.0, -radius),
-                                5.0,
-                                Color32::from_rgb(100, 170, 255),
-                            );
-                        }
-                        TransformGizmoMode::Scale => {
-                            painter.rect_stroke(
-                                object_rect.expand(8.0),
-                                0.0,
-                                Stroke::new(2.0, Color32::from_rgb(255, 180, 70)),
-                                egui::StrokeKind::Middle,
-                            );
-                            painter.rect_filled(
-                                Rect::from_center_size(
-                                    object_rect.right_bottom() + Vec2::splat(8.0),
-                                    Vec2::splat(10.0),
-                                ),
-                                0.0,
-                                Color32::from_rgb(255, 180, 70),
-                            );
-                        }
-                    }
-                    painter.circle_filled(pivot, 4.0, Color32::WHITE);
-                }
-            }
             let extent = Vec2::new(
                 (sprite.size[0] * sprite.scale[0]).abs() * pixels_per_unit,
                 (sprite.size[1] * sprite.scale[1]).abs() * pixels_per_unit,
@@ -2319,6 +2321,91 @@ impl EditorApp {
                     tint_color(sprite.tint),
                     Stroke::NONE,
                 ));
+            }
+        }
+        if let Some(sprite) = objects
+            .iter()
+            .find(|sprite| self.selected == Some(sprite.object_guid))
+        {
+            let corners = sprite_canvas_corners(
+                origin,
+                pixels_per_unit,
+                sprite.translation,
+                sprite.rotation_radians,
+                sprite.scale,
+                sprite.size,
+                sprite.anchor,
+            );
+            let object_rect = Rect::from_points(&corners);
+            let pivot = origin
+                + Vec2::new(
+                    sprite.translation[0] * pixels_per_unit,
+                    sprite.translation[1] * pixels_per_unit,
+                );
+            for index in 0..4 {
+                painter.line_segment(
+                    [corners[index], corners[(index + 1) % 4]],
+                    Stroke::new(2.0, Color32::YELLOW),
+                );
+            }
+            if self.runtime.is_none() {
+                match self.gizmo_mode {
+                    TransformGizmoMode::Move => {
+                        painter.line_segment(
+                            [pivot, pivot + Vec2::new(30.0, 0.0)],
+                            Stroke::new(2.5, Color32::from_rgb(240, 90, 80)),
+                        );
+                        painter.line_segment(
+                            [pivot, pivot + Vec2::new(0.0, 30.0)],
+                            Stroke::new(2.5, Color32::from_rgb(90, 220, 130)),
+                        );
+                    }
+                    TransformGizmoMode::Rotate => {
+                        let radius = object_rect.size().length() * 0.55 + 12.0;
+                        painter.circle_stroke(
+                            pivot,
+                            radius,
+                            Stroke::new(2.0, Color32::from_rgb(100, 170, 255)),
+                        );
+                        painter.circle_filled(
+                            pivot + Vec2::new(0.0, -radius),
+                            5.0,
+                            Color32::from_rgb(100, 170, 255),
+                        );
+                    }
+                    TransformGizmoMode::Scale => {
+                        painter.rect_stroke(
+                            object_rect.expand(8.0),
+                            0.0,
+                            Stroke::new(2.0, Color32::from_rgb(255, 180, 70)),
+                            egui::StrokeKind::Middle,
+                        );
+                        painter.rect_filled(
+                            Rect::from_center_size(
+                                object_rect.right_bottom() + Vec2::splat(8.0),
+                                Vec2::splat(10.0),
+                            ),
+                            0.0,
+                            Color32::from_rgb(255, 180, 70),
+                        );
+                    }
+                    TransformGizmoMode::Anchor => {
+                        painter.line_segment(
+                            [pivot - Vec2::new(9.0, 0.0), pivot + Vec2::new(9.0, 0.0)],
+                            Stroke::new(2.0, Color32::from_rgb(255, 180, 70)),
+                        );
+                        painter.line_segment(
+                            [pivot - Vec2::new(0.0, 9.0), pivot + Vec2::new(0.0, 9.0)],
+                            Stroke::new(2.0, Color32::from_rgb(255, 180, 70)),
+                        );
+                        painter.circle_stroke(
+                            pivot,
+                            6.0,
+                            Stroke::new(2.0, Color32::from_rgb(255, 180, 70)),
+                        );
+                    }
+                }
+                painter.circle_filled(pivot, 3.0, Color32::WHITE);
             }
         }
         painter.text(
@@ -2367,7 +2454,9 @@ impl EditorApp {
         }
         if response.drag_stopped() {
             if let Some(drag) = self.transform_gizmo_drag.take() {
-                if drag.transform_preview != drag.transform_start {
+                if drag.transform_preview != drag.transform_start
+                    || drag.anchor_preview != drag.anchor_start
+                {
                     if let Some(mut replacement) = self
                         .scene
                         .objects
@@ -2382,6 +2471,9 @@ impl EditorApp {
                             drag.transform_preview,
                         ) {
                             replacement.transform = local_transform;
+                            if let Some(sprite) = replacement.sprite.as_mut() {
+                                sprite.anchor = drag.anchor_preview;
+                            }
                             record_prefab_overrides(&before, &mut replacement);
                             if let Err(error) =
                                 self.history.replace_object(&mut self.scene, replacement)
@@ -2986,6 +3078,7 @@ impl eframe::App for EditorApp {
                     ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Move, "Move");
                     ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Rotate, "Rotate");
                     ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Scale, "Scale");
+                    ui.selectable_value(&mut self.gizmo_mode, TransformGizmoMode::Anchor, "Anchor");
                     ui.checkbox(&mut self.snap_to_grid, "Snap");
                 }
                 ui.separator();
