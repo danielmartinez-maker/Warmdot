@@ -867,8 +867,7 @@ mod audio_asset_tests {
         let mut wav = b"RIFF\x04\x00\x00\x00WAVE".to_vec();
         wav.extend_from_slice(b"fmt ");
         fs::write(&wav_path, wav).expect("write wav header");
-        fs::write(assets_dir.join("music.ogg"), b"OggS\0\0\0\0")
-            .expect("write ogg header");
+        fs::write(assets_dir.join("music.ogg"), b"OggS\0\0\0\0").expect("write ogg header");
 
         let catalog = AssetCatalog::open(project.path()).expect("open asset catalog");
         let effect = catalog
@@ -878,7 +877,11 @@ mod audio_asset_tests {
         assert_eq!(effect.kind, AssetKind::Audio);
         let loaded = catalog.load_audio(effect.guid).expect("load WAV metadata");
         assert_eq!(loaded.format, AudioFormat::Wav);
-        assert!(loaded.path.starts_with(project.path().canonicalize().unwrap()));
+        assert!(
+            loaded
+                .path
+                .starts_with(project.path().canonicalize().unwrap())
+        );
 
         let music = catalog
             .entries()
@@ -886,7 +889,10 @@ mod audio_asset_tests {
             .expect("OGG should be indexed");
         assert_eq!(music.kind, AssetKind::Audio);
         assert_eq!(
-            catalog.load_audio(music.guid).expect("load OGG metadata").format,
+            catalog
+                .load_audio(music.guid)
+                .expect("load OGG metadata")
+                .format,
             AudioFormat::Ogg
         );
     }
