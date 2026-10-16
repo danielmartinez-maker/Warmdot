@@ -1,7 +1,10 @@
 use std::{env, io, path::PathBuf, process, time::Duration};
 
+use forge_assets::{AssetCatalog, AssetKind};
+use forge_core::Guid;
 use forge_project::Project;
 use forge_runtime::{GameRuntime, RuntimeConfig};
+use forge_scene::{AuthoredScript, ScriptPropertyValue};
 
 fn main() {
     if let Err(error) = run() {
@@ -15,7 +18,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from);
     let project = Project::open(project_path)?;
-    let mut runtime = GameRuntime::from_scene(project.default_scene(), RuntimeConfig::default())?;
+    let assets = AssetCatalog::open(project.root())?;
+    let mut scene = project.default_scene().clone();
+    let script = assets
+        .entries()
+        .find(|record| {
+            record.kind == AssetKind::Script
+                && record.relative_path == "Assets/PlayerController.luau"
+        })
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "sample Luau script is missing"))?;
+    let player_guid = "529bb9ad-47b8-4992-874e-055c7fbf0003".parse::<Guid>()?;
+    let player = scene
+        .objects
+        .iter_mut()
+        .find(|object| object.object_guid == player_guid)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "sample Player object is missing"))?;
+    player.script = Some(AuthoredScript {
+        asset: script.guid,
+        properties: BTreeMap::from([
+            ("speed".into(), ScriptPropertyValue::Number(1.5)),
+            ("direction".into(), ScriptPropertyValue::Number(1.0)),
+        ]),
+    });
+    if !scene.dependencies.contains(&script.guid) {
+        scene.dependencies.push(script.guid);
+    }
+    let mut runtime = GameRuntime::from_scene_with_assets(
+        &scene,
+        RuntimeConfig::default(),
+        &assets,
+    )?;
 
     let mut frames = 0_u64;
     for _ in 0..120 {
@@ -26,7 +58,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let player_guid = "529bb9ad-47b8-4992-874e-055c7fbf0003".parse()?;
     let player = runtime.entity_for_guid(player_guid).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,

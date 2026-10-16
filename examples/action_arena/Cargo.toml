@@ -7,6 +7,7 @@ license.workspace = true
 description = "Headless physics action-arena kernel sample"
 
 [dependencies]
+forge_assets = { path = "../../crates/forge_assets" }
 forge_core = { path = "../../crates/forge_core" }
 forge_project = { path = "../../crates/forge_project" }
 forge_runtime = { path = "../../crates/forge_runtime" }
