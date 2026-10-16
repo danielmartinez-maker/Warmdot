@@ -8,7 +8,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt, fs,
-    io::Write,
+    io::{Read, Write},
     path::{Component, Path, PathBuf},
     time::Duration,
 };
@@ -24,6 +24,7 @@ pub const CURRENT_ANIMATION_CLIP_SCHEMA: u32 = 1;
 const MAX_PNG_SOURCE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_SCRIPT_SOURCE_BYTES: u64 = 1024 * 1024;
+const MAX_AUDIO_SOURCE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_TEXTURE_DIMENSION: u32 = 16_384;
 const MAX_TEXTURE_PIXELS: u64 = 32 * 1024 * 1024;
 
@@ -35,6 +36,7 @@ pub enum AssetKind {
     AnimationClip,
     Script,
     Prefab,
+    Audio,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -45,6 +47,21 @@ pub struct AssetRecord {
     pub kind: AssetKind,
     pub source_bytes: u64,
     pub fingerprint: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AudioFormat {
+    Wav,
+    Ogg,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LoadedAudioAsset {
+    pub guid: Guid,
+    pub relative_path: String,
+    pub format: AudioFormat,
+    pub path: PathBuf,
+    pub source_bytes: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -309,6 +326,61 @@ impl AssetCatalog {
         let texture = self.load_png(sheet.texture)?;
         sheet.validate(texture.width, texture.height)?;
         Ok(sheet)
+    }
+
+    pub fn load_audio(&self, guid: Guid) -> Result<LoadedAudioAsset, AssetError> {
+        let record = self.record_of_kind(guid, AssetKind::Audio)?;
+        let path = self.resolve_record_path(record)?;
+        let source_bytes = fs::metadata(&path)?.len();
+        if source_bytes > MAX_AUDIO_SOURCE_BYTES {
+            return Err(AssetError::Invalid(format!(
+                "{} is {source_bytes} bytes; maximum supported audio size is {MAX_AUDIO_SOURCE_BYTES}",
+                record.relative_path
+            )));
+        }
+
+        let mut file = fs::File::open(&path)?;
+        let mut header = [0_u8; 12];
+        file.read_exact(&mut header[..4])?;
+        let extension = Path::new(&record.relative_path)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let format = match extension.as_str() {
+            "wav" => {
+                file.read_exact(&mut header[4..])?;
+                if &header[..4] == b"RIFF" && &header[8..12] == b"WAVE" {
+                    AudioFormat::Wav
+                } else {
+                    return Err(AssetError::Invalid(format!(
+                        "{} has an invalid WAV container signature",
+                        record.relative_path
+                    )));
+                }
+            }
+            "ogg" if &header[..4] == b"OggS" => AudioFormat::Ogg,
+            "ogg" => {
+                return Err(AssetError::Invalid(format!(
+                    "{} has an invalid OGG container signature",
+                    record.relative_path
+                )));
+            }
+            _ => {
+                return Err(AssetError::Invalid(format!(
+                    "{} uses an unsupported audio format",
+                    record.relative_path
+                )));
+            }
+        };
+
+        Ok(LoadedAudioAsset {
+            guid,
+            relative_path: record.relative_path.clone(),
+            format,
+            path,
+            source_bytes,
+        })
     }
 
     pub fn load_script(&self, guid: Guid) -> Result<LoadedScriptAsset, AssetError> {
@@ -741,6 +813,7 @@ fn scan_directory(
                 MAX_METADATA_BYTES
             }
             AssetKind::Script => MAX_SCRIPT_SOURCE_BYTES,
+            AssetKind::Audio => MAX_AUDIO_SOURCE_BYTES,
         };
         let bytes = read_limited(&canonical, byte_limit)?;
         let record = (kind, bytes.len() as u64, fingerprint(&bytes));
@@ -761,6 +834,10 @@ fn asset_kind(path: &Path) -> Option<AssetKind> {
         Some(AssetKind::Png)
     } else if path.extension()?.to_str()?.eq_ignore_ascii_case("luau") {
         Some(AssetKind::Script)
+    } else if path.extension()?.to_str()?.eq_ignore_ascii_case("wav")
+        || path.extension()?.to_str()?.eq_ignore_ascii_case("ogg")
+    {
+        Some(AssetKind::Audio)
     } else {
         None
     }

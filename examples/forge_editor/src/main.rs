@@ -1042,6 +1042,7 @@ impl EditorApp {
             AssetKind::AnimationClip => catalog.load_animation_clip(guid).map(|_| ()),
             AssetKind::Script => catalog.load_script(guid).map(|_| ()),
             AssetKind::Prefab => catalog.load_prefab(guid).map(|_| ()),
+            AssetKind::Audio => catalog.load_audio(guid).map(|_| ()),
         }
         .map_err(|error| error.to_string())
     }
