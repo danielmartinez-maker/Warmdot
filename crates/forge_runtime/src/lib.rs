@@ -4,7 +4,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use forge_assets::{
@@ -109,6 +109,8 @@ pub struct RuntimeFrame {
     pub interpolation_alpha: f64,
     pub accepted_frame_time: Duration,
     pub dropped_time: Duration,
+    pub fixed_system_time: Duration,
+    pub script_time: Duration,
     pub simulation_time: Duration,
     pub physics_events: Vec<CollisionEvent2D>,
 }
@@ -129,6 +131,8 @@ struct PendingRuntimeFrame {
     interpolation_alpha: f64,
     accepted_frame_time: Duration,
     dropped_time: Duration,
+    fixed_system_time: Duration,
+    script_time: Duration,
     physics_events: Vec<CollisionEvent2D>,
     current_tick_started: bool,
 }
@@ -415,6 +419,8 @@ impl GameRuntime {
                 interpolation_alpha: plan.interpolation_alpha,
                 accepted_frame_time: Duration::ZERO,
                 dropped_time: Duration::ZERO,
+                fixed_system_time: Duration::ZERO,
+                script_time: Duration::ZERO,
                 simulation_time: self.simulation_time,
                 physics_events: Vec::new(),
             };
@@ -436,6 +442,8 @@ impl GameRuntime {
             interpolation_alpha: plan.interpolation_alpha,
             accepted_frame_time: plan.accepted_frame_time,
             dropped_time: plan.dropped_time,
+            fixed_system_time: Duration::ZERO,
+            script_time: Duration::ZERO,
             physics_events: Vec::new(),
             current_tick_started: false,
         };
@@ -449,7 +457,7 @@ impl GameRuntime {
     fn process_pending_frame(&mut self, pending: &mut PendingRuntimeFrame) -> bool {
         while pending.remaining_steps > 0 {
             if pending.current_tick_started {
-                self.finish_script_tick(&mut pending.physics_events);
+                self.finish_script_tick(pending);
                 pending.current_tick_started = false;
                 pending.completed_steps = pending.completed_steps.saturating_add(1);
                 pending.remaining_steps = pending.remaining_steps.saturating_sub(1);
@@ -467,22 +475,28 @@ impl GameRuntime {
                 physics_events: &self.pending_physics_events,
                 input: &self.input,
             };
+            let systems_started = Instant::now();
             for system in &mut self.fixed_systems {
                 system(&mut self.world, &context);
             }
+            pending.fixed_system_time = pending
+                .fixed_system_time
+                .saturating_add(systems_started.elapsed());
+            let script_started = Instant::now();
             let hit = self.script_host.update_with_breakpoints(
                 &mut self.world,
                 self.input.states(),
                 self.clock.step(),
                 context.tick,
             );
+            pending.script_time = pending.script_time.saturating_add(script_started.elapsed());
             if hit.is_some() {
                 pending.current_tick_started = true;
                 return true;
             }
 
             self.collect_scene_transition_requests();
-            self.finish_script_tick(&mut pending.physics_events);
+            self.finish_script_tick(pending);
             pending.completed_steps = pending.completed_steps.saturating_add(1);
             pending.remaining_steps = pending.remaining_steps.saturating_sub(1);
             pending.next_tick = pending.next_tick.saturating_add(1);
@@ -501,12 +515,18 @@ impl GameRuntime {
         );
     }
 
-    fn finish_script_tick(&mut self, frame_physics_events: &mut Vec<CollisionEvent2D>) {
+    fn finish_script_tick(&mut self, pending: &mut PendingRuntimeFrame) {
+        let systems_started = Instant::now();
         self.advance_sprite_animations(self.clock.step());
         self.pending_physics_events = self
             .physics
             .step(&mut self.world, self.clock.step().as_secs_f32());
-        frame_physics_events.extend(self.pending_physics_events.iter().copied());
+        pending
+            .physics_events
+            .extend(self.pending_physics_events.iter().copied());
+        pending.fixed_system_time = pending
+            .fixed_system_time
+            .saturating_add(systems_started.elapsed());
     }
 
     fn frame_from_pending(&self, pending: &PendingRuntimeFrame) -> RuntimeFrame {
@@ -516,6 +536,8 @@ impl GameRuntime {
             interpolation_alpha: pending.interpolation_alpha,
             accepted_frame_time: pending.accepted_frame_time,
             dropped_time: pending.dropped_time,
+            fixed_system_time: pending.fixed_system_time,
+            script_time: pending.script_time,
             simulation_time: self.simulation_time,
             physics_events: pending.physics_events.clone(),
         }

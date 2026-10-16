@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     env,
     error::Error,
     fs, io,
@@ -54,6 +54,12 @@ struct PlayerApp {
     state: Option<RunState>,
     last_frame: Instant,
     next_asset_refresh: Instant,
+    next_profile_log: Instant,
+    frame_samples_ms: VecDeque<f64>,
+    fixed_system_time: Duration,
+    script_time: Duration,
+    fixed_steps: u32,
+    tilemap_chunk_count: usize,
 }
 
 impl PlayerApp {
@@ -65,6 +71,7 @@ impl PlayerApp {
         ui: UiRuntime,
         assets: AssetCatalog,
         audio: Option<AudioEngine>,
+        tilemap_chunk_count: usize,
     ) -> Self {
         let now = Instant::now();
         let mut input = InputMap::new();
@@ -100,6 +107,12 @@ impl PlayerApp {
             state: None,
             last_frame: now,
             next_asset_refresh: now + Duration::from_millis(500),
+            next_profile_log: now + Duration::from_secs(2),
+            frame_samples_ms: VecDeque::with_capacity(180),
+            fixed_system_time: Duration::ZERO,
+            script_time: Duration::ZERO,
+            fixed_steps: 0,
+            tilemap_chunk_count,
         }
     }
 }
@@ -229,7 +242,14 @@ impl ApplicationHandler for PlayerApp {
                 }
                 let delta = now.saturating_duration_since(self.last_frame);
                 self.last_frame = now;
-                self.runtime.advance_frame(delta);
+                self.frame_samples_ms.push_back(delta.as_secs_f64() * 1000.0);
+                if self.frame_samples_ms.len() > 180 {
+                    self.frame_samples_ms.pop_front();
+                }
+                let runtime_frame = self.runtime.advance_frame(delta);
+                self.fixed_system_time = runtime_frame.fixed_system_time;
+                self.script_time = runtime_frame.script_time;
+                self.fixed_steps = runtime_frame.fixed_steps;
                 process_audio_commands(
                     self.audio.as_mut(),
                     &self.assets,
@@ -246,10 +266,14 @@ impl ApplicationHandler for PlayerApp {
                     scene_requests,
                 );
                 for diagnostic in self.runtime.take_script_diagnostics() {
-                    eprintln!(
-                        "Luau {} at tick {}: {}",
-                        diagnostic.source_path, diagnostic.tick, diagnostic.message
-                    );
+                    eprintln!("{}", serde_json::json!({
+                        "level": "error",
+                        "event": "script.runtime_diagnostic",
+                        "source_path": diagnostic.source_path,
+                        "object_guid": diagnostic.object_guid.to_string(),
+                        "tick": diagnostic.tick,
+                        "message": diagnostic.message,
+                    }));
                 }
                 let window_size = state.window.inner_size();
                 let ui_sprites = match self.ui.draw_commands(window_size.width, window_size.height)
@@ -272,6 +296,28 @@ impl ApplicationHandler for PlayerApp {
                         eprintln!("project rendering failed: {error}");
                         event_loop.exit();
                     }
+                }
+                if now >= self.next_profile_log {
+                    self.next_profile_log = now + Duration::from_secs(2);
+                    let stats = state.renderer.last_render_stats();
+                    let object_count = self.runtime.world().object_count();
+                    eprintln!("{}", serde_json::json!({
+                        "level": "info",
+                        "event": "runtime.profile",
+                        "frame_interval_ms": {
+                            "p50": percentile_ms(&self.frame_samples_ms, 0.50),
+                            "p95": percentile_ms(&self.frame_samples_ms, 0.95),
+                        },
+                        "fixed_system_ms": self.fixed_system_time.as_secs_f64() * 1000.0,
+                        "script_ms": self.script_time.as_secs_f64() * 1000.0,
+                        "fixed_steps": self.fixed_steps,
+                        "world_sprites": stats.world_sprites,
+                        "ui_sprites": stats.ui_sprites,
+                        "draw_calls": stats.draw_calls,
+                        "renderer_cpu_submit_ms": stats.cpu_submit_time.as_secs_f64() * 1000.0,
+                        "object_count": object_count,
+                        "tilemap_chunks": self.tilemap_chunk_count,
+                    }));
                 }
             }
             _ => {}
@@ -1170,6 +1216,16 @@ fn finish_validation_report(mut report: ValidationReport) -> ValidationReport {
     report
 }
 
+fn percentile_ms(samples: &VecDeque<f64>, percentile: f64) -> f64 {
+    let mut values = samples.iter().copied().collect::<Vec<_>>();
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(f64::total_cmp);
+    let index = ((values.len() - 1) as f64 * percentile.clamp(0.0, 1.0)).ceil() as usize;
+    values[index]
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args
@@ -1209,7 +1265,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let project_root = project.root().to_path_buf();
     let assets = AssetCatalog::open(project_root.clone())?;
     let mut scene = project.default_scene().clone();
-    if let Some(tilemap) = load_project_tilemap(&project_root)? {
+    let tilemap = load_project_tilemap(&project_root)?;
+    let tilemap_chunk_count = tilemap.as_ref().map(|tilemap| tilemap.chunks.len()).unwrap_or(0);
+    if let Some(tilemap) = tilemap {
         append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
     }
     let ui = load_scene_ui(&scene, &assets)?;
@@ -1232,6 +1290,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui,
         assets,
         audio,
+        tilemap_chunk_count,
     ))?;
     Ok(())
 }

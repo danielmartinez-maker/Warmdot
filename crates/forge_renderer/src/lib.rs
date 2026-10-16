@@ -4,7 +4,14 @@
 //! snapshots, sorts by authored layer/order/stable object ID, then submits contiguous texture
 //! batches with instanced quad draws. Textures are registered by stable asset GUID.
 
-use std::{collections::HashMap, error::Error, fmt, mem::size_of, sync::Arc};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt,
+    mem::size_of,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use bytemuck::{Pod, Zeroable};
 use forge_core::Guid;
@@ -89,6 +96,15 @@ pub enum RenderOutcome {
     Skipped,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RenderStats {
+    pub world_sprites: u32,
+    pub ui_sprites: u32,
+    pub draw_calls: u32,
+    /// CPU time to prepare, encode, and submit this frame; GPU completion is not measured.
+    pub cpu_submit_time: Duration,
+}
+
 #[derive(Debug)]
 pub enum RendererError {
     Surface(String),
@@ -159,6 +175,7 @@ pub struct GpuRenderer {
     instance_buffer: wgpu::Buffer,
     instance_capacity: u64,
     adapter: AdapterSummary,
+    last_render_stats: RenderStats,
 }
 
 impl GpuRenderer {
@@ -420,6 +437,7 @@ impl GpuRenderer {
                 driver: adapter_info.driver,
                 driver_info: adapter_info.driver_info,
             },
+            last_render_stats: RenderStats::default(),
         };
         renderer.configure_surface();
         Ok(renderer)
@@ -427,6 +445,10 @@ impl GpuRenderer {
 
     pub fn adapter(&self) -> &AdapterSummary {
         &self.adapter
+    }
+
+    pub fn last_render_stats(&self) -> RenderStats {
+        self.last_render_stats
     }
 
     pub fn window(&self) -> &Window {
@@ -616,6 +638,7 @@ impl GpuRenderer {
         clear_color: [f64; 4],
         ui_sprites: Option<&[TexturedSprite]>,
     ) -> Result<RenderOutcome, RendererError> {
+        let render_started = Instant::now();
         let world_instance_count =
             u32::try_from(sprites.len()).map_err(|_| RendererError::TooManySprites)?;
         if let Some(texture_assets) = texture_assets {
@@ -641,6 +664,11 @@ impl GpuRenderer {
                 }
             }
         }
+        self.last_render_stats = RenderStats {
+            world_sprites: world_instance_count,
+            ui_sprites: ui_instance_count,
+            ..RenderStats::default()
+        };
         let total_instance_count = world_instance_count
             .checked_add(ui_instance_count)
             .ok_or(RendererError::TooManySprites)?;
@@ -743,6 +771,7 @@ impl GpuRenderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("forge2d-sprite-frame"),
             });
+        let mut draw_calls = 0_u32;
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("forge2d-sprite-pass"),
@@ -793,6 +822,7 @@ impl GpuRenderer {
                     end += 1;
                 }
                 pass.draw(0..6, start..end);
+                draw_calls = draw_calls.saturating_add(1);
                 start = end;
             }
             if let Some(ui_sprites) = ui_sprites {
@@ -821,6 +851,7 @@ impl GpuRenderer {
                         0..6,
                         world_instance_count + ui_start..world_instance_count + ui_end,
                     );
+                    draw_calls = draw_calls.saturating_add(1);
                     ui_start = ui_end;
                 }
             }
@@ -828,6 +859,12 @@ impl GpuRenderer {
         self.queue.submit([encoder.finish()]);
         self.window.pre_present_notify();
         self.queue.present(surface_texture);
+        self.last_render_stats = RenderStats {
+            world_sprites: world_instance_count,
+            ui_sprites: ui_instance_count,
+            draw_calls,
+            cpu_submit_time: render_started.elapsed(),
+        };
         Ok(RenderOutcome::Presented)
     }
 

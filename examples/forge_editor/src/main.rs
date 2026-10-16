@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     env,
     error::Error,
     fs,
@@ -101,6 +101,18 @@ struct TransformGizmoDrag {
     mode: TransformGizmoMode,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct PreviewProfileSample {
+    frame_interval: Duration,
+    fixed_system_time: Duration,
+    script_time: Duration,
+    fixed_steps: u32,
+    object_count: usize,
+    sprite_count: usize,
+    sprite_batches: usize,
+    tilemap_chunks: usize,
+}
+
 struct EditorApp {
     project: Project,
     project_name_draft: String,
@@ -126,6 +138,7 @@ struct EditorApp {
     preview_actions: [f32; 2],
     breakpoint_line: u32,
     script_diagnostics: Vec<ScriptDiagnostic>,
+    profile_samples: VecDeque<PreviewProfileSample>,
     hidden_layers: BTreeSet<i32>,
     canvas_offset: Vec2,
     canvas_zoom: f32,
@@ -176,6 +189,7 @@ impl EditorApp {
             preview_actions: [0.0, 0.0],
             breakpoint_line: 1,
             script_diagnostics: Vec::new(),
+            profile_samples: VecDeque::with_capacity(180),
             hidden_layers: BTreeSet::new(),
             canvas_offset: Vec2::ZERO,
             canvas_zoom: 1.0,
@@ -568,6 +582,7 @@ impl EditorApp {
                 self.preview_tick = 0;
                 self.preview_actions = [0.0, 0.0];
                 self.script_diagnostics.clear();
+                self.profile_samples.clear();
                 self.status = audio_warning.map_or_else(
                     || "Scene is running in the editor.".into(),
                     |warning| format!("Scene is running in the editor without audio: {warning}"),
@@ -692,6 +707,13 @@ impl EditorApp {
         }
     }
 
+    fn record_profile_sample(&mut self, sample: PreviewProfileSample) {
+        self.profile_samples.push_back(sample);
+        if self.profile_samples.len() > 180 {
+            self.profile_samples.pop_front();
+        }
+    }
+
     fn advance_runtime(&mut self, ctx: &egui::Context) {
         if self.runtime.is_none() {
             return;
@@ -712,6 +734,13 @@ impl EditorApp {
                 (if up { 1.0 } else { 0.0 }) - (if down { 1.0 } else { 0.0 }),
             ]
         });
+        let frame_interval = now.saturating_duration_since(previous);
+        let tilemap_chunks = self
+            .tilemap
+            .as_ref()
+            .map(|tilemap| tilemap.map.chunk_count())
+            .unwrap_or(0);
+        let mut profile_sample = None;
         if let Some(runtime) = self.runtime.as_mut() {
             if !runtime.is_paused() {
                 let at = runtime.simulation_time();
@@ -722,11 +751,35 @@ impl EditorApp {
                     runtime.push_action(at, ActionId(2), movement[1], movement[1] != 0.0);
                 }
                 self.preview_actions = movement;
-                let frame = runtime.advance_frame(now.saturating_duration_since(previous));
+                let frame = runtime.advance_frame(frame_interval);
                 self.preview_tick = frame
                     .first_tick
                     .saturating_add(u64::from(frame.fixed_steps));
+                let object_count = runtime.world().object_count();
+                let sprites = runtime.world_mut().extract_sprites();
+                let sprite_count = sprites.len();
+                let sprite_batches = if sprites.is_empty() {
+                    0
+                } else {
+                    1 + sprites
+                        .windows(2)
+                        .filter(|pair| pair[0].asset != pair[1].asset)
+                        .count()
+                };
+                profile_sample = Some(PreviewProfileSample {
+                    frame_interval,
+                    fixed_system_time: frame.fixed_system_time,
+                    script_time: frame.script_time,
+                    fixed_steps: frame.fixed_steps,
+                    object_count,
+                    sprite_count,
+                    sprite_batches,
+                    tilemap_chunks,
+                });
             }
+        }
+        if let Some(sample) = profile_sample {
+            self.record_profile_sample(sample);
         }
         self.collect_script_diagnostics();
         self.process_preview_audio();
@@ -3719,7 +3772,7 @@ impl eframe::App for EditorApp {
             .resizable(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading("Script Console");
+                    ui.heading("Runtime Console");
                     if ui.button("Clear").clicked() {
                         self.script_diagnostics.clear();
                     }
@@ -3757,7 +3810,37 @@ impl eframe::App for EditorApp {
                 .show(ui, |ui| self.show_project_settings(ui));
             self.project_settings_open = open;
         }
+        if self.runtime.is_some() {
+            if let Some(latest) = self.profile_samples.back().copied() {
+                let p50 = preview_percentile_ms(&self.profile_samples, 0.50);
+                let p95 = preview_percentile_ms(&self.profile_samples, 0.95);
+                egui::Window::new("Profiler")
+                    .anchor(egui::Align2::RIGHT_TOP, Vec2::new(-16.0, 56.0))
+                    .resizable(false)
+                    .show(ui.ctx(), |ui| {
+                        ui.label(format!("Frame interval p50 / p95: {p50:.2} / {p95:.2} ms"));
+                        ui.label(format!("Latest fixed-system cost: {:.3} ms", latest.fixed_system_time.as_secs_f64() * 1000.0));
+                        ui.label(format!("Latest Luau cost: {:.3} ms across {} fixed step(s)", latest.script_time.as_secs_f64() * 1000.0, latest.fixed_steps));
+                        ui.label(format!("Objects: {}  •  sprites: {}  •  loaded tile chunks: {}", latest.object_count, latest.sprite_count, latest.tilemap_chunks));
+                        ui.label(format!("World sprite batches (draw-call estimate): {}", latest.sprite_batches));
+                        ui.weak("Preview batching excludes egui; use standalone player logs for exact GPU draw calls.");
+                    });
+            }
+        }
     }
+}
+
+fn preview_percentile_ms(samples: &VecDeque<PreviewProfileSample>, percentile: f64) -> f64 {
+    let mut values = samples
+        .iter()
+        .map(|sample| sample.frame_interval.as_secs_f64() * 1000.0)
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(f64::total_cmp);
+    let index = ((values.len() - 1) as f64 * percentile.clamp(0.0, 1.0)).ceil() as usize;
+    values[index]
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
