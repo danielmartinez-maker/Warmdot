@@ -753,7 +753,6 @@ fn default_looping() -> bool {
     true
 }
 
-
 #[cfg(test)]
 mod script_asset_tests {
     use super::*;
@@ -780,8 +779,11 @@ mod script_asset_tests {
         assert_eq!(loaded.relative_path, "Assets/Player.luau");
         assert_eq!(loaded.source, "return { on_fixed_update = function() end }");
 
-        fs::write(&script_path, "return { on_fixed_update = function(self, dt) end }")
-            .expect("write updated script");
+        fs::write(
+            &script_path,
+            "return { on_fixed_update = function(self, dt) end }",
+        )
+        .expect("write updated script");
         let changes = catalog.refresh().expect("refresh asset catalog");
         assert!(changes.iter().any(|change| change.guid == guid));
         assert_eq!(catalog.load_script(guid).expect("reload source").guid, guid);
