@@ -164,8 +164,22 @@ impl TileMapDocument {
                 let x = local % CHUNK_SIDE as usize;
                 let y = local / CHUNK_SIDE as usize;
                 let coordinate = TileCoord {
-                    x: chunk.coordinate.x * CHUNK_SIDE + x as i32,
-                    y: chunk.coordinate.y * CHUNK_SIDE + y as i32,
+                    x: chunk
+                        .coordinate
+                        .x
+                        .checked_mul(CHUNK_SIDE)
+                        .and_then(|base| base.checked_add(x as i32))
+                        .ok_or_else(|| {
+                            TileMapError::Invalid("tilemap x coordinate overflows world space".into())
+                        })?,
+                    y: chunk
+                        .coordinate
+                        .y
+                        .checked_mul(CHUNK_SIDE)
+                        .and_then(|base| base.checked_add(y as i32))
+                        .ok_or_else(|| {
+                            TileMapError::Invalid("tilemap y coordinate overflows world space".into())
+                        })?,
                 };
                 map.set_tile(coordinate, Some(entry.cell));
             }
