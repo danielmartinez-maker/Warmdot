@@ -9,11 +9,14 @@ use std::{
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use forge_assets::{AssetCatalog, AssetChange, AssetChangeKind, AssetKind};
+use forge_audio::{AudioBus, AudioEngine};
 use forge_core::{ActionId, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::{Project, SceneCatalog};
 use forge_ui::{UiDocument, UiKey, UiRuntime};
-use forge_runtime::{BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptDiagnostic};
+use forge_runtime::{
+    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptAudioCommand, ScriptDiagnostic,
+};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
@@ -117,6 +120,7 @@ struct EditorApp {
     last_asset_scan: Option<Instant>,
     runtime: Option<GameRuntime>,
     preview_ui: Option<UiRuntime>,
+    audio: Option<AudioEngine>,
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
     preview_actions: [f32; 2],
@@ -166,6 +170,7 @@ impl EditorApp {
             last_asset_scan: None,
             runtime: None,
             preview_ui: None,
+            audio: None,
             preview_last_frame: None,
             preview_tick: 0,
             preview_actions: [0.0, 0.0],
@@ -532,6 +537,17 @@ impl EditorApp {
             self.status = "Runtime preview needs an available asset catalog.".into();
             return;
         };
+        let audio_warning = if self.audio.is_none() {
+            match AudioEngine::new() {
+                Ok(audio) => {
+                    self.audio = Some(audio);
+                    None
+                }
+                Err(error) => Some(error.to_string()),
+            }
+        } else {
+            None
+        };
         if let Err(error) = validate_scene_dependencies(&self.scene, catalog) {
             self.status = format!("Play failed: {error}");
             return;
@@ -552,7 +568,10 @@ impl EditorApp {
                 self.preview_tick = 0;
                 self.preview_actions = [0.0, 0.0];
                 self.script_diagnostics.clear();
-                self.status = "Scene is running in the editor.".into();
+                self.status = audio_warning.map_or_else(
+                    || "Scene is running in the editor.".into(),
+                    |warning| format!("Scene is running in the editor without audio: {warning}"),
+                );
             }
             Err(error) => self.status = format!("Play failed: {error}"),
         }
@@ -580,6 +599,7 @@ impl EditorApp {
                 .saturating_add(u64::from(frame.fixed_steps));
         }
         self.collect_script_diagnostics();
+        self.process_preview_audio();
         self.process_runtime_scene_transitions();
         self.preview_last_frame = Some(Instant::now());
     }
@@ -606,6 +626,7 @@ impl EditorApp {
             }
         }
         self.collect_script_diagnostics();
+        self.process_preview_audio();
         self.process_runtime_scene_transitions();
         self.preview_last_frame = Some(Instant::now());
     }
@@ -708,6 +729,7 @@ impl EditorApp {
             }
         }
         self.collect_script_diagnostics();
+        self.process_preview_audio();
         self.process_runtime_scene_transitions();
         if self
             .runtime
@@ -721,6 +743,17 @@ impl EditorApp {
             .is_some_and(|runtime| runtime.current_script_breakpoint().is_some())
         {
             ctx.request_repaint();
+        }
+    }
+
+    fn process_preview_audio(&mut self) {
+        let commands = self
+            .runtime
+            .as_mut()
+            .map(GameRuntime::take_audio_commands)
+            .unwrap_or_default();
+        if let Some(assets) = self.catalog.as_ref() {
+            process_audio_commands(self.audio.as_mut(), assets, commands);
         }
     }
 
@@ -2763,6 +2796,33 @@ impl EditorApp {
                     }
                 }
             }
+        }
+    }
+}
+
+fn process_audio_commands(
+    audio: Option<&mut AudioEngine>,
+    assets: &AssetCatalog,
+    commands: Vec<ScriptAudioCommand>,
+) {
+    let Some(audio) = audio else {
+        return;
+    };
+    for command in commands {
+        let result = match command {
+            ScriptAudioCommand::PlayEffect { asset_guid, bus } => {
+                AudioBus::parse(&bus).and_then(|bus| audio.play_effect(assets, asset_guid, bus))
+            }
+            ScriptAudioCommand::PlayMusic {
+                asset_guid,
+                looping,
+            } => audio.play_music(assets, asset_guid, looping),
+            ScriptAudioCommand::SetBusVolume { bus, decibels } => {
+                AudioBus::parse(&bus).and_then(|bus| audio.set_bus_volume(bus, decibels as f32))
+            }
+        };
+        if let Err(error) = result {
+            eprintln!("audio command failed: {error}");
         }
     }
 }
