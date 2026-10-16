@@ -611,8 +611,11 @@ impl EditorApp {
                 .unwrap_or_default();
             ui.separator();
             ui.collapsing(format!("Assets ({})", assets.len()), |ui| {
+                ui.weak(
+                    "Drop PNG, Luau, sprite-sheet, or animation files into the editor to import.",
+                );
                 if assets.is_empty() {
-                    ui.weak("Add resources under Assets to browse them here.");
+                    ui.weak("The project Assets folder is empty.");
                 }
                 egui::ScrollArea::vertical()
                     .max_height(280.0)
@@ -706,6 +709,56 @@ impl EditorApp {
                     }
                 }
             }
+        }
+    }
+
+    fn import_dropped_assets(&mut self, ui: &egui::Ui) {
+        if self.runtime.is_some() {
+            return;
+        }
+        let (drop_count, paths) = ui.input(|input| {
+            let files = &input.raw.dropped_files;
+            (
+                files.len(),
+                files
+                    .iter()
+                    .filter_map(|file| file.path.clone())
+                    .collect::<Vec<_>>(),
+            )
+        });
+        if drop_count == 0 {
+            return;
+        }
+
+        let mut imported = Vec::new();
+        let mut issues = Vec::new();
+        for source in paths {
+            match import_asset_file(self.project.root(), &source) {
+                Ok(relative_path) => imported.push(relative_path),
+                Err(error) => issues.push(error),
+            }
+        }
+        self.last_asset_scan = None;
+        let pathless_drops = drop_count.saturating_sub(imported.len() + issues.len());
+        if pathless_drops > 0 {
+            issues.push(format!(
+                "{pathless_drops} dropped item(s) did not provide a file path"
+            ));
+        }
+        if imported.is_empty() {
+            self.status = format!("Asset import failed: {}", issues.join("; "));
+        } else if issues.is_empty() {
+            self.status = format!(
+                "Imported {} asset(s); the catalog will assign stable GUIDs.",
+                imported.len()
+            );
+        } else {
+            self.status = format!(
+                "Imported {} asset(s); {} issue(s): {}",
+                imported.len(),
+                issues.len(),
+                issues.join("; ")
+            );
         }
     }
 
@@ -2058,6 +2111,102 @@ fn connected_tile_fill(
     Ok(changes)
 }
 
+fn import_asset_file(project_root: &Path, source: &Path) -> Result<String, String> {
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|error| format!("Cannot inspect {}: {error}", source.display()))?;
+    if source_metadata.file_type().is_symlink() || !source_metadata.is_file() {
+        return Err(format!(
+            "{} is not a regular file",
+            source.display()
+        ));
+    }
+    let file_name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("{} has an invalid filename", source.display()))?;
+    let lower_name = file_name.to_ascii_lowercase();
+    let suffix = [".forgeatlas.json", ".forgeanim.json", ".png", ".luau"]
+        .into_iter()
+        .find(|suffix| lower_name.ends_with(suffix))
+        .ok_or_else(|| format!("{} has an unsupported asset type", source.display()))?;
+    let size_limit = match suffix {
+        ".png" => 128 * 1024 * 1024,
+        ".luau" => 1024 * 1024,
+        _ => 8 * 1024 * 1024,
+    };
+    if source_metadata.len() > size_limit {
+        return Err(format!(
+            "{} exceeds the {} byte import limit",
+            source.display(),
+            size_limit
+        ));
+    }
+
+    let project_root = project_root
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve project root: {error}"))?;
+    let assets_root = project_root.join("Assets");
+    match fs::symlink_metadata(&assets_root) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err("Project Assets folder must not be a symbolic link".into());
+        }
+        Ok(metadata) if !metadata.is_dir() => {
+            return Err("Project Assets path is not a directory".into());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(&assets_root)
+                .map_err(|error| format!("Cannot create project Assets folder: {error}"))?;
+        }
+        Err(error) => return Err(format!("Cannot inspect project Assets folder: {error}")),
+    }
+    let assets_root = assets_root
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve project Assets folder: {error}"))?;
+    if !assets_root.starts_with(&project_root) {
+        return Err("Project Assets folder resolves outside the project".into());
+    }
+
+    let source = source
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve {}: {error}", source.display()))?;
+    if source.starts_with(&assets_root) {
+        return Err("This file is already inside the project Assets folder".into());
+    }
+    let stem = &file_name[..file_name.len() - suffix.len()];
+    let lower_suffix = suffix;
+    let mut source_file = fs::File::open(&source)
+        .map_err(|error| format!("Cannot open {}: {error}", source.display()))?;
+    for index in 1..=10_000 {
+        let candidate_name = if index == 1 {
+            format!("{stem}{lower_suffix}")
+        } else {
+            format!("{stem} ({index}){lower_suffix}")
+        };
+        let target = assets_root.join(candidate_name);
+        let mut target_file = match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Cannot create imported asset: {error}")),
+        };
+        if let Err(error) = std::io::copy(&mut source_file, &mut target_file) {
+            let _ = fs::remove_file(&target);
+            return Err(format!("Cannot copy {}: {error}", source.display()));
+        }
+        let relative_path = target
+            .strip_prefix(&project_root)
+            .map_err(|_| "Imported asset escaped the project folder".to_owned())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        return Ok(relative_path);
+    }
+    Err("Could not find an unused filename in the project Assets folder".into())
+}
+
 fn tilemap_resource_path(project_root: &Path) -> Result<PathBuf, String> {
     let project_root = project_root
         .canonicalize()
@@ -2131,6 +2280,7 @@ fn tint_color(tint: [f32; 4]) -> Color32 {
 
 impl eframe::App for EditorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.import_dropped_assets(ui);
         self.refresh_assets(ui.ctx());
         self.advance_runtime(ui.ctx());
         egui::Panel::top("toolbar").show(ui, |ui| {
