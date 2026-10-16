@@ -19,6 +19,10 @@ const MAX_SCRIPT_SOURCE_BYTES: usize = 1024 * 1024;
 const MAX_VM_MEMORY_BYTES: usize = 4 * 1024 * 1024;
 const MAX_SCRIPT_INSTANCES: usize = 64;
 const MAX_INTERRUPT_CHECKPOINTS_PER_CALLBACK: usize = 20_000;
+const MAX_SCRIPT_EVENT_NAME_BYTES: usize = 128;
+const MAX_SCRIPT_EVENT_PAYLOAD_BYTES: usize = 16 * 1024;
+const MAX_SCRIPT_EVENTS_PER_CALLBACK: usize = 64;
+const MAX_QUEUED_SCRIPT_EVENTS: usize = 1024;
 
 #[derive(Clone, Debug)]
 pub struct ScriptDefinition {
@@ -36,6 +40,23 @@ pub struct ScriptDiagnostic {
     pub source_path: String,
     pub tick: u64,
     pub message: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ScriptEventValue {
+    Nil,
+    Boolean(bool),
+    Integer(i64),
+    Number(f64),
+    String(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScriptEvent {
+    pub name: String,
+    pub value: ScriptEventValue,
+    pub sender_guid: Guid,
+    pub tick: u64,
 }
 
 #[derive(Debug)]
@@ -86,16 +107,22 @@ struct ScriptCallContext {
     transform: Transform2D,
     properties: BTreeMap<String, ScriptPropertyValue>,
     actions: BTreeMap<ActionId, ActionState>,
+    object_guid: Guid,
+    tick: u64,
+    emitted_events: Vec<ScriptEvent>,
 }
 
 type SharedContext = Rc<RefCell<Option<ScriptCallContext>>>;
+type SharedEvents = Rc<RefCell<Vec<ScriptEvent>>>;
 
 struct ScriptInstance {
     _lua: Lua,
     state: Table,
     on_start: Option<Function>,
     on_fixed_update: Option<Function>,
+    on_event: Option<Function>,
     context: SharedContext,
+    pending_events: SharedEvents,
     interrupt_checkpoints: Rc<Cell<usize>>,
     definition: ScriptDefinition,
     start_pending: bool,
@@ -103,7 +130,11 @@ struct ScriptInstance {
 }
 
 impl ScriptInstance {
-    fn compile(definition: ScriptDefinition, context: SharedContext) -> Result<Self, ScriptError> {
+    fn compile(
+        definition: ScriptDefinition,
+        context: SharedContext,
+        pending_events: SharedEvents,
+    ) -> Result<Self, ScriptError> {
         if definition.source.len() > MAX_SCRIPT_SOURCE_BYTES {
             return Err(ScriptError::SourceTooLarge(definition.source.len()));
         }
@@ -123,7 +154,7 @@ impl ScriptInstance {
             Ok(VmState::Continue)
         });
 
-        install_forge_api(&lua, context.clone())?;
+        install_forge_api(&lua, context.clone(), pending_events.clone())?;
         lua.sandbox(true)?;
 
         let state: Table = lua
@@ -133,13 +164,16 @@ impl ScriptInstance {
         install_object_api(&lua, &state, context.clone())?;
         let on_start: Option<Function> = state.get("on_start")?;
         let on_fixed_update: Option<Function> = state.get("on_fixed_update")?;
+        let on_event: Option<Function> = state.get("on_event")?;
 
         Ok(Self {
             _lua: lua,
             state,
             on_start,
             on_fixed_update,
+            on_event,
             context,
+            pending_events,
             interrupt_checkpoints,
             definition,
             start_pending: true,
@@ -147,20 +181,26 @@ impl ScriptInstance {
         })
     }
 
-    fn invoke(
+    fn invoke<F>(
         &mut self,
-        callback: &Function,
         transform: Transform2D,
         actions: &BTreeMap<ActionId, ActionState>,
-        delta: Duration,
-    ) -> Result<ScriptCallContext, LuaError> {
+        tick: u64,
+        call: F,
+    ) -> Result<ScriptCallContext, LuaError>
+    where
+        F: FnOnce(&Lua, &Table) -> Result<(), LuaError>,
+    {
         *self.context.borrow_mut() = Some(ScriptCallContext {
             transform,
             properties: self.definition.properties.clone(),
             actions: actions.clone(),
+            object_guid: self.definition.object_guid,
+            tick,
+            emitted_events: Vec::new(),
         });
         self.interrupt_checkpoints.set(0);
-        let result = callback.call::<()>((self.state.clone(), delta.as_secs_f64()));
+        let result = call(&self._lua, &self.state);
         let context = self
             .context
             .borrow_mut()
@@ -169,6 +209,9 @@ impl ScriptInstance {
                 transform,
                 properties: self.definition.properties.clone(),
                 actions: actions.clone(),
+                object_guid: self.definition.object_guid,
+                tick,
+                emitted_events: Vec::new(),
             });
         result?;
         Ok(context)
@@ -178,6 +221,7 @@ impl ScriptInstance {
 pub struct ScriptHost {
     instances: BTreeMap<Guid, ScriptInstance>,
     diagnostics: Vec<ScriptDiagnostic>,
+    pending_events: SharedEvents,
 }
 
 impl Default for ScriptHost {
@@ -191,6 +235,7 @@ impl ScriptHost {
         Self {
             instances: BTreeMap::new(),
             diagnostics: Vec::new(),
+            pending_events: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -208,7 +253,11 @@ impl ScriptHost {
             return Err(ScriptError::MissingObject(definition.object_guid));
         }
         let context = Rc::new(RefCell::new(None));
-        let instance = ScriptInstance::compile(definition.clone(), context)?;
+        let instance = ScriptInstance::compile(
+            definition.clone(),
+            context,
+            self.pending_events.clone(),
+        )?;
         self.instances.insert(definition.object_guid, instance);
         Ok(())
     }
@@ -248,6 +297,7 @@ impl ScriptHost {
         delta: Duration,
         tick: u64,
     ) {
+        let pending_events = std::mem::take(&mut *self.pending_events.borrow_mut());
         let mut orphaned = Vec::new();
         for (object_guid, instance) in &mut self.instances {
             if world.entity_for_guid(*object_guid).is_none() {
@@ -270,6 +320,24 @@ impl ScriptHost {
                         tick,
                         &mut self.diagnostics,
                     );
+                }
+            }
+            if !instance.disabled {
+                if let Some(callback) = instance.on_event.clone() {
+                    for event in &pending_events {
+                        run_event_callback(
+                            instance,
+                            &callback,
+                            event,
+                            world,
+                            actions,
+                            tick,
+                            &mut self.diagnostics,
+                        );
+                        if instance.disabled {
+                            break;
+                        }
+                    }
                 }
             }
             if !instance.disabled {
@@ -305,7 +373,11 @@ impl ScriptHost {
             definition.source_path = asset.relative_path.clone();
             definition.source = asset.source.clone();
             let context = Rc::new(RefCell::new(None));
-            match ScriptInstance::compile(definition.clone(), context) {
+            match ScriptInstance::compile(
+                definition.clone(),
+                context,
+                self.pending_events.clone(),
+            ) {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
                         migrate_compatible_state(&previous.state, &instance.state, &instance._lua)
@@ -409,7 +481,48 @@ fn run_callback(
         return;
     };
 
-    match instance.invoke(callback, transform, actions, delta) {
+    let result = instance.invoke(transform, actions, tick, |_, state| {
+        callback.call::<()>((state.clone(), delta.as_secs_f64()))
+    });
+    apply_callback_result(instance, world, result, tick, diagnostics);
+}
+
+fn run_event_callback(
+    instance: &mut ScriptInstance,
+    callback: &Function,
+    event: &ScriptEvent,
+    world: &mut RuntimeWorld,
+    actions: &BTreeMap<ActionId, ActionState>,
+    tick: u64,
+    diagnostics: &mut Vec<ScriptDiagnostic>,
+) {
+    let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
+        return;
+    };
+    let Some(transform) = world.transform(entity) else {
+        return;
+    };
+
+    let result = instance.invoke(transform, actions, tick, |lua, state| {
+        callback.call::<()>((
+            state.clone(),
+            event.name.clone(),
+            event_value_to_lua(lua, &event.value)?,
+            event.sender_guid.to_string(),
+            event.tick,
+        ))
+    });
+    apply_callback_result(instance, world, result, tick, diagnostics);
+}
+
+fn apply_callback_result(
+    instance: &mut ScriptInstance,
+    world: &mut RuntimeWorld,
+    result: Result<ScriptCallContext, LuaError>,
+    tick: u64,
+    diagnostics: &mut Vec<ScriptDiagnostic>,
+) {
+    match result {
         Ok(context) => {
             if !transform_is_finite(context.transform) {
                 disable_with_diagnostic(
@@ -420,11 +533,18 @@ fn run_callback(
                 );
                 return;
             }
+            let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
+                return;
+            };
             if let Err(error) = world.set_transform(entity, context.transform) {
                 disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
                 return;
             }
             instance.definition.properties = context.properties;
+            instance
+                .pending_events
+                .borrow_mut()
+                .extend(context.emitted_events);
         }
         Err(error) => {
             disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
@@ -490,7 +610,11 @@ fn is_compatible_state_scalar(value: &LuaValue) -> bool {
     )
 }
 
-fn install_forge_api(lua: &Lua, context: SharedContext) -> Result<(), LuaError> {
+fn install_forge_api(
+    lua: &Lua,
+    context: SharedContext,
+    pending_events: SharedEvents,
+) -> Result<(), LuaError> {
     let input = lua.create_table()?;
 
     let axis_context = context.clone();
@@ -505,7 +629,7 @@ fn install_forge_api(lua: &Lua, context: SharedContext) -> Result<(), LuaError> 
         })?,
     )?;
 
-    let pressed_context = context;
+    let pressed_context = context.clone();
     input.set(
         "is_pressed",
         lua.create_function(move |_, action: u32| {
@@ -516,8 +640,42 @@ fn install_forge_api(lua: &Lua, context: SharedContext) -> Result<(), LuaError> 
         })?,
     )?;
 
+    let events = lua.create_table()?;
+    let event_context = context;
+    let queued_events = pending_events;
+    events.set(
+        "emit",
+        lua.create_function(move |_, (name, value): (String, Option<LuaValue>)| {
+            if name.trim().is_empty() || name.len() > MAX_SCRIPT_EVENT_NAME_BYTES {
+                return Ok(false);
+            }
+            let Some(value) = event_value_from_lua(value.unwrap_or(LuaValue::Nil)) else {
+                return Ok(false);
+            };
+            let mut slot = event_context.borrow_mut();
+            let context = slot.as_mut().ok_or_else(inactive_context_error)?;
+            if context.emitted_events.len() >= MAX_SCRIPT_EVENTS_PER_CALLBACK
+                || queued_events
+                    .borrow()
+                    .len()
+                    .saturating_add(context.emitted_events.len())
+                    >= MAX_QUEUED_SCRIPT_EVENTS
+            {
+                return Ok(false);
+            }
+            context.emitted_events.push(ScriptEvent {
+                name,
+                value,
+                sender_guid: context.object_guid.clone(),
+                tick: context.tick,
+            });
+            Ok(true)
+        })?,
+    )?;
+
     let forge = lua.create_table()?;
     forge.set("Input", input)?;
+    forge.set("Events", events)?;
     lua.globals().set("Forge", forge)?;
     Ok(())
 }
@@ -601,6 +759,31 @@ fn install_object_api(lua: &Lua, state: &Table, context: SharedContext) -> Resul
     )?;
 
     Ok(())
+}
+
+fn event_value_from_lua(value: LuaValue) -> Option<ScriptEventValue> {
+    match value {
+        LuaValue::Nil => Some(ScriptEventValue::Nil),
+        LuaValue::Boolean(value) => Some(ScriptEventValue::Boolean(value)),
+        LuaValue::Integer(value) => Some(ScriptEventValue::Integer(value)),
+        LuaValue::Number(value) if value.is_finite() => Some(ScriptEventValue::Number(value)),
+        LuaValue::String(value) => {
+            let value = value.to_str().ok()?.to_string();
+            (value.len() <= MAX_SCRIPT_EVENT_PAYLOAD_BYTES)
+                .then_some(ScriptEventValue::String(value))
+        }
+        _ => None,
+    }
+}
+
+fn event_value_to_lua(lua: &Lua, value: &ScriptEventValue) -> Result<LuaValue, LuaError> {
+    match value {
+        ScriptEventValue::Nil => Ok(LuaValue::Nil),
+        ScriptEventValue::Boolean(value) => Ok(LuaValue::Boolean(*value)),
+        ScriptEventValue::Integer(value) => Ok(LuaValue::Integer(*value)),
+        ScriptEventValue::Number(value) => Ok(LuaValue::Number(*value)),
+        ScriptEventValue::String(value) => Ok(LuaValue::String(lua.create_string(value)?)),
+    }
 }
 
 fn active_context(
