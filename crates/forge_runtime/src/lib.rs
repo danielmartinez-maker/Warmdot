@@ -2,7 +2,9 @@
 
 use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
 
-use forge_assets::{AnimationClipDocument, AnimationPlayer, AssetCatalog, AssetError, SpriteSheetDocument};
+use forge_assets::{
+    AnimationClipDocument, AnimationPlayer, AssetCatalog, AssetError, SpriteSheetDocument,
+};
 use forge_core::{
     ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
 };
@@ -10,7 +12,6 @@ use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument};
 use forge_world::{RuntimeWorld, WorldError};
 
-#[derive(Clone, Copy, Debug)]
 #[derive(Debug)]
 pub enum SpriteAnimationError {
     Asset(AssetError),
@@ -21,11 +22,15 @@ pub enum SpriteAnimationError {
 impl fmt::Display for SpriteAnimationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Asset(error) => write!(f, "sprite animation asset could not be loaded: {error}"),
+            Self::Asset(error) => {
+                write!(f, "sprite animation asset could not be loaded: {error}")
+            }
             Self::MissingObject(guid) => {
                 write!(f, "sprite animation object {guid} does not exist in this scene")
             }
-            Self::World(error) => write!(f, "sprite animation could not update the world: {error}"),
+            Self::World(error) => {
+                write!(f, "sprite animation could not update the world: {error}")
+            }
         }
     }
 }
@@ -52,6 +57,7 @@ struct RuntimeSpriteAnimation {
     player: AnimationPlayer,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct RuntimeConfig {
     pub fixed_step: Duration,
     pub max_frame_delta: Duration,
@@ -254,12 +260,7 @@ impl GameRuntime {
             .entity_for_guid(object_guid)
             .ok_or(SpriteAnimationError::MissingObject(object_guid))?;
         let mut player = AnimationPlayer::default();
-        let uv_rect = player.current_frame_uv_rect(
-            &clip,
-            &sheet,
-            texture.width,
-            texture.height,
-        )?;
+        let uv_rect = player.current_frame_uv_rect(&clip, &sheet, texture.width, texture.height)?;
         self.world.set_sprite_asset(entity, Some(sheet.texture))?;
         self.world.set_sprite_uv_rect(entity, uv_rect)?;
         self.sprite_animations.insert(
