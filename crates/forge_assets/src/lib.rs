@@ -309,8 +309,9 @@ impl AssetCatalog {
         let record = self.record_of_kind(guid, AssetKind::AnimationClip)?;
         let bytes = read_limited(&self.resolve_record_path(record)?, MAX_METADATA_BYTES)?;
         let clip: AnimationClipDocument = serde_json::from_slice(&bytes)?;
-        let sheet = self.load_sprite_sheet(clip.sprite_sheet)?;
-        clip.validate(guid, &sheet)?;
+        let sheet_guid = clip.sprite_sheet;
+        let sheet = self.load_sprite_sheet(sheet_guid)?;
+        clip.validate(sheet_guid, &sheet)?;
         Ok(clip)
     }
 
