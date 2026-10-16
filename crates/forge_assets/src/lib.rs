@@ -22,6 +22,7 @@ pub const CURRENT_SPRITE_SHEET_SCHEMA: u32 = 1;
 pub const CURRENT_ANIMATION_CLIP_SCHEMA: u32 = 1;
 const MAX_PNG_SOURCE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_SCRIPT_SOURCE_BYTES: u64 = 1024 * 1024;
 const MAX_TEXTURE_DIMENSION: u32 = 16_384;
 const MAX_TEXTURE_PIXELS: u64 = 32 * 1024 * 1024;
 
@@ -31,6 +32,7 @@ pub enum AssetKind {
     Png,
     SpriteSheet,
     AnimationClip,
+    Script,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -307,6 +309,19 @@ impl AssetCatalog {
         Ok(sheet)
     }
 
+    pub fn load_script(&self, guid: Guid) -> Result<LoadedScriptAsset, AssetError> {
+        let record = self.record_of_kind(guid, AssetKind::Script)?;
+        let bytes = read_limited(&self.resolve_record_path(record)?, MAX_SCRIPT_SOURCE_BYTES)?;
+        let source = String::from_utf8(bytes).map_err(|error| {
+            AssetError::Invalid(format!("{} is not valid UTF-8: {error}", record.relative_path))
+        })?;
+        Ok(LoadedScriptAsset {
+            guid,
+            relative_path: record.relative_path.clone(),
+            source,
+        })
+    }
+
     pub fn load_animation_clip(&self, guid: Guid) -> Result<AnimationClipDocument, AssetError> {
         let record = self.record_of_kind(guid, AssetKind::AnimationClip)?;
         let bytes = read_limited(&self.resolve_record_path(record)?, MAX_METADATA_BYTES)?;
@@ -355,6 +370,13 @@ impl AssetCatalog {
             .map_err(|error| AssetError::Io(error.error))?;
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LoadedScriptAsset {
+    pub guid: Guid,
+    pub relative_path: String,
+    pub source: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -682,6 +704,7 @@ fn scan_directory(
         let byte_limit = match kind {
             AssetKind::Png => MAX_PNG_SOURCE_BYTES,
             AssetKind::SpriteSheet | AssetKind::AnimationClip => MAX_METADATA_BYTES,
+            AssetKind::Script => MAX_SCRIPT_SOURCE_BYTES,
         };
         let bytes = read_limited(&canonical, byte_limit)?;
         let record = (kind, bytes.len() as u64, fingerprint(&bytes));
@@ -698,6 +721,8 @@ fn asset_kind(path: &Path) -> Option<AssetKind> {
         Some(AssetKind::AnimationClip)
     } else if path.extension()?.to_str()?.eq_ignore_ascii_case("png") {
         Some(AssetKind::Png)
+    } else if path.extension()?.to_str()?.eq_ignore_ascii_case("luau") {
+        Some(AssetKind::Script)
     } else {
         None
     }
