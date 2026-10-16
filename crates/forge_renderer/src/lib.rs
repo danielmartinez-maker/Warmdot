@@ -136,7 +136,7 @@ impl GpuRenderer {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
-                apply_limit_buckets: false,
+            apply_limit_buckets: false,
         }))
         .map_err(|error| RendererError::Adapter(error.to_string()))?;
         let adapter_info = adapter.get_info();
