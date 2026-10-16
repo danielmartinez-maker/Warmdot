@@ -67,11 +67,6 @@ mod tests {
         let project = Project::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
             .expect("open Action Arena sample");
         let assets = AssetCatalog::open(project.root()).expect("open sample assets");
-        assert_eq!(
-            runtime.sprite_animation_count(),
-            5,
-            "the authored player and four enemies should load looping clips"
-        );
         let player_guid = "529bb9ad-47b8-4992-874e-055c7fbf0003"
             .parse::<Guid>()
             .expect("parse sample player GUID");
@@ -81,6 +76,12 @@ mod tests {
             &assets,
         )
         .expect("load authored scene and controller");
+
+        assert_eq!(
+            runtime.sprite_animation_count(),
+            5,
+            "the authored player and four enemies should load looping clips"
+        );
         let player = runtime
             .entity_for_guid(player_guid)
             .expect("sample player exists");
