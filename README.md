@@ -9,7 +9,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - Stable authored GUIDs are kept separate from ephemeral runtime entities.
 - Scene JSON is schema-versioned, validated, and compiled into a Forge-owned world API.
 - Project manifests resolve a default scene and reject path traversal or symlink escape.
-- The fixed-step clock caps frame time and simulation catch-up and reports dropped time.
+- The fixed-step clock caps frame time and simulation catch-up and reports dropped time; the runtime supports play, pause, one-tick stepping, and scene replacement with clock/input/physics reset.
 - Timestamped input actions are delivered in stable queue order.
 - The Rapier adapter supports fixed, dynamic, and position-based kinematic bodies; circle and box colliders; sensor/collision events; raycasts; and transform synchronization.
 - The headless action-arena sample runs a dynamic player against a fixed floor.
@@ -40,6 +40,7 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer curr
 - `docs/architecture/renderer-and-benchmark.md`: renderer scope and benchmark measurement contract
 - `docs/architecture/assets-and-animation.md`: asset scan, stable identity, and animation data contract
 - `docs/architecture/tilemaps-and-edit-history.md`: chunk layout, coordinate mapping, and editor history contract
+- `docs/architecture/runtime-controls.md`: pause, stepping, and scene replacement behavior
 
 ## Build
 

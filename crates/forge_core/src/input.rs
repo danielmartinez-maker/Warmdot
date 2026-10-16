@@ -58,6 +58,12 @@ impl InputTimeline {
         ready
     }
 
+    pub fn clear(&mut self) {
+        self.queued.clear();
+        self.states.clear();
+        self.next_sequence = 0;
+    }
+
     pub fn state(&self, action: ActionId) -> Option<ActionState> {
         self.states.get(&action).copied()
     }

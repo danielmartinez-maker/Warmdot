@@ -78,6 +78,32 @@ impl FixedStepClock {
         plan
     }
 
+    /// Produces one deterministic tick without consuming wall-clock time.
+    pub fn advance_one_step(&mut self) -> FramePlan {
+        let first_tick = self.next_tick;
+        self.next_tick = self.next_tick.saturating_add(1);
+        self.accumulator = Duration::ZERO;
+        FramePlan {
+            first_tick,
+            fixed_steps: 1,
+            accepted_frame_time: Duration::ZERO,
+            dropped_time: Duration::ZERO,
+            interpolation_alpha: 0.0,
+        }
+    }
+
+    /// Clears fractional frame time while preserving tick and dropped-time counters.
+    pub fn clear_accumulator(&mut self) {
+        self.accumulator = Duration::ZERO;
+    }
+
+    /// Resets simulation tick, accumulated time, and dropped-time statistics.
+    pub fn reset(&mut self) {
+        self.accumulator = Duration::ZERO;
+        self.next_tick = 0;
+        self.total_dropped_time = Duration::ZERO;
+    }
+
     pub fn step(&self) -> Duration {
         self.step
     }

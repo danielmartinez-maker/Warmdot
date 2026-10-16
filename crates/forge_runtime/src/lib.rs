@@ -79,6 +79,7 @@ pub struct GameRuntime {
     simulation_time: Duration,
     physics: PhysicsSimulation,
     pending_physics_events: Vec<CollisionEvent2D>,
+    paused: bool,
 }
 
 impl GameRuntime {
@@ -97,6 +98,7 @@ impl GameRuntime {
             simulation_time: Duration::ZERO,
             physics: PhysicsSimulation::new(),
             pending_physics_events: Vec::new(),
+            paused: false,
         })
     }
 
@@ -123,10 +125,50 @@ impl GameRuntime {
         self.input.push(at, action, value, pressed);
     }
 
+    /// Pausing stops wall-clock accumulation while preserving the current scene and systems.
+    pub fn set_paused(&mut self, paused: bool) {
+        if self.paused != paused {
+            self.paused = paused;
+            self.clock.clear_accumulator();
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    /// Advances exactly one fixed tick while paused. Returns None while the runtime is playing.
+    pub fn step_once(&mut self) -> Option<RuntimeFrame> {
+        if !self.paused {
+            return None;
+        }
+        let plan = self.clock.advance_one_step();
+        Some(self.execute_plan(plan))
+    }
+
+    /// Replaces the scene and resets physics, clock, input, and pending collision events.
+    pub fn replace_scene(&mut self, scene: &SceneDocument) -> Result<(), RuntimeError> {
+        self.world = scene.instantiate().map_err(RuntimeError::Scene)?;
+        self.clock.reset();
+        self.input.clear();
+        self.simulation_time = Duration::ZERO;
+        self.physics = PhysicsSimulation::new();
+        self.pending_physics_events.clear();
+        Ok(())
+    }
+
     /// Advances bounded fixed steps. Systems run before physics; collision events produced by
-    /// physics are delivered to systems at the next fixed-tick barrier.
+    /// physics are delivered to systems at the next fixed-tick barrier. Paused time is ignored.
     pub fn advance_frame(&mut self, frame_delta: Duration) -> RuntimeFrame {
-        let plan: FramePlan = self.clock.advance(frame_delta);
+        let plan = if self.paused {
+            self.clock.advance(Duration::ZERO)
+        } else {
+            self.clock.advance(frame_delta)
+        };
+        self.execute_plan(plan)
+    }
+
+    fn execute_plan(&mut self, plan: FramePlan) -> RuntimeFrame {
         let mut frame_physics_events = Vec::new();
         for offset in 0..plan.fixed_steps {
             self.simulation_time = self.simulation_time.saturating_add(self.clock.step());
