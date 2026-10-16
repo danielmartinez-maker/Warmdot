@@ -1,0 +1,17 @@
+[package]
+name = "forge-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Native scene editor for Forge 2D projects"
+
+[dependencies]
+eframe = { version = "=0.37.0", default-features = false, features = ["default_fonts", "wgpu"] }
+forge_core = { path = "../../crates/forge_core" }
+forge_editor_core = { path = "../../crates/forge_editor_core" }
+forge_project = { path = "../../crates/forge_project" }
+forge_scene = { path = "../../crates/forge_scene" }
+
+[lints]
+workspace = true

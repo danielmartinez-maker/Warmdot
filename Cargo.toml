@@ -15,6 +15,7 @@ members = [
     "examples/action_arena",
     "examples/renderer_benchmark",
     "examples/forge_player",
+    "examples/forge_editor",
     "examples/playable_action_arena",
 ]
 
