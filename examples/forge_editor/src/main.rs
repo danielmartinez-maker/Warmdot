@@ -286,8 +286,7 @@ fn tint_color(tint: [f32; 4]) -> Color32 {
 
 impl eframe::App for EditorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let context = ui.ctx().clone();
-        egui::TopBottomPanel::top("toolbar").show(&context, |ui| {
+        egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Add sprite").clicked() {
                     self.add_sprite();
@@ -329,13 +328,13 @@ impl eframe::App for EditorApp {
                 }
             });
         });
-        egui::SidePanel::left("hierarchy")
-            .default_width(220.0)
-            .show(&context, |ui| self.show_hierarchy(ui));
-        egui::SidePanel::right("inspector")
-            .default_width(320.0)
-            .show(&context, |ui| self.show_inspector(ui));
-        egui::CentralPanel::default().show(&context, |ui| self.show_canvas(ui));
+        egui::Panel::left("hierarchy")
+            .default_size(220.0)
+            .show(ui, |ui| self.show_hierarchy(ui));
+        egui::Panel::right("inspector")
+            .default_size(320.0)
+            .show(ui, |ui| self.show_inspector(ui));
+        egui::CentralPanel::default().show(ui, |ui| self.show_canvas(ui));
     }
 }
 
