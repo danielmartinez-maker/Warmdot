@@ -40,6 +40,7 @@ jobs:
             'artifacts/action-arena-windows/Forge2DPlayer.exe',
             'artifacts/action-arena-windows/run-game.bat',
             'artifacts/action-arena-windows/LICENSE',
+            'artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html',
             'artifacts/action-arena-windows/Game/project.forgeproj',
             'artifacts/action-arena-windows/Game/Scenes/Main.forgescene',
             'artifacts/action-arena-windows/Game/Scenes/Menu.forgescene',
@@ -50,6 +51,10 @@ jobs:
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
               throw "Missing expected export file: $path"
             }
+          }
+          $licenseHtml = Get-Content -LiteralPath 'artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html' -Raw
+          if ($licenseHtml.Length -lt 100 -or $licenseHtml -notmatch 'Third Party Licenses') {
+            throw 'Third-party license report is empty or missing its title.'
           }
       - name: Upload Windows player package
         uses: actions/upload-artifact@v4
