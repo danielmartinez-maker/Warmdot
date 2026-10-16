@@ -56,6 +56,8 @@ struct RunState {
 struct PlayerApp {
     project_name: String,
     project_root: PathBuf,
+    project_default_scene_guid: Guid,
+    project_tilemap: Option<TileMapDocument>,
     scene: SceneDocument,
     runtime: GameRuntime,
     input: InputMap,
@@ -79,6 +81,8 @@ impl PlayerApp {
     fn new(
         project_name: String,
         project_root: PathBuf,
+        project_default_scene_guid: Guid,
+        project_tilemap: Option<TileMapDocument>,
         scene: SceneDocument,
         runtime: GameRuntime,
         ui: UiRuntime,
@@ -109,6 +113,8 @@ impl PlayerApp {
         Self {
             project_name,
             project_root,
+            project_default_scene_guid,
+            project_tilemap,
             scene,
             runtime,
             input,
@@ -300,6 +306,8 @@ impl ApplicationHandler for PlayerApp {
                 let scene_requests = self.runtime.take_scene_transition_requests();
                 process_scene_transition_requests(
                     &self.project_root,
+                    self.project_default_scene_guid,
+                    self.project_tilemap.as_ref(),
                     &self.assets,
                     &mut self.runtime,
                     &mut self.scene,
@@ -425,6 +433,8 @@ fn process_audio_commands(
 
 fn process_scene_transition_requests(
     project_root: &Path,
+    project_default_scene_guid: Guid,
+    project_tilemap: Option<&TileMapDocument>,
     assets: &AssetCatalog,
     runtime: &mut GameRuntime,
     current_scene: &mut SceneDocument,
@@ -450,7 +460,7 @@ fn process_scene_transition_requests(
         return;
     };
     for scene_guid in requests {
-        let scene = match catalog.load_scene(scene_guid) {
+        let mut scene = match catalog.load_scene(scene_guid) {
             Ok(scene) => scene,
             Err(error) => {
                 emit_message(
@@ -461,6 +471,18 @@ fn process_scene_transition_requests(
                 continue;
             }
         };
+        if scene.resource_guid == project_default_scene_guid {
+            if let Some(tilemap) = project_tilemap {
+                if let Err(error) = append_tilemap_to_scene(&mut scene, tilemap, assets) {
+                    emit_message(
+                        DiagnosticLevel::Error,
+                        "player.scene_transition_rejected",
+                        format!("{scene_guid}: {error}"),
+                    );
+                    continue;
+                }
+            }
+        }
         if let Err(error) = validate_scene_dependencies(&scene, assets) {
             emit_message(
                 DiagnosticLevel::Error,
@@ -1377,15 +1399,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let project = Project::open(PathBuf::from(&args[0]))?;
     let project_name = project.document().name.clone();
     let project_root = project.root().to_path_buf();
+    let project_default_scene_guid = project.document().default_scene_guid;
     let assets = AssetCatalog::open(project_root.clone())?;
     let mut scene = project.default_scene().clone();
-    let tilemap = load_project_tilemap(&project_root)?;
-    let tilemap_chunk_count = tilemap
+    let project_tilemap = load_project_tilemap(&project_root)?;
+    let tilemap_chunk_count = project_tilemap
         .as_ref()
         .map(|tilemap| tilemap.chunks.len())
         .unwrap_or(0);
-    if let Some(tilemap) = tilemap {
-        append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
+    if let Some(tilemap) = project_tilemap.as_ref() {
+        append_tilemap_to_scene(&mut scene, tilemap, &assets)?;
     }
     let ui = load_scene_ui(&scene, &assets)?;
     let runtime = GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), &assets)?;
@@ -1406,6 +1429,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     event_loop.run_app(&mut PlayerApp::new(
         project_name,
         project_root,
+        project_default_scene_guid,
+        project_tilemap,
         scene,
         runtime,
         ui,
@@ -1460,6 +1485,8 @@ mod tests {
         let mut scene_catalog = None;
         process_scene_transition_requests(
             &project_root,
+            default_scene_guid,
+            Some(&tilemap),
             &assets,
             &mut runtime,
             &mut current_scene,
@@ -1475,6 +1502,8 @@ mod tests {
 
         process_scene_transition_requests(
             &project_root,
+            default_scene_guid,
+            Some(&tilemap),
             &assets,
             &mut runtime,
             &mut current_scene,
