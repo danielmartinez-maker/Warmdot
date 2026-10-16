@@ -10,6 +10,7 @@ description = "Headless physics action-arena kernel sample"
 forge_assets = { path = "../../crates/forge_assets" }
 forge_core = { path = "../../crates/forge_core" }
 forge_project = { path = "../../crates/forge_project" }
+forge_scene = { path = "../../crates/forge_scene" }
 forge_runtime = { path = "../../crates/forge_runtime" }
 forge_world = { path = "../../crates/forge_world" }
 
