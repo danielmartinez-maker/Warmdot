@@ -12,7 +12,9 @@ use forge_assets::{AssetCatalog, AssetChange, AssetChangeKind, AssetKind};
 use forge_core::{ActionId, Guid};
 use forge_editor_core::SceneEditHistory;
 use forge_project::Project;
-use forge_runtime::{GameRuntime, RuntimeConfig, ScriptDiagnostic};
+use forge_runtime::{
+    BreakpointContinueResult, GameRuntime, RuntimeConfig, ScriptDiagnostic,
+};
 use forge_scene::{
     AuthoredCamera, AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody,
     AuthoredRigidBodyKind, AuthoredScript, AuthoredSprite, AuthoredTransform,
@@ -118,6 +120,7 @@ struct EditorApp {
     preview_last_frame: Option<Instant>,
     preview_tick: u64,
     preview_actions: [f32; 2],
+    breakpoint_line: u32,
     script_diagnostics: Vec<ScriptDiagnostic>,
     hidden_layers: BTreeSet<i32>,
     canvas_offset: Vec2,
@@ -165,6 +168,7 @@ impl EditorApp {
             preview_last_frame: None,
             preview_tick: 0,
             preview_actions: [0.0, 0.0],
+            breakpoint_line: 1,
             script_diagnostics: Vec::new(),
             hidden_layers: BTreeSet::new(),
             canvas_offset: Vec2::ZERO,
@@ -565,6 +569,70 @@ impl EditorApp {
         self.preview_last_frame = Some(Instant::now());
     }
 
+    fn continue_runtime(&mut self) {
+        let Some(runtime) = self.runtime.as_mut() else {
+            return;
+        };
+        match runtime.continue_script_breakpoint() {
+            BreakpointContinueResult::Hit(hit) => {
+                self.status = format!(
+                    "Paused at {}:{} for object {} on tick {}.",
+                    hit.source_path, hit.line, hit.object_guid, hit.tick
+                );
+            }
+            BreakpointContinueResult::FrameComplete(frame) => {
+                self.preview_tick = frame
+                    .first_tick
+                    .saturating_add(u64::from(frame.fixed_steps));
+                self.status = "Breakpoint continued; the pending frame completed.".into();
+            }
+            BreakpointContinueResult::NotPaused => {
+                self.status = "No script breakpoint is currently paused.".into();
+            }
+        }
+        self.collect_script_diagnostics();
+        self.preview_last_frame = Some(Instant::now());
+    }
+
+    fn set_selected_breakpoint(&mut self, enabled: bool) {
+        let Some(object_guid) = self.selected else {
+            self.status = "Select an object with a script first.".into();
+            return;
+        };
+        let has_script = self
+            .scene
+            .objects
+            .iter()
+            .find(|object| object.object_guid == object_guid)
+            .is_some_and(|object| object.script.is_some());
+        if !has_script {
+            self.status = "The selected object has no Luau script.".into();
+            return;
+        }
+        let Some(runtime) = self.runtime.as_mut() else {
+            return;
+        };
+        match runtime.set_script_breakpoint(object_guid, self.breakpoint_line, enabled) {
+            Ok(Some(line)) if enabled => {
+                self.status = format!(
+                    "Breakpoint set at line {line} (requested line {}).",
+                    self.breakpoint_line
+                );
+            }
+            Ok(Some(line)) => self.status = format!("Breakpoint removed from line {line}."),
+            Ok(None) if enabled => {
+                self.status = format!(
+                    "No executable script line was found at or after line {}.",
+                    self.breakpoint_line
+                );
+            }
+            Ok(None) => {
+                self.status = format!("No breakpoint was found for line {}.", self.breakpoint_line);
+            }
+            Err(error) => self.status = format!("Breakpoint update failed: {error}"),
+        }
+    }
+
     fn stop_runtime(&mut self) {
         self.runtime = None;
         self.preview_last_frame = None;
@@ -627,6 +695,12 @@ impl EditorApp {
             .is_some_and(|runtime| !runtime.is_paused())
         {
             ctx.request_repaint_after(Duration::from_millis(16));
+        } else if self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.current_script_breakpoint().is_some())
+        {
+            ctx.request_repaint();
         }
     }
     fn handle_asset_change(&mut self, change: AssetChange) {
@@ -3195,26 +3269,62 @@ impl eframe::App for EditorApp {
                             self.start_runtime();
                         }
                     } else {
-                        if ui
-                            .button(
-                                if self.runtime.as_ref().is_some_and(GameRuntime::is_paused) {
-                                    "Resume"
-                                } else {
-                                    "Pause"
-                                },
-                            )
-                            .clicked()
-                        {
-                            self.toggle_runtime_pause();
+                        let breakpoint_hit = self
+                            .runtime
+                            .as_ref()
+                            .and_then(GameRuntime::current_script_breakpoint);
+                        if let Some(hit) = breakpoint_hit {
+                            if ui.button("Continue").clicked() {
+                                self.continue_runtime();
+                            }
+                            ui.label(format!(
+                                "Paused at {}:{}  •  object {}  •  tick {}",
+                                hit.source_path, hit.line, hit.object_guid, hit.tick
+                            ));
+                        } else {
+                            if ui
+                                .button(
+                                    if self.runtime.as_ref().is_some_and(GameRuntime::is_paused) {
+                                        "Resume"
+                                    } else {
+                                        "Pause"
+                                    },
+                                )
+                                .clicked()
+                            {
+                                self.toggle_runtime_pause();
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.runtime.as_ref().is_some_and(GameRuntime::is_paused),
+                                    egui::Button::new("Step"),
+                                )
+                                .clicked()
+                            {
+                                self.step_runtime();
+                            }
                         }
-                        if ui
-                            .add_enabled(
-                                self.runtime.as_ref().is_some_and(GameRuntime::is_paused),
-                                egui::Button::new("Step"),
-                            )
-                            .clicked()
-                        {
-                            self.step_runtime();
+                        let selected_script = self
+                            .selected
+                            .and_then(|guid| {
+                                self.scene
+                                    .objects
+                                    .iter()
+                                    .find(|object| object.object_guid == guid)
+                            })
+                            .is_some_and(|object| object.script.is_some());
+                        if selected_script {
+                            ui.add(
+                                egui::DragValue::new(&mut self.breakpoint_line)
+                                    .range(1..=100_000)
+                                    .prefix("Line "),
+                            );
+                            if ui.button("Set breakpoint").clicked() {
+                                self.set_selected_breakpoint(true);
+                            }
+                            if ui.button("Remove breakpoint").clicked() {
+                                self.set_selected_breakpoint(false);
+                            }
                         }
                         if ui.button("Stop").clicked() {
                             self.stop_runtime();
