@@ -23,7 +23,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The first native scene editor is now available, but this branch is not the complete P0 alpha yet. The editor can select project PNGs and preview textured sprites, but does not yet provide tilemap painting, a full asset browser, script/audio inspectors, or multi-scene workflows. Automatic attachment of animation players to scene objects remains outstanding. Luau scripts, audio, retained game UI, standalone export, and deeper colony-simulation features remain ahead. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+The first native scene editor is now available, but this branch is not the complete P0 alpha yet. The editor can select project PNGs and preview textured sprites, but does not yet provide tilemap painting, a full asset browser, script/audio inspectors, or multi-scene workflows. Luau scripts, audio, retained game UI, standalone export, and deeper colony-simulation features remain ahead. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
