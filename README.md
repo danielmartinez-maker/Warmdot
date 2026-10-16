@@ -22,7 +22,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 
 ## Remaining P0 work
 
-The native editor supports scene editing plus a tilemap workspace with PNG tileset selection, tile painting and erasing, solid-cell metadata, bounded undo/redo, and a saved-state marker. Tilemaps save to `Assets/Default.forgetilemap.json`; the player loads that map as textured runtime tiles and creates fixed colliders for solid cells. This branch is still short of the complete P0 alpha: a full asset browser, Luau scripting, audio, retained game UI, standalone export, chunk-aware tile rendering/collision optimization, and deeper colony-simulation features remain. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
+The native editor supports scene editing plus a tilemap workspace with PNG tileset selection, tile painting and erasing, solid-cell metadata, bounded undo/redo, and a saved-state marker. Tilemaps save to `Assets/Default.forgetilemap.json`; the player loads that map as textured runtime tiles and creates fixed colliders for solid cells. This branch is still short of the complete P0 alpha: a full asset browser, Luau scripting, audio, retained game UI, multi-scene authoring, chunk-aware tile rendering/collision optimization, and deeper colony-simulation features remain. The renderer benchmark executable is implemented but has not been run on a desktop GPU, so there are no measured performance results.
 
 ## Workspace
 
@@ -39,7 +39,7 @@ The native editor supports scene editing plus a tilemap workspace with PNG tiles
 - `crates/forge_editor_core`: validated scene edits with bounded undo/redo and dirty-state tracking
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
-- `examples/forge_player`: opens a `.forgeproj`, runs its default scene, authored animations, and saved tilemap with solid-cell colliders, uploads project PNGs, and refreshes changed images while the player is open
+- `examples/forge_player`: opens a `.forgeproj`, runs its default scene, authored animations, and saved tilemap with solid-cell colliders, refreshes project PNGs, and exports a portable player/project folder with a launcher
 - `examples/forge_editor`: creates or opens projects, edits scenes and tilemaps, previews sprites and PNG tilesets, and saves scene or tilemap edits with undo/redo
 - `examples/playable_action_arena`: playable keyboard/mouse action game using the runtime, input map, and renderer
 - `examples/colony_simulation`: worker colony sample with fixed-step resource trips and worker creation
@@ -60,6 +60,7 @@ Use stable Rust. On Windows, install the Visual C++ Build Tools workload and Win
     cargo check --workspace
     cargo run -p action-arena
     cargo run -p forge-player -- path/to/project.forgeproj
+    cargo run -p forge-player -- --export path/to/project.forgeproj path/to/export-folder
     cargo run -p forge-editor -- path/to/project.forgeproj
     cargo run -p colony-simulation
     cargo run --release -p renderer-benchmark -- --sprites 10000 --warmup 120 --samples 600
