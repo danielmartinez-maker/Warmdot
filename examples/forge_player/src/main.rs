@@ -188,8 +188,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let project = Project::open(PathBuf::from(project_path))?;
     let project_name = project.document().name.clone();
     let project_root = project.root().to_path_buf();
-    let runtime = GameRuntime::from_scene(project.default_scene(), RuntimeConfig::default())?;
     let assets = AssetCatalog::open(project_root)?;
+    let runtime = GameRuntime::from_scene_with_assets(
+        project.default_scene(),
+        RuntimeConfig::default(),
+        &assets,
+    )?;
 
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
