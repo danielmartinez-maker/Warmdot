@@ -631,6 +631,24 @@ impl SceneDocument {
                     })?;
             }
         }
+        for object in &self.objects {
+            if let Some(parent_guid) = object.parent_guid {
+                let local = Transform2D {
+                    translation: object.transform.translation,
+                    rotation_radians: object.transform.rotation_radians,
+                    scale: object.transform.scale,
+                };
+                world
+                    .set_parent(object.object_guid, Some(parent_guid), local)
+                    .map_err(|error| {
+                        vec![SceneDiagnostic::error(
+                            "runtime_scene_compile_failed",
+                            error.to_string(),
+                            Some(object.object_guid),
+                        )]
+                    })?;
+            }
+        }
         Ok(world)
     }
 

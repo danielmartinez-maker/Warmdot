@@ -4,7 +4,7 @@
 //! stay behind this API so projects do not depend on a storage-library contract.
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
 };
 
@@ -50,6 +50,122 @@ impl Default for Sprite {
             layer: 0,
             order: 0,
         }
+    }
+}
+
+fn valid_transform(transform: Transform2D) -> bool {
+    transform.translation.iter().all(|value| value.is_finite())
+        && transform.scale.iter().all(|value| value.is_finite())
+        && transform.rotation_radians.is_finite()
+}
+
+fn transform_basis(transform: Transform2D) -> ([f32; 2], [f32; 2]) {
+    let (sin, cos) = transform.rotation_radians.sin_cos();
+    (
+        [cos * transform.scale[0], sin * transform.scale[0]],
+        [-sin * transform.scale[1], cos * transform.scale[1]],
+    )
+}
+
+fn decompose_basis(
+    x_axis: [f32; 2],
+    y_axis: [f32; 2],
+    object_guid: Guid,
+) -> Result<(f32, [f32; 2]), WorldError> {
+    let x_length = x_axis[0].hypot(x_axis[1]);
+    let y_length = y_axis[0].hypot(y_axis[1]);
+    let dot = x_axis[0] * y_axis[0] + x_axis[1] * y_axis[1];
+    if x_length > f32::EPSILON
+        && y_length > f32::EPSILON
+        && dot.abs() > 1.0e-4 * x_length * y_length
+    {
+        return Err(WorldError::UnsupportedParentShear(object_guid));
+    }
+    let determinant = x_axis[0] * y_axis[1] - x_axis[1] * y_axis[0];
+    if x_length > f32::EPSILON {
+        Ok((
+            x_axis[1].atan2(x_axis[0]),
+            [x_length, determinant / x_length],
+        ))
+    } else if y_length > f32::EPSILON {
+        Ok((
+            y_axis[1].atan2(y_axis[0]) - std::f32::consts::FRAC_PI_2,
+            [0.0, y_length],
+        ))
+    } else {
+        Ok((0.0, [0.0, 0.0]))
+    }
+}
+
+fn compose_transform(
+    parent: Transform2D,
+    local: Transform2D,
+    object_guid: Guid,
+) -> Result<Transform2D, WorldError> {
+    let (parent_x, parent_y) = transform_basis(parent);
+    let (local_x, local_y) = transform_basis(local);
+    let world_x = [
+        parent_x[0] * local_x[0] + parent_y[0] * local_x[1],
+        parent_x[1] * local_x[0] + parent_y[1] * local_x[1],
+    ];
+    let world_y = [
+        parent_x[0] * local_y[0] + parent_y[0] * local_y[1],
+        parent_x[1] * local_y[0] + parent_y[1] * local_y[1],
+    ];
+    let (rotation_radians, scale) = decompose_basis(world_x, world_y, object_guid)?;
+    let transform = Transform2D {
+        translation: [
+            parent.translation[0] + parent_x[0] * local.translation[0]
+                + parent_y[0] * local.translation[1],
+            parent.translation[1] + parent_x[1] * local.translation[0]
+                + parent_y[1] * local.translation[1],
+        ],
+        rotation_radians,
+        scale,
+    };
+    if valid_transform(transform) {
+        Ok(transform)
+    } else {
+        Err(WorldError::InvalidTransform(object_guid))
+    }
+}
+
+fn relative_transform(
+    parent: Transform2D,
+    world: Transform2D,
+    object_guid: Guid,
+) -> Result<Transform2D, WorldError> {
+    if parent.scale.iter().any(|value| value.abs() <= f32::EPSILON) {
+        return Err(WorldError::InvalidTransform(object_guid));
+    }
+    let (sin, cos) = parent.rotation_radians.sin_cos();
+    let world_delta = [
+        world.translation[0] - parent.translation[0],
+        world.translation[1] - parent.translation[1],
+    ];
+    let local_translation = [
+        (cos * world_delta[0] + sin * world_delta[1]) / parent.scale[0],
+        (-sin * world_delta[0] + cos * world_delta[1]) / parent.scale[1],
+    ];
+    let (world_x, world_y) = transform_basis(world);
+    let local_x = [
+        (cos * world_x[0] + sin * world_x[1]) / parent.scale[0],
+        (-sin * world_x[0] + cos * world_x[1]) / parent.scale[1],
+    ];
+    let local_y = [
+        (cos * world_y[0] + sin * world_y[1]) / parent.scale[0],
+        (-sin * world_y[0] + cos * world_y[1]) / parent.scale[1],
+    ];
+    let (rotation_radians, scale) = decompose_basis(local_x, local_y, object_guid)?;
+    let transform = Transform2D {
+        translation: local_translation,
+        rotation_radians,
+        scale,
+    };
+    if valid_transform(transform) {
+        Ok(transform)
+    } else {
+        Err(WorldError::InvalidTransform(object_guid))
     }
 }
 
@@ -196,6 +312,10 @@ pub enum WorldError {
     MissingSprite,
     InvalidSprite(&'static str),
     InvalidPhysicsConfiguration(&'static str),
+    MissingParent(Guid),
+    ParentCycle(Guid),
+    UnsupportedParentShear(Guid),
+    InvalidTransform(Guid),
 }
 
 impl fmt::Display for WorldError {
@@ -208,6 +328,15 @@ impl fmt::Display for WorldError {
             Self::MissingSprite => f.write_str("runtime entity has no sprite component"),
             Self::InvalidSprite(message) => f.write_str(message),
             Self::InvalidPhysicsConfiguration(message) => f.write_str(message),
+            Self::MissingParent(guid) => write!(f, "parent object {guid} is missing"),
+            Self::ParentCycle(guid) => write!(f, "parenting would create a cycle at object {guid}"),
+            Self::UnsupportedParentShear(guid) => write!(
+                f,
+                "parent transform would introduce unsupported shear for object {guid}"
+            ),
+            Self::InvalidTransform(guid) => {
+                write!(f, "object {guid} has a non-finite or singular transform")
+            }
         }
     }
 }
@@ -221,6 +350,8 @@ pub struct RuntimeWorld {
     ecs: EcsWorld,
     by_guid: BTreeMap<Guid, Entity>,
     guid_by_entity: HashMap<Entity, Guid>,
+    local_transforms: BTreeMap<Guid, Transform2D>,
+    parent_by_guid: BTreeMap<Guid, Guid>,
     sprite_query: QueryState<(
         &'static AuthoredIdentity,
         &'static Transform2D,
@@ -260,6 +391,8 @@ impl RuntimeWorld {
             ecs,
             by_guid: BTreeMap::new(),
             guid_by_entity: HashMap::new(),
+            local_transforms: BTreeMap::new(),
+            parent_by_guid: BTreeMap::new(),
             sprite_query,
             camera_query,
             physics_query,
@@ -287,7 +420,128 @@ impl RuntimeWorld {
         let runtime_entity = entity.id();
         self.by_guid.insert(object_guid, runtime_entity);
         self.guid_by_entity.insert(runtime_entity, object_guid);
+        self.local_transforms.insert(object_guid, transform);
         Ok(RuntimeEntity(runtime_entity))
+    }
+
+    /// Sets the authored parent and local transform, then propagates world transforms.
+    pub fn set_parent(
+        &mut self,
+        object_guid: Guid,
+        parent_guid: Option<Guid>,
+        local_transform: Transform2D,
+    ) -> Result<(), WorldError> {
+        if !self.by_guid.contains_key(&object_guid) {
+            return Err(WorldError::StaleEntity);
+        }
+        if !valid_transform(local_transform) {
+            return Err(WorldError::InvalidTransform(object_guid));
+        }
+        if let Some(parent_guid) = parent_guid {
+            if !self.by_guid.contains_key(&parent_guid) {
+                return Err(WorldError::MissingParent(parent_guid));
+            }
+            let mut cursor = Some(parent_guid);
+            let mut visited = BTreeSet::new();
+            while let Some(current) = cursor {
+                if current == object_guid || !visited.insert(current) {
+                    return Err(WorldError::ParentCycle(object_guid));
+                }
+                cursor = self.parent_by_guid.get(&current).copied();
+            }
+            self.parent_by_guid.insert(object_guid, parent_guid);
+        } else {
+            self.parent_by_guid.remove(&object_guid);
+        }
+        self.local_transforms.insert(object_guid, local_transform);
+        self.propagate_parent_transforms()
+    }
+
+    /// Rebuilds world transforms from stable parent GUIDs and authored local transforms.
+    pub fn propagate_parent_transforms(&mut self) -> Result<(), WorldError> {
+        let mut resolved = BTreeMap::new();
+        let mut visiting = BTreeSet::new();
+        let object_guids = self.by_guid.keys().copied().collect::<Vec<_>>();
+        for object_guid in object_guids {
+            self.resolve_world_transform(object_guid, &mut resolved, &mut visiting)?;
+        }
+        for (object_guid, transform) in resolved {
+            let Some(entity) = self.by_guid.get(&object_guid).copied() else {
+                return Err(WorldError::StaleEntity);
+            };
+            let Some(mut current) = self.ecs.get_mut::<Transform2D>(entity) else {
+                return Err(WorldError::StaleEntity);
+            };
+            *current = transform;
+        }
+        Ok(())
+    }
+
+    fn resolve_world_transform(
+        &self,
+        object_guid: Guid,
+        resolved: &mut BTreeMap<Guid, Transform2D>,
+        visiting: &mut BTreeSet<Guid>,
+    ) -> Result<Transform2D, WorldError> {
+        if let Some(transform) = resolved.get(&object_guid) {
+            return Ok(*transform);
+        }
+        if !visiting.insert(object_guid) {
+            return Err(WorldError::ParentCycle(object_guid));
+        }
+        let local = *self
+            .local_transforms
+            .get(&object_guid)
+            .ok_or(WorldError::StaleEntity)?;
+        let transform = if let Some(parent_guid) = self.parent_by_guid.get(&object_guid).copied() {
+            let parent = self.resolve_world_transform(parent_guid, resolved, visiting)?;
+            compose_transform(parent, local, object_guid)?
+        } else {
+            local
+        };
+        visiting.remove(&object_guid);
+        if !valid_transform(transform) {
+            return Err(WorldError::InvalidTransform(object_guid));
+        }
+        resolved.insert(object_guid, transform);
+        Ok(transform)
+    }
+
+    fn set_world_transform(
+        &mut self,
+        object_guid: Guid,
+        transform: Transform2D,
+    ) -> Result<(), WorldError> {
+        if !valid_transform(transform) {
+            return Err(WorldError::InvalidTransform(object_guid));
+        }
+        let local = if let Some(parent_guid) = self.parent_by_guid.get(&object_guid).copied() {
+            let parent_entity = self
+                .by_guid
+                .get(&parent_guid)
+                .copied()
+                .ok_or(WorldError::MissingParent(parent_guid))?;
+            let parent = self
+                .ecs
+                .get::<Transform2D>(parent_entity)
+                .copied()
+                .ok_or(WorldError::StaleEntity)?;
+            relative_transform(parent, transform, object_guid)?
+        } else {
+            transform
+        };
+        self.local_transforms.insert(object_guid, local);
+        let entity = self
+            .by_guid
+            .get(&object_guid)
+            .copied()
+            .ok_or(WorldError::StaleEntity)?;
+        let Some(mut current) = self.ecs.get_mut::<Transform2D>(entity) else {
+            return Err(WorldError::StaleEntity);
+        };
+        *current = transform;
+        drop(current);
+        self.propagate_parent_transforms()
     }
 
     pub fn entity_for_guid(&self, object_guid: Guid) -> Option<RuntimeEntity> {
@@ -302,8 +556,25 @@ impl RuntimeWorld {
         let Some(object_guid) = self.guid_by_entity.remove(&entity.0) else {
             return false;
         };
+        let children = self
+            .parent_by_guid
+            .iter()
+            .filter_map(|(child, parent)| (*parent == object_guid).then_some(*child))
+            .collect::<Vec<_>>();
+        for child in children {
+            self.parent_by_guid.remove(&child);
+            if let Some(child_entity) = self.by_guid.get(&child).copied() {
+                if let Some(world_transform) = self.ecs.get::<Transform2D>(child_entity).copied() {
+                    self.local_transforms.insert(child, world_transform);
+                }
+            }
+        }
+        self.parent_by_guid.remove(&object_guid);
+        self.local_transforms.remove(&object_guid);
         self.by_guid.remove(&object_guid);
-        self.ecs.despawn(entity.0)
+        let removed = self.ecs.despawn(entity.0);
+        let _ = self.propagate_parent_transforms();
+        removed
     }
 
     pub fn set_transform(
@@ -311,11 +582,12 @@ impl RuntimeWorld {
         entity: RuntimeEntity,
         transform: Transform2D,
     ) -> Result<(), WorldError> {
-        let Some(mut current) = self.ecs.get_mut::<Transform2D>(entity.0) else {
-            return Err(WorldError::StaleEntity);
-        };
-        *current = transform;
-        Ok(())
+        let object_guid = self
+            .guid_by_entity
+            .get(&entity.0)
+            .copied()
+            .ok_or(WorldError::StaleEntity)?;
+        self.set_world_transform(object_guid, transform)
     }
 
     pub fn transform(&self, entity: RuntimeEntity) -> Option<Transform2D> {
@@ -478,11 +750,7 @@ impl RuntimeWorld {
         let Some(entity) = self.by_guid.get(&object_guid).copied() else {
             return Err(WorldError::StaleEntity);
         };
-        if let Some(mut current) = self.ecs.get_mut::<Transform2D>(entity) {
-            *current = transform;
-        } else {
-            return Err(WorldError::StaleEntity);
-        }
+        self.set_world_transform(object_guid, transform)?;
         if let Some(mut body) = self.ecs.get_mut::<RigidBody2D>(entity) {
             body.linear_velocity = linear_velocity;
             body.angular_velocity = angular_velocity;
