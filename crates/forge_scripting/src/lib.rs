@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 
+use forge_assets::LoadedScriptAsset;
 use forge_core::{ActionId, ActionState, Guid};
 use forge_scene::ScriptPropertyValue;
 use forge_world::{RuntimeWorld, Transform2D};
@@ -243,6 +244,58 @@ impl ScriptHost {
                     );
                 }
             }
+        }
+    }
+
+    /// Recompiles every active instance that references this source. Invalid updates leave the
+    /// last working instance installed and produce a diagnostic.
+    pub fn reload_asset(&mut self, asset: &LoadedScriptAsset) {
+        let targets = self
+            .instances
+            .iter()
+            .filter(|(_, instance)| instance.definition.asset_guid == asset.guid)
+            .map(|(object_guid, instance)| (*object_guid, instance.definition.clone()))
+            .collect::<Vec<_>>();
+
+        for (object_guid, mut definition) in targets {
+            definition.source_path = asset.relative_path.clone();
+            definition.source = asset.source.clone();
+            let context = Rc::new(RefCell::new(None));
+            match ScriptInstance::compile(definition.clone(), context) {
+                Ok(instance) => {
+                    self.instances.insert(object_guid, instance);
+                }
+                Err(error) => self.record_diagnostic(
+                    object_guid,
+                    asset.guid,
+                    asset.relative_path.clone(),
+                    0,
+                    error.to_string(),
+                ),
+            }
+        }
+    }
+
+    pub fn report_asset_issue(
+        &mut self,
+        asset_guid: Guid,
+        source_path: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        let source_path = source_path.into();
+        let message = message.into();
+        for instance in self
+            .instances
+            .values()
+            .filter(|instance| instance.definition.asset_guid == asset_guid)
+        {
+            self.diagnostics.push(ScriptDiagnostic {
+                object_guid: instance.definition.object_guid,
+                asset_guid,
+                source_path: source_path.clone(),
+                tick: 0,
+                message: message.clone(),
+            });
         }
     }
 

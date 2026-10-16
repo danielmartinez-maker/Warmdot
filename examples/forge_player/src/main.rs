@@ -105,7 +105,7 @@ impl ApplicationHandler for PlayerApp {
             WindowEvent::RedrawRequested => {
                 if refresh_assets {
                     if let Err(error) =
-                        refresh_project_textures(&mut self.assets, &mut state.renderer)
+                        refresh_project_assets(&mut self.assets, &mut state.renderer, &mut self.runtime)
                     {
                         eprintln!("project asset refresh failed: {error}");
                         event_loop.exit();
@@ -115,6 +115,12 @@ impl ApplicationHandler for PlayerApp {
                 let delta = now.saturating_duration_since(self.last_frame);
                 self.last_frame = now;
                 self.runtime.advance_frame(delta);
+                for diagnostic in self.runtime.take_script_diagnostics() {
+                    eprintln!(
+                        "Luau {} at tick {}: {}",
+                        diagnostic.source_path, diagnostic.tick, diagnostic.message
+                    );
+                }
                 match state
                     .renderer
                     .render_world(self.runtime.world_mut(), [0.035, 0.045, 0.065, 1.0])
@@ -470,14 +476,20 @@ fn load_project_textures(
     Ok(())
 }
 
-fn refresh_project_textures(
+fn refresh_project_assets(
     assets: &mut AssetCatalog,
     renderer: &mut GpuRenderer,
+    runtime: &mut GameRuntime,
 ) -> Result<(), Box<dyn Error>> {
     for change in assets.refresh()? {
         match change.kind {
             AssetChangeKind::Removed => {
                 renderer.remove_texture(change.guid);
+                runtime.report_script_asset_issue(
+                    change.guid,
+                    change.relative_path,
+                    "script asset was removed; the active last-good version remains loaded",
+                );
             }
             AssetChangeKind::Added | AssetChangeKind::Modified => {
                 if assets
@@ -491,6 +503,18 @@ fn refresh_project_textures(
                         image.height,
                         &image.rgba8,
                     )?;
+                } else if assets
+                    .get(change.guid)
+                    .is_some_and(|record| record.kind == AssetKind::Script)
+                {
+                    match assets.load_script(change.guid) {
+                        Ok(script) => runtime.reload_script_asset(&script),
+                        Err(error) => runtime.report_script_asset_issue(
+                            change.guid,
+                            change.relative_path,
+                            error.to_string(),
+                        ),
+                    }
                 }
             }
         }

@@ -3,7 +3,8 @@
 use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
 
 use forge_assets::{
-    AnimationClipDocument, AnimationPlayer, AssetCatalog, AssetError, SpriteSheetDocument,
+    AnimationClipDocument, AnimationPlayer, AssetCatalog, AssetError, LoadedScriptAsset,
+    SpriteSheetDocument,
 };
 use forge_core::{
     ActionEvent, ActionId, ActionState, FixedStepClock, FramePlan, Guid, InputTimeline,
@@ -412,6 +413,20 @@ impl GameRuntime {
             simulation_time: self.simulation_time,
             physics_events: frame_physics_events,
         }
+    }
+
+    pub fn reload_script_asset(&mut self, asset: &LoadedScriptAsset) {
+        self.script_host.reload_asset(asset);
+    }
+
+    pub fn report_script_asset_issue(
+        &mut self,
+        asset_guid: Guid,
+        source_path: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        self.script_host
+            .report_asset_issue(asset_guid, source_path, message);
     }
 
     pub fn take_script_diagnostics(&mut self) -> Vec<ScriptDiagnostic> {
