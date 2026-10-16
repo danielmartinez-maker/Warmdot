@@ -6,6 +6,7 @@ use std::{
     error::Error,
     fmt,
     rc::Rc,
+    str::FromStr,
     time::Duration,
 };
 
@@ -27,6 +28,9 @@ const MAX_SCRIPT_EVENT_NAME_BYTES: usize = 128;
 const MAX_SCRIPT_EVENT_PAYLOAD_BYTES: usize = 16 * 1024;
 const MAX_SCRIPT_EVENTS_PER_CALLBACK: usize = 64;
 const MAX_QUEUED_SCRIPT_EVENTS: usize = 1024;
+const MAX_AUDIO_COMMANDS_PER_CALLBACK: usize = 16;
+const MAX_QUEUED_AUDIO_COMMANDS: usize = 512;
+const MAX_AUDIO_GUID_BYTES: usize = 64;
 
 #[derive(Clone, Debug)]
 pub struct ScriptDefinition {
@@ -61,6 +65,13 @@ pub struct ScriptEvent {
     pub value: ScriptEventValue,
     pub sender_guid: Guid,
     pub tick: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ScriptAudioCommand {
+    PlayEffect { asset_guid: Guid, bus: String },
+    PlayMusic { asset_guid: Guid, looping: bool },
+    SetBusVolume { bus: String, decibels: f64 },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -123,10 +134,12 @@ struct ScriptCallContext {
     object_guid: Guid,
     tick: u64,
     emitted_events: Vec<ScriptEvent>,
+    audio_commands: Vec<ScriptAudioCommand>,
 }
 
 type SharedContext = Rc<RefCell<Option<ScriptCallContext>>>;
 type SharedEvents = Rc<RefCell<Vec<ScriptEvent>>>;
+type SharedAudioCommands = Rc<RefCell<Vec<ScriptAudioCommand>>>;
 
 struct ScriptInstance {
     _lua: Lua,
@@ -162,6 +175,7 @@ impl ScriptInstance {
         definition: ScriptDefinition,
         context: SharedContext,
         pending_events: SharedEvents,
+        pending_audio_commands: SharedAudioCommands,
     ) -> Result<Self, ScriptError> {
         if definition.source.len() > MAX_SCRIPT_SOURCE_BYTES {
             return Err(ScriptError::SourceTooLarge(definition.source.len()));
@@ -183,7 +197,12 @@ impl ScriptInstance {
             Ok(VmState::Continue)
         });
 
-        install_forge_api(&lua, context.clone(), pending_events.clone())?;
+        install_forge_api(
+            &lua,
+            context.clone(),
+            pending_events.clone(),
+            pending_audio_commands,
+        )?;
         lua.sandbox(true)?;
 
         let source_function: Function = lua
@@ -230,6 +249,7 @@ impl ScriptInstance {
             object_guid: self.definition.object_guid,
             tick,
             emitted_events: Vec::new(),
+            audio_commands: Vec::new(),
         };
         *self.context.borrow_mut() = Some(fallback.clone());
         self.interrupt_checkpoints.set(0);
@@ -355,6 +375,7 @@ pub struct ScriptHost {
     instances: BTreeMap<Guid, ScriptInstance>,
     diagnostics: Vec<ScriptDiagnostic>,
     pending_events: SharedEvents,
+    pending_audio_commands: SharedAudioCommands,
     pending_callbacks: VecDeque<QueuedScriptCallback>,
     pending_update: Option<PendingScriptUpdate>,
     current_breakpoint: Option<ScriptBreakpointHit>,
@@ -373,6 +394,7 @@ impl ScriptHost {
             instances: BTreeMap::new(),
             diagnostics: Vec::new(),
             pending_events: Rc::new(RefCell::new(Vec::new())),
+            pending_audio_commands: Rc::new(RefCell::new(Vec::new())),
             pending_callbacks: VecDeque::new(),
             pending_update: None,
             current_breakpoint: None,
@@ -394,8 +416,12 @@ impl ScriptHost {
             return Err(ScriptError::MissingObject(definition.object_guid));
         }
         let context = Rc::new(RefCell::new(None));
-        let instance =
-            ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())?;
+        let instance = ScriptInstance::compile(
+            definition.clone(),
+            context,
+            self.pending_events.clone(),
+            self.pending_audio_commands.clone(),
+        )?;
         self.instances.insert(definition.object_guid, instance);
         Ok(())
     }
@@ -603,9 +629,18 @@ impl ScriptHost {
     ) -> Option<ScriptBreakpointHit> {
         match invocation {
             ScriptInvocation::Completed(context) => {
-                let (instances, diagnostics) = (&mut self.instances, &mut self.diagnostics);
+                let audio_commands = context.audio_commands.clone();
+                let (instances, diagnostics, pending_audio_commands) = (
+                    &mut self.instances,
+                    &mut self.diagnostics,
+                    &self.pending_audio_commands,
+                );
                 if let Some(instance) = instances.get_mut(&object_guid) {
-                    apply_callback_result(instance, world, Ok(context), tick, diagnostics);
+                    if apply_callback_result(instance, world, Ok(context), tick, diagnostics) {
+                        pending_audio_commands
+                            .borrow_mut()
+                            .extend(audio_commands);
+                    }
                 }
                 None
             }
@@ -665,7 +700,12 @@ impl ScriptHost {
             definition.source_path = update.source_path.clone();
             definition.source = update.source.clone();
             let context = Rc::new(RefCell::new(None));
-            match ScriptInstance::compile(definition.clone(), context, self.pending_events.clone())
+            match ScriptInstance::compile(
+                definition.clone(),
+                context,
+                self.pending_events.clone(),
+                self.pending_audio_commands.clone(),
+            )
             {
                 Ok(mut instance) => {
                     let migration = self.instances.get(&object_guid).map(|previous| {
@@ -752,6 +792,10 @@ impl ScriptHost {
         std::mem::take(&mut self.diagnostics)
     }
 
+    pub fn take_audio_commands(&mut self) -> Vec<ScriptAudioCommand> {
+        std::mem::take(&mut *self.pending_audio_commands.borrow_mut())
+    }
+
     pub fn record_diagnostic(
         &mut self,
         object_guid: Guid,
@@ -799,7 +843,7 @@ fn apply_callback_result(
     result: Result<ScriptCallContext, LuaError>,
     tick: u64,
     diagnostics: &mut Vec<ScriptDiagnostic>,
-) {
+) -> bool {
     match result {
         Ok(context) => {
             if !transform_is_finite(context.transform) {
@@ -809,23 +853,25 @@ fn apply_callback_result(
                     "script produced a non-finite transform".into(),
                     diagnostics,
                 );
-                return;
+                return false;
             }
             let Some(entity) = world.entity_for_guid(instance.definition.object_guid) else {
-                return;
+                return false;
             };
             if let Err(error) = world.set_transform(entity, context.transform) {
                 disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
-                return;
+                return false;
             }
             instance.definition.properties = context.properties;
             instance
                 .pending_events
                 .borrow_mut()
                 .extend(context.emitted_events);
+            true
         }
         Err(error) => {
             disable_with_diagnostic(instance, tick, error.to_string(), diagnostics);
+            false
         }
     }
 }
@@ -892,6 +938,7 @@ fn install_forge_api(
     lua: &Lua,
     context: SharedContext,
     pending_events: SharedEvents,
+    pending_audio_commands: SharedAudioCommands,
 ) -> Result<(), LuaError> {
     let input = lua.create_table()?;
 
@@ -919,7 +966,7 @@ fn install_forge_api(
     )?;
 
     let events = lua.create_table()?;
-    let event_context = context;
+    let event_context = context.clone();
     let queued_events = pending_events;
     events.set(
         "emit",
@@ -951,9 +998,102 @@ fn install_forge_api(
         })?,
     )?;
 
+    let audio = lua.create_table()?;
+
+    let play_context = context.clone();
+    let play_pending = pending_audio_commands.clone();
+    audio.set(
+        "play",
+        lua.create_function(move |_, (guid, bus): (String, Option<String>)| {
+            let bus = bus.unwrap_or_else(|| "sfx".to_owned());
+            if guid.len() > MAX_AUDIO_GUID_BYTES || !matches!(bus.as_str(), "master" | "sfx" | "ui") {
+                return Ok(false);
+            }
+            let Ok(asset_guid) = Guid::from_str(&guid) else {
+                return Ok(false);
+            };
+            let mut slot = play_context.borrow_mut();
+            let context = slot.as_mut().ok_or_else(inactive_context_error)?;
+            if context.audio_commands.len() >= MAX_AUDIO_COMMANDS_PER_CALLBACK
+                || play_pending
+                    .borrow()
+                    .len()
+                    .saturating_add(context.audio_commands.len())
+                    >= MAX_QUEUED_AUDIO_COMMANDS
+            {
+                return Ok(false);
+            }
+            context
+                .audio_commands
+                .push(ScriptAudioCommand::PlayEffect { asset_guid, bus });
+            Ok(true)
+        })?,
+    )?;
+
+    let music_context = context.clone();
+    let music_pending = pending_audio_commands.clone();
+    audio.set(
+        "play_music",
+        lua.create_function(move |_, (guid, looping): (String, Option<bool>)| {
+            if guid.len() > MAX_AUDIO_GUID_BYTES {
+                return Ok(false);
+            }
+            let Ok(asset_guid) = Guid::from_str(&guid) else {
+                return Ok(false);
+            };
+            let mut slot = music_context.borrow_mut();
+            let context = slot.as_mut().ok_or_else(inactive_context_error)?;
+            if context.audio_commands.len() >= MAX_AUDIO_COMMANDS_PER_CALLBACK
+                || music_pending
+                    .borrow()
+                    .len()
+                    .saturating_add(context.audio_commands.len())
+                    >= MAX_QUEUED_AUDIO_COMMANDS
+            {
+                return Ok(false);
+            }
+            context.audio_commands.push(ScriptAudioCommand::PlayMusic {
+                asset_guid,
+                looping: looping.unwrap_or(true),
+            });
+            Ok(true)
+        })?,
+    )?;
+
+    let volume_context = context;
+    let volume_pending = pending_audio_commands;
+    audio.set(
+        "set_bus_volume",
+        lua.create_function(move |_, (bus, decibels): (String, f64)| {
+            if bus.len() > 16
+                || !matches!(bus.as_str(), "master" | "music" | "sfx" | "ui")
+                || !decibels.is_finite()
+                || !(-60.0..=6.0).contains(&decibels)
+            {
+                return Ok(false);
+            }
+            let mut slot = volume_context.borrow_mut();
+            let context = slot.as_mut().ok_or_else(inactive_context_error)?;
+            if context.audio_commands.len() >= MAX_AUDIO_COMMANDS_PER_CALLBACK
+                || volume_pending
+                    .borrow()
+                    .len()
+                    .saturating_add(context.audio_commands.len())
+                    >= MAX_QUEUED_AUDIO_COMMANDS
+            {
+                return Ok(false);
+            }
+            context
+                .audio_commands
+                .push(ScriptAudioCommand::SetBusVolume { bus, decibels });
+            Ok(true)
+        })?,
+    )?;
+
     let forge = lua.create_table()?;
     forge.set("Input", input)?;
     forge.set("Events", events)?;
+    forge.set("Audio", audio)?;
     lua.globals().set("Forge", forge)?;
     Ok(())
 }

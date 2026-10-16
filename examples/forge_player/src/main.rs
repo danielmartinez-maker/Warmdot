@@ -8,10 +8,11 @@ use std::{
 };
 
 use forge_assets::{AssetCatalog, AssetChangeKind, AssetKind};
+use forge_audio::{AudioBus, AudioEngine};
 use forge_core::Guid;
 use forge_project::{PROJECT_FILE_NAME, Project};
 use forge_renderer::{GpuRenderer, RenderOutcome};
-use forge_runtime::{GameRuntime, RuntimeConfig};
+use forge_runtime::{GameRuntime, RuntimeConfig, ScriptAudioCommand};
 use forge_scene::{
     AuthoredCollider, AuthoredColliderShape, AuthoredRigidBody, AuthoredRigidBodyKind,
     AuthoredSprite, AuthoredTransform, SceneDocument, SceneObject,
@@ -34,18 +35,25 @@ struct PlayerApp {
     project_name: String,
     runtime: GameRuntime,
     assets: AssetCatalog,
+    audio: Option<AudioEngine>,
     state: Option<RunState>,
     last_frame: Instant,
     next_asset_refresh: Instant,
 }
 
 impl PlayerApp {
-    fn new(project_name: String, runtime: GameRuntime, assets: AssetCatalog) -> Self {
+    fn new(
+        project_name: String,
+        runtime: GameRuntime,
+        assets: AssetCatalog,
+        audio: Option<AudioEngine>,
+    ) -> Self {
         let now = Instant::now();
         Self {
             project_name,
             runtime,
             assets,
+            audio,
             state: None,
             last_frame: now,
             next_asset_refresh: now + Duration::from_millis(500),
@@ -117,6 +125,11 @@ impl ApplicationHandler for PlayerApp {
                 let delta = now.saturating_duration_since(self.last_frame);
                 self.last_frame = now;
                 self.runtime.advance_frame(delta);
+                process_audio_commands(
+                    self.audio.as_mut(),
+                    &self.assets,
+                    self.runtime.take_audio_commands(),
+                );
                 for diagnostic in self.runtime.take_script_diagnostics() {
                     eprintln!(
                         "Luau {} at tick {}: {}",
@@ -143,6 +156,32 @@ impl ApplicationHandler for PlayerApp {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(state) = &self.state {
             state.window.request_redraw();
+        }
+    }
+}
+
+fn process_audio_commands(
+    audio: Option<&mut AudioEngine>,
+    assets: &AssetCatalog,
+    commands: Vec<ScriptAudioCommand>,
+) {
+    let Some(audio) = audio else {
+        return;
+    };
+    for command in commands {
+        let result = match command {
+            ScriptAudioCommand::PlayEffect { asset_guid, bus } => AudioBus::parse(&bus)
+                .and_then(|bus| audio.play_effect(assets, asset_guid, bus)),
+            ScriptAudioCommand::PlayMusic {
+                asset_guid,
+                looping,
+            } => audio.play_music(assets, asset_guid, looping),
+            ScriptAudioCommand::SetBusVolume { bus, decibels } => {
+                AudioBus::parse(&bus).and_then(|bus| audio.set_bus_volume(bus, decibels as f32))
+            }
+        };
+        if let Err(error) = result {
+            eprintln!("audio command failed: {error}");
         }
     }
 }
@@ -553,9 +592,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         append_tilemap_to_scene(&mut scene, &tilemap, &assets)?;
     }
     let runtime = GameRuntime::from_scene_with_assets(&scene, RuntimeConfig::default(), &assets)?;
+    let audio = match AudioEngine::new() {
+        Ok(audio) => Some(audio),
+        Err(error) => {
+            eprintln!("audio is unavailable; continuing without game audio: {error}");
+            None
+        }
+    };
 
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop.run_app(&mut PlayerApp::new(project_name, runtime, assets))?;
+    event_loop.run_app(&mut PlayerApp::new(project_name, runtime, assets, audio))?;
     Ok(())
 }

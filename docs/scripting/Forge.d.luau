@@ -7,6 +7,12 @@ declare namespace Forge
     declare namespace Events
         function emit(name: string, value: (boolean | number | string)?): boolean
     end
+
+    declare namespace Audio
+        function play(assetGuid: string, bus: ("master" | "sfx" | "ui")?): boolean
+        function play_music(assetGuid: string, loop: boolean?): boolean
+        function set_bus_volume(bus: ("master" | "music" | "sfx" | "ui"), decibels: number): boolean
+    end
 end
 
 export type ForgeObject = {
