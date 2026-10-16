@@ -1125,7 +1125,7 @@ mod tests {
     use forge_scene::ScriptPropertyValue;
     use forge_world::{RuntimeWorld, Transform2D};
 
-    use super::{ScriptDefinition, ScriptHost};
+    use super::{ScriptAudioCommand, ScriptDefinition, ScriptHost};
 
     #[test]
     fn fixed_update_changes_only_its_authored_object_and_reads_properties() {
@@ -1352,4 +1352,80 @@ mod tests {
         let transform = world.transform(entity).expect("object transform");
         assert!((transform.translation[0] - 0.2).abs() < 0.0001);
     }
+    #[test]
+    fn audio_commands_are_staged_in_callback_order() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let asset_guid = Guid::new();
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/Audio.luau".into(),
+            source: format!(
+                r#"return {{ on_fixed_update = function()
+                    Forge.Audio.play("{asset_guid}", "sfx")
+                    Forge.Audio.play_music("{asset_guid}", true)
+                    Forge.Audio.set_bus_volume("music", -6)
+                end }}"#
+            ),
+            properties: BTreeMap::new(),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach audio script");
+
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1);
+
+        assert_eq!(
+            host.take_audio_commands(),
+            vec![
+                ScriptAudioCommand::PlayEffect {
+                    asset_guid,
+                    bus: "sfx".into(),
+                },
+                ScriptAudioCommand::PlayMusic {
+                    asset_guid,
+                    looping: true,
+                },
+                ScriptAudioCommand::SetBusVolume {
+                    bus: "music".into(),
+                    decibels: -6.0,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn audio_commands_are_discarded_when_the_script_callback_fails() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let audio_guid = Guid::new();
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/Audio.luau".into(),
+            source: format!(
+                r#"return {{ on_fixed_update = function()
+                    Forge.Audio.play("{audio_guid}", "sfx")
+                    error("rollback audio command")
+                end }}"#
+            ),
+            properties: BTreeMap::new(),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach audio script");
+
+        host.update(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1);
+
+        assert!(host.take_audio_commands().is_empty());
+        assert_eq!(host.take_diagnostics().len(), 1);
+    }
+
 }
