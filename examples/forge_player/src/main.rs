@@ -382,6 +382,19 @@ fn export_project(project_path: PathBuf, output_path: PathBuf) -> Result<(), Box
     let scene_target = game_root.join(scene_relative);
     copy_regular_file(&scene_source, &scene_target)?;
 
+    let scenes_source = project_root.join("Scenes");
+    if scenes_source.exists() {
+        let canonical_scenes = scenes_source.canonicalize()?;
+        if !canonical_scenes.starts_with(&project_root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Scenes folder resolves outside the source project",
+            )
+            .into());
+        }
+        copy_tree_without_symlinks(&canonical_scenes, &game_root.join("Scenes"))?;
+    }
+
     let assets_source = project_root.join("Assets");
     if assets_source.exists() {
         let canonical_assets = assets_source.canonicalize()?;
