@@ -18,6 +18,7 @@ This repository is being implemented from the Forge 2D product proposal. The tar
 - The asset service scans project Assets folders without following symlinks, assigns stable GUIDs, detects added/changed/removed files, decodes bounded PNG images, and validates sprite-sheet and animation data.
 - The animation player advances clip frames using simulation delta and handles looping and completion without per-frame allocation.
 - Tilemaps use sparse 32x32 chunks with correct negative-coordinate mapping, deterministic serialization, batched paint edits, and bounded undo/redo history.
+- Scene authoring commands add, delete, and replace objects through a bounded undo/redo history with a saved-state marker.
 
 ## Not implemented yet
 
@@ -35,6 +36,7 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer curr
 - `crates/forge_assets`: safe project asset catalog, PNG decode, sprite-sheet/clip validation, and animation playback
 - `crates/forge_tilemap`: sparse chunk storage, versioned tilemap documents, paint edits, and bounded undo/redo
 - `crates/forge_input`: winit keyboard/mouse bindings translated into timestamped game actions
+- `crates/forge_editor_core`: validated scene edits with bounded undo/redo and dirty-state tracking
 - `examples/action_arena`: small headless physics scene
 - `examples/renderer_benchmark`: windowed renderer benchmark with raw CPU frame-time samples
 - `.github/workflows/windows-check.yml`: Windows format and workspace type-check
@@ -43,6 +45,7 @@ This branch is the runtime kernel, not the complete P0 engine. The renderer curr
 - `docs/architecture/tilemaps-and-edit-history.md`: chunk layout, coordinate mapping, and editor history contract
 - `docs/architecture/runtime-controls.md`: pause, stepping, and scene replacement behavior
 - `docs/architecture/input-bindings.md`: key/mouse action mapping and focus-loss semantics
+- `docs/architecture/editor-core.md`: scene command and save-state history behavior
 
 ## Build
 
