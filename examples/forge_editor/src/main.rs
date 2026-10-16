@@ -39,10 +39,10 @@ impl EditorTileMap {
     /// Returns None when the brush should leave this coordinate unchanged.
     fn brush_edit(&self, coordinate: TileCoord) -> Option<Option<TileCell>> {
         if self.collision_only_mode {
-            return self.map.get(coordinate).map(|mut cell| {
+            return Some(self.map.get(coordinate).map(|mut cell| {
                 cell.solid = self.collision_brush_solid;
                 cell
-            });
+            }));
         }
         if self.erase_mode {
             Some(None)
@@ -1956,6 +1956,8 @@ fn load_saved_tilemap(project_root: &Path) -> Result<Option<EditorTileMap>, Stri
         history,
         selected_tile: 0,
         paint_solid: false,
+        collision_only_mode: false,
+        collision_brush_solid: false,
         erase_mode: false,
         fill_mode: false,
         metadata_dirty: false,

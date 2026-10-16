@@ -299,10 +299,7 @@ impl Project {
     }
 
     fn write_document(&mut self, document: ProjectDocument) -> Result<(), ProjectError> {
-        fs::write(
-            &self.manifest_path,
-            serde_json::to_vec_pretty(&document)?,
-        )?;
+        fs::write(&self.manifest_path, serde_json::to_vec_pretty(&document)?)?;
         self.document = document;
         Ok(())
     }
