@@ -12,9 +12,7 @@ use forge_core::{
 use forge_physics::{CollisionEvent2D, PhysicsSimulation};
 use forge_scene::{SceneDiagnostic, SceneDocument, ScriptPropertyValue};
 use forge_scripting::ScriptHost;
-pub use forge_scripting::{
-    ScriptBreakpointHit, ScriptDefinition, ScriptDiagnostic, ScriptError,
-};
+pub use forge_scripting::{ScriptBreakpointHit, ScriptDefinition, ScriptDiagnostic, ScriptError};
 use forge_world::{RuntimeWorld, WorldError};
 
 #[derive(Debug)]
