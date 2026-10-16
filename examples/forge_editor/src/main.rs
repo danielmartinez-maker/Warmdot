@@ -784,7 +784,7 @@ impl EditorApp {
             ui.separator();
             ui.collapsing(format!("Assets ({})", assets.len()), |ui| {
                 ui.weak(
-                    "Drop PNG, Luau, sprite-sheet, or animation files into the editor to import.",
+                    "Drop PNG, Luau, sprite-sheet, animation, or prefab files into the editor to import.",
                 );
                 if assets.is_empty() {
                     ui.weak("The project Assets folder is empty.");
@@ -1114,6 +1114,23 @@ impl EditorApp {
                             egui::DragValue::new(&mut sprite.size[1])
                                 .speed(0.05)
                                 .range(0.01..=10000.0),
+                        )
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Anchor");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut sprite.anchor[0])
+                                .speed(0.01)
+                                .range(0.0..=1.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut sprite.anchor[1])
+                                .speed(0.01)
+                                .range(0.0..=1.0),
                         )
                         .changed();
                 });
@@ -2019,22 +2036,40 @@ impl EditorApp {
                             return None;
                         }
                         let transform = self.scene.world_transform(object.object_guid)?;
-                        let center = origin_before_drag
+                        let pivot = origin_before_drag
                             + Vec2::new(
                                 transform.translation[0] * pixels_per_unit,
                                 transform.translation[1] * pixels_per_unit,
                             );
-                        let extent = Vec2::new(
-                            (sprite.size[0] * transform.scale[0]).abs() * pixels_per_unit,
-                            (sprite.size[1] * transform.scale[1]).abs() * pixels_per_unit,
-                        )
-                        .max(Vec2::splat(2.0));
-                        Rect::from_center_size(center, extent)
-                            .contains(pointer)
-                            .then_some((
-                                (sprite.layer, sprite.order, object.object_guid),
-                                (object.object_guid, transform, center),
-                            ))
+                        let corners = sprite_canvas_corners(
+                            origin_before_drag,
+                            pixels_per_unit,
+                            transform.translation,
+                            transform.rotation_radians,
+                            transform.scale,
+                            sprite.size,
+                            sprite.anchor,
+                        );
+                        let object_rect = Rect::from_points(&corners);
+                        let is_selected = self.selected == Some(object.object_guid);
+                        let hit = match self.gizmo_mode {
+                            TransformGizmoMode::Move => object_rect.contains(pointer),
+                            TransformGizmoMode::Rotate if is_selected => {
+                                let radius = object_rect.size().length() * 0.55 + 12.0;
+                                ((pointer - pivot).length() - radius).abs() <= 8.0
+                            }
+                            TransformGizmoMode::Scale if is_selected => {
+                                let handle =
+                                    object_rect.right_bottom() + Vec2::splat(8.0);
+                                Rect::from_center_size(handle, Vec2::splat(20.0))
+                                    .contains(pointer)
+                            }
+                            _ => false,
+                        };
+                        hit.then_some((
+                            (sprite.layer, sprite.order, object.object_guid),
+                            (object.object_guid, transform, pivot),
+                        ))
                     })
                     .max_by_key(|(draw_order, _)| *draw_order)
                     .map(|(_, target)| target)
@@ -2184,40 +2219,51 @@ impl EditorApp {
             }
         }
         for sprite in &objects {
-            let center = origin
+            let corners = sprite_canvas_corners(
+                origin,
+                pixels_per_unit,
+                sprite.translation,
+                sprite.rotation_radians,
+                sprite.scale,
+                sprite.size,
+                sprite.anchor,
+            );
+            let object_rect = Rect::from_points(&corners);
+            let pivot = origin
                 + Vec2::new(
                     sprite.translation[0] * pixels_per_unit,
                     sprite.translation[1] * pixels_per_unit,
                 );
-            let extent = Vec2::new(
-                (sprite.size[0] * sprite.scale[0]).abs() * pixels_per_unit,
-                (sprite.size[1] * sprite.scale[1]).abs() * pixels_per_unit,
-            )
-            .max(Vec2::splat(2.0));
-            let object_rect = Rect::from_center_size(center, extent);
+            let sprite_center = (corners[0] + corners[1] + corners[2] + corners[3].to_vec2())
+                / 4.0;
             if self.selected == Some(sprite.object_guid) {
-                painter.rect_filled(object_rect.expand(4.0), 0.0, Color32::YELLOW);
+                for index in 0..4 {
+                    painter.line_segment(
+                        [corners[index], corners[(index + 1) % 4]],
+                        Stroke::new(2.0, Color32::YELLOW),
+                    );
+                }
                 if self.runtime.is_none() {
                     match self.gizmo_mode {
                         TransformGizmoMode::Move => {
                             painter.line_segment(
-                                [center, center + Vec2::new(30.0, 0.0)],
+                                [pivot, pivot + Vec2::new(30.0, 0.0)],
                                 Stroke::new(2.5, Color32::from_rgb(240, 90, 80)),
                             );
                             painter.line_segment(
-                                [center, center + Vec2::new(0.0, 30.0)],
+                                [pivot, pivot + Vec2::new(0.0, 30.0)],
                                 Stroke::new(2.5, Color32::from_rgb(90, 220, 130)),
                             );
                         }
                         TransformGizmoMode::Rotate => {
-                            let radius = extent.length() * 0.55 + 12.0;
+                            let radius = object_rect.size().length() * 0.55 + 12.0;
                             painter.circle_stroke(
-                                center,
+                                pivot,
                                 radius,
                                 Stroke::new(2.0, Color32::from_rgb(100, 170, 255)),
                             );
                             painter.circle_filled(
-                                center + Vec2::new(0.0, -radius),
+                                pivot + Vec2::new(0.0, -radius),
                                 5.0,
                                 Color32::from_rgb(100, 170, 255),
                             );
@@ -2236,19 +2282,39 @@ impl EditorApp {
                             );
                         }
                     }
-                    painter.circle_filled(center, 4.0, Color32::WHITE);
+                    painter.circle_filled(pivot, 4.0, Color32::WHITE);
                 }
             }
+            let extent = Vec2::new(
+                (sprite.size[0] * sprite.scale[0]).abs() * pixels_per_unit,
+                (sprite.size[1] * sprite.scale[1]).abs() * pixels_per_unit,
+            )
+            .max(Vec2::splat(2.0));
+            let local_rect = Rect::from_center_size(sprite_center, extent);
+            let (sin, cos) = sprite.rotation_radians.sin_cos();
             if let Some(texture) = sprite.asset.and_then(|asset| self.textures.get(&asset)) {
                 let [u, v, width, height] = sprite.uv_rect;
-                painter.image(
-                    texture.id(),
-                    object_rect,
+                let mut mesh = egui::Mesh::with_texture(texture.id());
+                mesh.add_rect_with_uv(
+                    local_rect,
                     Rect::from_min_max(Pos2::new(u, v), Pos2::new(u + width, v + height)),
                     tint_color(sprite.tint),
                 );
+                for vertex in &mut mesh.vertices {
+                    let offset = vertex.pos - sprite_center;
+                    vertex.pos = sprite_center
+                        + Vec2::new(
+                            cos * offset.x - sin * offset.y,
+                            sin * offset.x + cos * offset.y,
+                        );
+                }
+                painter.add(egui::Shape::mesh(mesh));
             } else {
-                painter.rect_filled(object_rect, 0.0, tint_color(sprite.tint));
+                painter.add(egui::Shape::convex_polygon(
+                    corners.to_vec(),
+                    tint_color(sprite.tint),
+                    Stroke::NONE,
+                ));
             }
         }
         painter.text(
@@ -2281,17 +2347,16 @@ impl EditorApp {
                     .iter()
                     .rev()
                     .find(|sprite| {
-                        let center = origin
-                            + Vec2::new(
-                                sprite.translation[0] * pixels_per_unit,
-                                sprite.translation[1] * pixels_per_unit,
-                            );
-                        let extent = Vec2::new(
-                            (sprite.size[0] * sprite.scale[0]).abs() * pixels_per_unit,
-                            (sprite.size[1] * sprite.scale[1]).abs() * pixels_per_unit,
-                        )
-                        .max(Vec2::splat(2.0));
-                        Rect::from_center_size(center, extent).contains(pointer)
+                        let corners = sprite_canvas_corners(
+                            origin,
+                            pixels_per_unit,
+                            sprite.translation,
+                            sprite.rotation_radians,
+                            sprite.scale,
+                            sprite.size,
+                            sprite.anchor,
+                        );
+                        Rect::from_points(&corners).contains(pointer)
                     })
                     .map(|sprite| sprite.object_guid);
             }
@@ -2432,6 +2497,35 @@ fn connected_tile_fill(
         ]);
     }
     Ok(changes)
+}
+
+fn sprite_canvas_corners(
+    origin: Pos2,
+    pixels_per_unit: f32,
+    translation: [f32; 2],
+    rotation_radians: f32,
+    scale: [f32; 2],
+    size: [f32; 2],
+    anchor: [f32; 2],
+) -> [Pos2; 4] {
+    let (sin, cos) = rotation_radians.sin_cos();
+    let point = |u: f32, v: f32| {
+        let local_x = (u - anchor[0]) * size[0] * scale[0];
+        let local_y = (v - anchor[1]) * size[1] * scale[1];
+        origin
+            + Vec2::new(
+                translation[0] * pixels_per_unit
+                    + (cos * local_x - sin * local_y) * pixels_per_unit,
+                translation[1] * pixels_per_unit
+                    + (sin * local_x + cos * local_y) * pixels_per_unit,
+            )
+    };
+    [
+        point(0.0, 0.0),
+        point(1.0, 0.0),
+        point(1.0, 1.0),
+        point(0.0, 1.0),
+    ]
 }
 
 fn scene_hierarchy_rows(scene: &SceneDocument) -> Vec<(Guid, String, usize)> {

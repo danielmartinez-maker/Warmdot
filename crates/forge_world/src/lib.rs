@@ -417,11 +417,14 @@ impl RuntimeWorld {
         if self.by_guid.contains_key(&object_guid) {
             return Err(WorldError::DuplicateGuid(object_guid));
         }
-        if sprite.is_some_and(|sprite| {
-            !valid_uv_rect(sprite.uv_rect) || !valid_anchor(sprite.anchor)
-        }) {
+        if sprite.is_some_and(|sprite| !valid_uv_rect(sprite.uv_rect)) {
             return Err(WorldError::InvalidSprite(
                 "sprite UV rectangle must be finite, positive, and inside the image",
+            ));
+        }
+        if sprite.is_some_and(|sprite| !valid_anchor(sprite.anchor)) {
+            return Err(WorldError::InvalidSprite(
+                "sprite anchor must contain finite normalized coordinates",
             ));
         }
         let mut entity = self.ecs.spawn((AuthoredIdentity(object_guid), transform));
@@ -606,9 +609,14 @@ impl RuntimeWorld {
     }
 
     pub fn set_sprite(&mut self, entity: RuntimeEntity, sprite: Sprite) -> Result<(), WorldError> {
-        if !valid_uv_rect(sprite.uv_rect) || !valid_anchor(sprite.anchor) {
+        if !valid_uv_rect(sprite.uv_rect) {
             return Err(WorldError::InvalidSprite(
                 "sprite UV rectangle must be finite, positive, and inside the image",
+            ));
+        }
+        if !valid_anchor(sprite.anchor) {
+            return Err(WorldError::InvalidSprite(
+                "sprite anchor must contain finite normalized coordinates",
             ));
         }
         let Ok(mut current) = self.ecs.get_entity_mut(entity.0) else {

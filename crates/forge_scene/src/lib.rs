@@ -337,7 +337,7 @@ impl SceneDocument {
                 {
                     diagnostics.push(SceneDiagnostic::error(
                         "invalid_sprite",
-                        "sprite size must be positive and finite, and tint values must be finite",
+                        "sprite size and anchor must be valid, and tint values must be finite",
                         Some(guid),
                     ));
                 }
