@@ -731,7 +731,7 @@ impl EditorApp {
             let up = input.key_down(egui::Key::W) || input.key_down(egui::Key::ArrowUp);
             [
                 (if right { 1.0 } else { 0.0 }) - (if left { 1.0 } else { 0.0 }),
-                (if up { 1.0 } else { 0.0 }) - (if down { 1.0 } else { 0.0 }),
+                (if down { 1.0 } else { 0.0 }) - (if up { 1.0 } else { 0.0 }),
             ]
         });
         let frame_interval = now.saturating_duration_since(previous);
