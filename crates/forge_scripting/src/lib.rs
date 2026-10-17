@@ -156,9 +156,21 @@ type SharedAudioCommands = Rc<RefCell<Vec<ScriptAudioCommand>>>;
 type SharedSceneRequests = Rc<RefCell<Vec<Guid>>>;
 type SharedUiCommands = Rc<RefCell<Vec<ScriptUiCommand>>>;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BreakpointCallback {
+    Start,
+    FixedUpdate,
+    Event,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BreakpointLocation {
+    callback: BreakpointCallback,
+    line: u32,
+}
+
 struct ScriptInstance {
     _lua: Lua,
-    source_function: Function,
     state: Table,
     on_start: Option<Function>,
     on_fixed_update: Option<Function>,
@@ -169,7 +181,7 @@ struct ScriptInstance {
     definition: ScriptDefinition,
     start_pending: bool,
     disabled: bool,
-    breakpoint_lines: BTreeSet<u32>,
+    breakpoint_lines: BTreeMap<u32, BreakpointLocation>,
     breakpoint_context: BreakpointContext,
     suspended: Option<SuspendedCallback>,
 }
@@ -236,7 +248,6 @@ impl ScriptInstance {
 
         Ok(Self {
             _lua: lua,
-            source_function,
             state,
             on_start,
             on_fixed_update,
@@ -247,7 +258,7 @@ impl ScriptInstance {
             definition,
             start_pending: true,
             disabled: false,
-            breakpoint_lines: BTreeSet::new(),
+            breakpoint_lines: BTreeMap::new(),
             breakpoint_context: BreakpointContext::default(),
             suspended: None,
         })
@@ -349,19 +360,81 @@ impl ScriptInstance {
         }
     }
 
-    fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<Option<u32>, LuaError> {
-        let accepted_line =
-            luau_debug::set_breakpoint(&self._lua, &self.source_function, line, enabled)?;
-        if enabled && accepted_line.is_some() {
-            self.breakpoint_lines.insert(line);
-        } else if !enabled {
-            self.breakpoint_lines.remove(&line);
+    fn breakpoint_callback(&self, callback: BreakpointCallback) -> Option<Function> {
+        match callback {
+            BreakpointCallback::Start => self.on_start.clone(),
+            BreakpointCallback::FixedUpdate => self.on_fixed_update.clone(),
+            BreakpointCallback::Event => self.on_event.clone(),
         }
-        Ok(accepted_line)
     }
 
-    fn restore_breakpoints(&mut self, lines: &BTreeSet<u32>) -> Result<(), LuaError> {
-        for line in lines {
+    fn set_breakpoint(&mut self, line: u32, enabled: bool) -> Result<Option<u32>, LuaError> {
+        if !enabled {
+            let Some(location) = self.breakpoint_lines.remove(&line) else {
+                return Ok(None);
+            };
+            if self
+                .breakpoint_lines
+                .values()
+                .any(|existing| *existing == location)
+            {
+                return Ok(Some(location.line));
+            }
+            let Some(callback) = self.breakpoint_callback(location.callback) else {
+                return Ok(None);
+            };
+            return luau_debug::set_breakpoint(&self._lua, &callback, location.line, false);
+        }
+
+        let callbacks = [
+            (BreakpointCallback::Start, self.on_start.clone()),
+            (BreakpointCallback::FixedUpdate, self.on_fixed_update.clone()),
+            (BreakpointCallback::Event, self.on_event.clone()),
+        ];
+        let mut candidates = Vec::new();
+        for (kind, callback) in callbacks {
+            let Some(callback) = callback else {
+                continue;
+            };
+            if let Some(placed_line) =
+                luau_debug::set_breakpoint(&self._lua, &callback, line, true)?
+            {
+                candidates.push((
+                    BreakpointLocation {
+                        callback: kind,
+                        line: placed_line,
+                    },
+                    callback,
+                ));
+            }
+        }
+        let Some(target) = candidates
+            .iter()
+            .map(|(location, _)| *location)
+            .min_by_key(|location| location.line)
+        else {
+            return Ok(None);
+        };
+
+        for (candidate, callback) in candidates {
+            if candidate != target
+                && !self
+                    .breakpoint_lines
+                    .values()
+                    .any(|existing| *existing == candidate)
+            {
+                luau_debug::set_breakpoint(&self._lua, &callback, candidate.line, false)?;
+            }
+        }
+        self.breakpoint_lines.insert(line, target);
+        Ok(Some(target.line))
+    }
+
+    fn restore_breakpoints(
+        &mut self,
+        lines: &BTreeMap<u32, BreakpointLocation>,
+    ) -> Result<(), LuaError> {
+        for line in lines.keys() {
             self.set_breakpoint(*line, true)?;
         }
         Ok(())
