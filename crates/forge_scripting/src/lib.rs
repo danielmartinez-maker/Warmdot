@@ -1856,6 +1856,48 @@ mod tests {
         assert!(host.take_scene_transition_requests().is_empty());
         assert_eq!(host.take_diagnostics().len(), 1);
     }
+
+    #[test]
+    fn breakpoint_pauses_inside_nested_fixed_update_and_resumes_that_tick() {
+        let mut world = RuntimeWorld::new();
+        let object_guid = Guid::new();
+        let entity = world
+            .spawn(object_guid, Transform2D::default(), None)
+            .expect("spawn scripted object");
+        let definition = ScriptDefinition {
+            object_guid,
+            asset_guid: Guid::new(),
+            source_path: "Assets/Breakpoint.luau".into(),
+            source: r#"return {
+    on_fixed_update = function(self, dt)
+        self:translate(1.0, 0.0)
+    end,
+}
+"#
+            .into(),
+            properties: BTreeMap::new(),
+        };
+        let mut host = ScriptHost::new();
+        host.attach(definition, &mut world)
+            .expect("attach valid Luau script");
+        assert_eq!(
+            host.set_breakpoint(object_guid, 3, true)
+                .expect("set callback breakpoint"),
+            Some(3)
+        );
+
+        let hit = host
+            .update_with_breakpoints(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1)
+            .expect("nested fixed update should pause at line 3");
+        assert_eq!(hit.object_guid, object_guid);
+        assert_eq!(hit.source_path, "Assets/Breakpoint.luau");
+        assert_eq!(hit.line, 3);
+        assert_eq!(hit.tick, 1);
+        assert_eq!(world.transform(entity).expect("object transform").translation[0], 0.0);
+
+        assert!(host.continue_breakpoint(&mut world).is_none());
+        assert_eq!(world.transform(entity).expect("object transform").translation[0], 1.0);
+    }
 }
 
 #[cfg(test)]
