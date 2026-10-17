@@ -20,6 +20,8 @@ jobs:
         run: cargo check --workspace
       - name: Run focused Luau breakpoint probe
         run: cargo test -p forge_luau_debug entrypoint_breakpoint_pauses_nested_callback -- --nocapture
+      - name: Run focused Forge scripting breakpoint probe
+        run: cargo test -p forge_scripting breakpoint_pauses_inside_nested_fixed_update_and_resumes_that_tick -- --nocapture
       - name: Run workspace tests
         run: cargo test --workspace
 
