@@ -1886,9 +1886,18 @@ mod tests {
             Some(3)
         );
 
-        let hit = host
-            .update_with_breakpoints(&mut world, &BTreeMap::new(), Duration::from_millis(16), 1)
-            .expect("nested fixed update should pause at line 3");
+        let hit = match host.update_with_breakpoints(
+            &mut world,
+            &BTreeMap::new(),
+            Duration::from_millis(16),
+            1,
+        ) {
+            Some(hit) => hit,
+            None => panic!(
+                "nested fixed update should pause at line 3; diagnostics: {:?}",
+                host.take_diagnostics()
+            ),
+        };
         assert_eq!(hit.object_guid, object_guid);
         assert_eq!(hit.source_path, "Assets/Breakpoint.luau");
         assert_eq!(hit.line, 3);
