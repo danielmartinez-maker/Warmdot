@@ -262,6 +262,9 @@ mod raw_ffi_boundary {
         #[test]
         fn entrypoint_breakpoint_pauses_nested_callback() {
             let lua = Lua::new();
+            lua.set_memory_limit(4 * 1024 * 1024)
+                .expect("bound Luau memory");
+            lua.set_interrupt(|_| Ok(mlua::VmState::Continue));
             install(&lua).expect("install Luau debugger");
             let calls = Rc::new(Cell::new(0));
             let callback_calls = Rc::clone(&calls);
@@ -276,6 +279,7 @@ mod raw_ffi_boundary {
             object
                 .set("translate", translate)
                 .expect("install native object method");
+            lua.sandbox(true).expect("sandbox Luau environment");
             let entrypoint: Function = lua
                 .load("return {\n    callback = function(self, dt)\n        self:translate(dt, 0)\n    end,\n}\n")
                 .into_function()
