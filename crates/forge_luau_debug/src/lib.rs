@@ -185,15 +185,18 @@ mod raw_ffi_boundary {
             if state.is_null() || debug.is_null() {
                 return;
             }
+            eprintln!("probe: debugbreak callback entry state={state:p} debug={debug:p}");
             // Luau only invokes this callback for a LOP_BREAK. During the hook, lua_atbreakpoint
             // can inspect an already-advanced saved instruction pointer and reject the real hit.
             let context_key = unsafe { ffi::lua_mainthread(state) } as usize;
+            eprintln!("probe: debugbreak callback main={context_key:#x}");
             let context = ACTIVE_CONTEXTS.with(|contexts| {
                 contexts
                     .try_borrow()
                     .ok()
                     .and_then(|contexts| contexts.get(&context_key).and_then(Weak::upgrade))
             });
+            eprintln!("probe: debugbreak context active={}", context.is_some());
             let Some(context) = context else {
                 return;
             };
