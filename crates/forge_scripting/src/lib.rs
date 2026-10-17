@@ -237,10 +237,9 @@ impl ScriptInstance {
         Ok(Self {
             _lua: lua,
             state,
-            on_start, 
-            entrypoint: source_function,
-
+            on_start,
             on_fixed_update,
+            entrypoint: source_function,
             on_event,
             context,
             pending_events,
@@ -376,7 +375,7 @@ impl ScriptInstance {
 
     fn restore_breakpoints(
         &mut self,
-        lines: &BTreeMap<u32, BreakpointLocation>,
+        lines: &BTreeMap<u32, u32>,
     ) -> Result<(), LuaError> {
         for line in lines.keys() {
             self.set_breakpoint(*line, true)?;
