@@ -264,7 +264,18 @@ mod raw_ffi_boundary {
             let lua = Lua::new();
             lua.set_memory_limit(4 * 1024 * 1024)
                 .expect("bound Luau memory");
-            lua.set_interrupt(|_| Ok(mlua::VmState::Continue));
+            let interrupt_checkpoints = Rc::new(Cell::new(0_usize));
+            let checkpoints = Rc::clone(&interrupt_checkpoints);
+            lua.set_interrupt(move |_| {
+                let count = checkpoints.get().saturating_add(1);
+                checkpoints.set(count);
+                if count > 20_000 {
+                    return Err(mlua::Error::RuntimeError(
+                        "script execution budget exceeded".into(),
+                    ));
+                }
+                Ok(mlua::VmState::Continue)
+            });
             install(&lua).expect("install Luau debugger");
             let calls = Rc::new(Cell::new(0));
             let callback_calls = Rc::clone(&calls);
