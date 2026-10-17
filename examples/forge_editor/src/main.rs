@@ -840,9 +840,9 @@ impl EditorApp {
         }
         let now = Instant::now();
         let previous = self.preview_last_frame.replace(now).unwrap_or(now);
-        let keyboard_captured = ctx.egui_wants_keyboard_input();
+        let text_edit_focused = ctx.text_edit_focused();
         let (movement, firing) = ctx.input(|input| {
-            if !input.raw.focused || keyboard_captured {
+            if !input.raw.focused || text_edit_focused {
                 return ([0.0, 0.0], false);
             }
             let left = input.key_down(egui::Key::A) || input.key_down(egui::Key::ArrowLeft);
