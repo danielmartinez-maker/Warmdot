@@ -4312,9 +4312,9 @@ mod tests {
         assert!(app.runtime.is_some(), "editor preview starts");
 
         let context = egui::Context::default();
-        let canvas_id = egui::Id::new("runtime_preview_canvas");
+        let canvas_id = egui::Id::unique();
         context.memory_mut(|memory| memory.request_focus(canvas_id));
-        let _ = context.run(
+        let _ = context.run_ui(
             egui::RawInput {
                 focused: true,
                 events: vec![egui::Event::Key {
@@ -4326,10 +4326,8 @@ mod tests {
                 }],
                 ..Default::default()
             },
-            |context| {
-                egui::CentralPanel::default().show(context, |ui| {
-                    let _ = ui.interact(ui.max_rect(), canvas_id, egui::Sense::click_and_drag());
-                });
+            |ui| {
+                let _ = ui.interact(ui.max_rect(), canvas_id, egui::Sense::click_and_drag());
             },
         );
 
