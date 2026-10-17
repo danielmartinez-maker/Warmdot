@@ -373,10 +373,7 @@ impl ScriptInstance {
         Ok(Some(placed_line))
     }
 
-    fn restore_breakpoints(
-        &mut self,
-        lines: &BTreeMap<u32, u32>,
-    ) -> Result<(), LuaError> {
+    fn restore_breakpoints(&mut self, lines: &BTreeMap<u32, u32>) -> Result<(), LuaError> {
         for line in lines.keys() {
             self.set_breakpoint(*line, true)?;
         }
