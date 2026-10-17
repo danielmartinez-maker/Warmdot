@@ -144,13 +144,9 @@ mod raw_ffi_boundary {
                     }
                 }
                 let mut result_count = 0;
-                eprintln!(
-                    "probe: before lua_resumex coroutine={coroutine:p} main={key:#x} nargs={arg_count}"
-                );
                 status = unsafe {
                     ffi::lua_resumex(coroutine, main_state, arg_count, &mut result_count)
                 };
-                eprintln!("probe: lua_resumex returned {status}");
                 if status == ffi::LUA_OK {
                     unsafe {
                         ffi::lua_settop(coroutine, 0);
@@ -193,23 +189,19 @@ mod raw_ffi_boundary {
             if state.is_null() || debug.is_null() {
                 return;
             }
-            eprintln!("probe: debugbreak callback entry state={state:p} debug={debug:p}");
             // Luau only invokes this callback for a LOP_BREAK. During the hook, lua_atbreakpoint
             // can inspect an already-advanced saved instruction pointer and reject the real hit.
             let context_key = unsafe { ffi::lua_mainthread(state) } as usize;
-            eprintln!("probe: debugbreak callback main={context_key:#x}");
             let context = ACTIVE_CONTEXTS.with(|contexts| {
                 contexts
                     .try_borrow()
                     .ok()
                     .and_then(|contexts| contexts.get(&context_key).and_then(Weak::upgrade))
             });
-            eprintln!("probe: debugbreak context active={}", context.is_some());
             let Some(context) = context else {
                 return;
             };
             let yieldable = unsafe { ffi::lua_isyieldable(state) };
-            eprintln!("probe: breakpoint yieldable={yieldable}");
             if yieldable == 0 {
                 context.borrow_mut().failure =
                     Some("Luau breakpoint was reached outside a resumable callback".to_owned());
@@ -239,10 +231,6 @@ mod raw_ffi_boundary {
                     false
                 }
             };
-            eprintln!(
-                "probe: debugbreak at line {} skip={skip_resumed_breakpoint}",
-                hit.line
-            );
             if skip_resumed_breakpoint {
                 return;
             }

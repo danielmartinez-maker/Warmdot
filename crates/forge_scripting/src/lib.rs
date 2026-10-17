@@ -1346,18 +1346,15 @@ fn install_object_api(lua: &Lua, state: &Table, context: SharedContext) -> Resul
     state.set(
         "translate",
         lua.create_function(move |_, (_self, x, y): (Table, f64, f64)| {
-            eprintln!("probe: translate entered");
             if !x.is_finite() || !y.is_finite() {
                 return Err(LuaError::RuntimeError(
                     "script translation must be finite".into(),
                 ));
             }
             let mut slot = translate_context.borrow_mut();
-            eprintln!("probe: translate context borrowed");
             let context = slot.as_mut().ok_or_else(inactive_context_error)?;
             context.transform.translation[0] += x as f32;
             context.transform.translation[1] += y as f32;
-            eprintln!("probe: translate completed");
             Ok(())
         })?,
     )?;
