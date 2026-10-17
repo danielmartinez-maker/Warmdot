@@ -388,7 +388,10 @@ impl ScriptInstance {
 
         let callbacks = [
             (BreakpointCallback::Start, self.on_start.clone()),
-            (BreakpointCallback::FixedUpdate, self.on_fixed_update.clone()),
+            (
+                BreakpointCallback::FixedUpdate,
+                self.on_fixed_update.clone(),
+            ),
             (BreakpointCallback::Event, self.on_event.clone()),
         ];
         let mut candidates = Vec::new();
