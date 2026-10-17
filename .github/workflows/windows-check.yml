@@ -18,6 +18,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Type-check workspace
         run: cargo check --workspace
+      - name: Run focused Luau breakpoint probe
+        run: cargo test -p forge_luau_debug entrypoint_breakpoint_pauses_nested_callback -- --nocapture
       - name: Run workspace tests
         run: cargo test --workspace
 
