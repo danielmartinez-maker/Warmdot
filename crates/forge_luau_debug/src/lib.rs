@@ -292,8 +292,8 @@ mod raw_ffi_boundary {
 
             let thread = lua.create_thread(callback).expect("create callback thread");
             let context = BreakpointContext::default();
-            let result = resume(&lua, &thread, MultiValue::default(), &context)
-                .expect("resume callback");
+            let result =
+                resume(&lua, &thread, MultiValue::default(), &context).expect("resume callback");
             let probe = DEBUGBREAK_PROBE.with(|probe| probe.borrow().clone());
 
             assert!(
