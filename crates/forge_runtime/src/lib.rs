@@ -825,4 +825,77 @@ mod tests {
             "the contact event should reach Luau with its sender and other-object GUIDs"
         );
     }
+
+    #[test]
+    fn quick_action_tap_reaches_luau_after_press_and_release_share_a_tick() {
+        let object_guid = Guid::new();
+        let sound_guid = Guid::new();
+        let scene = SceneDocument {
+            schema_version: CURRENT_SCENE_SCHEMA,
+            resource_guid: Guid::new(),
+            name: "Quick action tap".into(),
+            ui_document: None,
+            dependencies: Vec::new(),
+            objects: vec![SceneObject {
+                object_guid,
+                name: "Input listener".into(),
+                parent_guid: None,
+                prefab_instance: None,
+                transform: AuthoredTransform::default(),
+                sprite: None,
+                camera: None,
+                rigid_body: None,
+                collider: None,
+                script: None,
+            }],
+        };
+        let mut runtime =
+            GameRuntime::from_scene(&scene, RuntimeConfig::default()).expect("valid scene");
+        runtime
+            .attach_script(ScriptDefinition {
+                object_guid,
+                asset_guid: Guid::new(),
+                source_path: "Assets/QuickTap.luau".into(),
+                source: format!(
+                    r#"
+                        return {{
+                            on_fixed_update = function()
+                                if Forge.Input.is_just_pressed(3) then
+                                    Forge.Audio.play("{sound_guid}", "sfx")
+                                end
+                            end,
+                        }}
+                    "#
+                ),
+                properties: BTreeMap::new(),
+            })
+            .expect("attach input listener");
+
+        runtime.push_action(Duration::ZERO, ActionId(3), 1.0, true);
+        runtime.push_action(Duration::ZERO, ActionId(3), 0.0, false);
+        runtime.advance_frame(Duration::from_millis(50));
+
+        assert!(
+            runtime.take_script_diagnostics().is_empty(),
+            "the just-pressed input API should run without script diagnostics"
+        );
+        let audio_commands = runtime.take_audio_commands();
+        assert_eq!(
+            audio_commands.len(),
+            1,
+            "a press and release in the same fixed tick should trigger exactly once"
+        );
+        assert!(matches!(
+            audio_commands.first(),
+            Some(ScriptAudioCommand::PlayEffect { asset_guid, bus })
+                if *asset_guid == sound_guid && bus == "sfx"
+        ));
+        assert!(
+            runtime
+                .input_state(ActionId(3))
+                .is_some_and(|state| !state.pressed),
+            "the tap must finish in the released state"
+        );
+    }
+
 }
