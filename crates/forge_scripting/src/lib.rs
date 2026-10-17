@@ -1893,10 +1893,22 @@ mod tests {
         assert_eq!(hit.source_path, "Assets/Breakpoint.luau");
         assert_eq!(hit.line, 3);
         assert_eq!(hit.tick, 1);
-        assert_eq!(world.transform(entity).expect("object transform").translation[0], 0.0);
+        assert_eq!(
+            world
+                .transform(entity)
+                .expect("object transform")
+                .translation[0],
+            0.0
+        );
 
         assert!(host.continue_breakpoint(&mut world).is_none());
-        assert_eq!(world.transform(entity).expect("object transform").translation[0], 1.0);
+        assert_eq!(
+            world
+                .transform(entity)
+                .expect("object transform")
+                .translation[0],
+            1.0
+        );
     }
 }
 
