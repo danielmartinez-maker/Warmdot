@@ -280,12 +280,12 @@ mod raw_ffi_boundary {
             let lua = Lua::new();
             install(&lua).expect("install Luau debugger");
             let entrypoint: Function = lua
-                .load("return { callback = function()\n    local value = 1\nend }")
+                .load("return {\n    callback = function()\n        local value = 1\n    end,\n}\n")
                 .into_function()
                 .expect("compile script entrypoint");
             assert_eq!(
-                set_breakpoint(&lua, &entrypoint, 2, true).expect("set source breakpoint"),
-                Some(2)
+                set_breakpoint(&lua, &entrypoint, 3, true).expect("set source breakpoint"),
+                Some(3)
             );
             let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
             let callback: Function = state.get("callback").expect("load nested callback");
@@ -297,7 +297,7 @@ mod raw_ffi_boundary {
             let probe = DEBUGBREAK_PROBE.with(|probe| probe.borrow().clone());
 
             assert!(
-                matches!(&result, ResumeResult::Paused(hit) if hit.line == 2),
+                matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
                 "result={result:?}; probe={probe:?}"
             );
         }
