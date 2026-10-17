@@ -257,20 +257,25 @@ mod raw_ffi_boundary {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::{cell::Cell, rc::Rc};
 
         #[test]
         fn entrypoint_breakpoint_pauses_nested_callback() {
             let lua = Lua::new();
             install(&lua).expect("install Luau debugger");
-            let counter = lua.create_table().expect("create callback counter");
-            counter
-                .set("value", 0)
-                .expect("initialize callback counter");
+            let calls = Rc::new(Cell::new(0));
+            let callback_calls = Rc::clone(&calls);
+            let translate = lua
+                .create_function(move |_, ()| {
+                    callback_calls.set(callback_calls.get() + 1);
+                    Ok(())
+                })
+                .expect("create native Forge-style callback");
             lua.globals()
-                .set("counter", counter.clone())
-                .expect("expose callback counter");
+                .set("translate", translate)
+                .expect("expose native callback");
             let entrypoint: Function = lua
-                .load("return {\n    callback = function()\n        counter.value = counter.value + 1\n    end,\n}\n")
+                .load("return {\n    callback = function()\n        translate()\n    end,\n}\n")
                 .into_function()
                 .expect("compile script entrypoint");
             let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
@@ -284,27 +289,18 @@ mod raw_ffi_boundary {
             let context = BreakpointContext::default();
             let result =
                 resume(&lua, &thread, MultiValue::default(), &context).expect("resume callback");
-            let counter_value: u32 = counter.get("value").expect("read callback counter");
 
             assert!(
                 matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
-                "result={result:?}; counter={counter_value}"
+                "result={result:?}; native calls={}",
+                calls.get()
             );
-            assert_eq!(
-                counter_value, 0,
-                "callback side effect happened before pause"
-            );
+            assert_eq!(calls.get(), 0, "native callback ran before breakpoint");
 
-            eprintln!("probe: before continuing paused callback");
             let continued = resume(&lua, &thread, MultiValue::default(), &context)
                 .expect("continue paused callback");
-            eprintln!("probe: continuation returned {continued:?}");
             assert_eq!(continued, ResumeResult::Complete);
-            let continued_counter = counter
-                .get::<u32>("value")
-                .expect("read continued callback counter");
-            eprintln!("probe: continued counter={continued_counter}");
-            assert_eq!(continued_counter, 1);
+            assert_eq!(calls.get(), 1, "resumed native callback must run once");
         }
     }
 }
