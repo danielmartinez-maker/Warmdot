@@ -26,6 +26,15 @@ mod raw_ffi_boundary {
         failure: Option<String>,
     }
 
+    #[derive(Clone, Debug, Default, Eq, PartialEq)]
+    struct DebugbreakProbe {
+        callbacks: usize,
+        null_arguments: usize,
+        not_at_breakpoint: usize,
+        missing_context: usize,
+        not_yieldable: usize,
+    }
+
     type SharedOutcome = Rc<RefCell<BreakpointOutcome>>;
 
     #[derive(Clone, Default)]
@@ -43,6 +52,7 @@ mod raw_ffi_boundary {
     thread_local! {
         static ACTIVE_CONTEXTS: RefCell<HashMap<usize, Weak<RefCell<BreakpointOutcome>>>> =
             RefCell::new(HashMap::new());
+        static DEBUGBREAK_PROBE: RefCell<DebugbreakProbe> = RefCell::new(DebugbreakProbe::default());
     }
 
     struct ContextRegistration(usize);
@@ -123,6 +133,11 @@ mod raw_ffi_boundary {
         });
         let _registration = ContextRegistration(key);
 
+        DEBUGBREAK_PROBE.with(|probe| {
+            if let Ok(mut probe) = probe.try_borrow_mut() {
+                *probe = DebugbreakProbe::default();
+            }
+        });
         let mut status = ffi::LUA_ERRRUN;
         let mut error = None;
         // The coroutine is owned by mlua's Thread; this closure moves only the supplied callback
@@ -177,7 +192,25 @@ mod raw_ffi_boundary {
         debug: *mut ffi::lua_Debug,
     ) {
         let _ = catch_unwind(AssertUnwindSafe(|| {
-            if state.is_null() || debug.is_null() || unsafe { ffi::lua_atbreakpoint(state) } == 0 {
+            DEBUGBREAK_PROBE.with(|probe| {
+                if let Ok(mut probe) = probe.try_borrow_mut() {
+                    probe.callbacks = probe.callbacks.saturating_add(1);
+                }
+            });
+            if state.is_null() || debug.is_null() {
+                DEBUGBREAK_PROBE.with(|probe| {
+                    if let Ok(mut probe) = probe.try_borrow_mut() {
+                        probe.null_arguments = probe.null_arguments.saturating_add(1);
+                    }
+                });
+                return;
+            }
+            if unsafe { ffi::lua_atbreakpoint(state) } == 0 {
+                DEBUGBREAK_PROBE.with(|probe| {
+                    if let Ok(mut probe) = probe.try_borrow_mut() {
+                        probe.not_at_breakpoint = probe.not_at_breakpoint.saturating_add(1);
+                    }
+                });
                 return;
             }
             let context_key = unsafe { ffi::lua_mainthread(state) } as usize;
@@ -188,9 +221,19 @@ mod raw_ffi_boundary {
                     .and_then(|contexts| contexts.get(&context_key).and_then(Weak::upgrade))
             });
             let Some(context) = context else {
+                DEBUGBREAK_PROBE.with(|probe| {
+                    if let Ok(mut probe) = probe.try_borrow_mut() {
+                        probe.missing_context = probe.missing_context.saturating_add(1);
+                    }
+                });
                 return;
             };
             if unsafe { ffi::lua_isyieldable(state) } == 0 {
+                DEBUGBREAK_PROBE.with(|probe| {
+                    if let Ok(mut probe) = probe.try_borrow_mut() {
+                        probe.not_yieldable = probe.not_yieldable.saturating_add(1);
+                    }
+                });
                 context.borrow_mut().failure =
                     Some("Luau breakpoint was reached outside a resumable callback".to_owned());
                 return;
@@ -227,6 +270,37 @@ mod raw_ffi_boundary {
         }
         let bytes = unsafe { slice::from_raw_parts(message.cast::<u8>(), length) };
         String::from_utf8_lossy(bytes).into_owned()
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn entrypoint_breakpoint_pauses_nested_callback() {
+            let lua = Lua::new();
+            install(&lua).expect("install Luau debugger");
+            let entrypoint: Function = lua
+                .load("return { callback = function()\n    local value = 1\nend }")
+                .eval()
+                .expect("compile script entrypoint");
+            let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
+            let callback: Function = state.get("callback").expect("load nested callback");
+            assert_eq!(
+                set_breakpoint(&lua, &entrypoint, 2, true).expect("set source breakpoint"),
+                Some(2)
+            );
+
+            let thread = lua.create_thread(callback).expect("create callback thread");
+            let context = BreakpointContext::default();
+            let result = resume(&lua, &thread, MultiValue::default(), &context)
+                .expect("resume callback");
+            let probe = DEBUGBREAK_PROBE.with(|probe| probe.borrow().clone());
+
+            assert!(
+                matches!(result, ResumeResult::Paused(hit) if hit.line == 2),
+                "result={result:?}; probe={probe:?}"
+            );
+        }
     }
 }
 
