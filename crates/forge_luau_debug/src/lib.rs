@@ -328,7 +328,11 @@ mod raw_ffi_boundary {
             let continued = resume(&lua, &thread, MultiValue::default(), &context)
                 .expect("continue paused callback");
             assert_eq!(continued, ResumeResult::Complete);
-            assert_eq!(calls.borrow().as_ref(), Some(&1), "resumed native callback must run once");
+            assert_eq!(
+                calls.borrow().as_ref(),
+                Some(&1),
+                "resumed native callback must run once"
+            );
         }
     }
 }
