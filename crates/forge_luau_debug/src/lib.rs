@@ -308,7 +308,10 @@ mod raw_ffi_boundary {
                 matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
                 "result={result:?}; counter={counter_value}; probe={probe:?}"
             );
-            assert_eq!(counter_value, 0, "callback side effect happened before pause");
+            assert_eq!(
+                counter_value, 0,
+                "callback side effect happened before pause"
+            );
         }
     }
 }
