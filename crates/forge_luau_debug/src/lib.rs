@@ -136,9 +136,11 @@ mod raw_ffi_boundary {
                     }
                 }
                 let mut result_count = 0;
+                eprintln!("probe: before lua_resumex");
                 status = unsafe {
                     ffi::lua_resumex(coroutine, main_state, arg_count, &mut result_count)
                 };
+                eprintln!("probe: lua_resumex returned {status}");
                 if status == ffi::LUA_OK {
                     unsafe {
                         ffi::lua_settop(coroutine, 0);
@@ -228,6 +230,10 @@ mod raw_ffi_boundary {
                     false
                 }
             };
+            eprintln!(
+                "probe: debugbreak at line {} skip={skip_resumed_breakpoint}",
+                hit.line
+            );
             if skip_resumed_breakpoint {
                 return;
             }
@@ -289,17 +295,16 @@ mod raw_ffi_boundary {
                 "callback side effect happened before pause"
             );
 
-            assert_eq!(
-                resume(&lua, &thread, MultiValue::default(), &context)
-                    .expect("continue paused callback"),
-                ResumeResult::Complete
-            );
-            assert_eq!(
-                counter
-                    .get::<u32>("value")
-                    .expect("read continued callback counter"),
-                1
-            );
+            eprintln!("probe: before continuing paused callback");
+            let continued = resume(&lua, &thread, MultiValue::default(), &context)
+                .expect("continue paused callback");
+            eprintln!("probe: continuation returned {continued:?}");
+            assert_eq!(continued, ResumeResult::Complete);
+            let continued_counter = counter
+                .get::<u32>("value")
+                .expect("read continued callback counter");
+            eprintln!("probe: continued counter={continued_counter}");
+            assert_eq!(continued_counter, 1);
         }
     }
 }
