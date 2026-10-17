@@ -266,7 +266,7 @@ mod raw_ffi_boundary {
             let calls = Rc::new(Cell::new(0));
             let callback_calls = Rc::clone(&calls);
             let translate = lua
-                .create_function(move |_, (_self: mlua::Table, x: f64, y: f64)| {
+                .create_function(move |_, (_self, x, y): (mlua::Table, f64, f64)| {
                     assert_eq!((x, y), (1.0, 0.0));
                     callback_calls.set(callback_calls.get() + 1);
                     Ok(())
