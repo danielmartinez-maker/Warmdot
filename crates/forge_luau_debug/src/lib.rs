@@ -216,6 +216,8 @@ mod raw_ffi_boundary {
                 source,
                 line: debug.currentline as u32,
             };
+            // Resume re-enters the same break instruction once before executing its line.
+            // Consume only that re-entry; later loop visits should still stop here.
             let skip_resumed_breakpoint = {
                 let mut outcome = context.borrow_mut();
                 if outcome.resume_skip.as_ref() == Some(&hit) {
@@ -293,7 +295,9 @@ mod raw_ffi_boundary {
                 ResumeResult::Complete
             );
             assert_eq!(
-                counter.get::<u32>("value").expect("read continued callback counter"),
+                counter
+                    .get::<u32>("value")
+                    .expect("read continued callback counter"),
                 1
             );
         }
