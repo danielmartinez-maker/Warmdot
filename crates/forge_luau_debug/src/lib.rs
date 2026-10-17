@@ -266,16 +266,18 @@ mod raw_ffi_boundary {
             let calls = Rc::new(Cell::new(0));
             let callback_calls = Rc::clone(&calls);
             let translate = lua
-                .create_function(move |_, ()| {
+                .create_function(move |_, (_self: mlua::Table, x: f64, y: f64)| {
+                    assert_eq!((x, y), (1.0, 0.0));
                     callback_calls.set(callback_calls.get() + 1);
                     Ok(())
                 })
                 .expect("create native Forge-style callback");
-            lua.globals()
+            let object = lua.create_table().expect("create script object");
+            object
                 .set("translate", translate)
-                .expect("expose native callback");
+                .expect("install native object method");
             let entrypoint: Function = lua
-                .load("return {\n    callback = function()\n        translate()\n    end,\n}\n")
+                .load("return {\n    callback = function(self, dt)\n        self:translate(dt, 0)\n    end,\n}\n")
                 .into_function()
                 .expect("compile script entrypoint");
             let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
@@ -287,8 +289,11 @@ mod raw_ffi_boundary {
 
             let thread = lua.create_thread(callback).expect("create callback thread");
             let context = BreakpointContext::default();
-            let result =
-                resume(&lua, &thread, MultiValue::default(), &context).expect("resume callback");
+            let args = MultiValue::from_vec(vec![
+                mlua::Value::Table(object),
+                mlua::Value::Number(1.0),
+            ]);
+            let result = resume(&lua, &thread, args, &context).expect("resume callback");
 
             assert!(
                 matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
