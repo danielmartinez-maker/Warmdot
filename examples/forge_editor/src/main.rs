@@ -4314,7 +4314,7 @@ mod tests {
         let context = egui::Context::default();
         let canvas_id = egui::Id::unique("runtime_preview_canvas");
         context.memory_mut(|memory| memory.request_focus(canvas_id));
-        let _ = context.run_ui(
+        let output = context.run_ui(
             egui::RawInput {
                 focused: true,
                 events: vec![egui::Event::Key {
@@ -4330,6 +4330,7 @@ mod tests {
                 let _ = ui.interact(ui.max_rect(), canvas_id, egui::Sense::click_and_drag());
             },
         );
+        output.drop_without_applying_deltas();
 
         assert!(context.egui_wants_keyboard_input());
         assert!(!context.text_edit_focused());
