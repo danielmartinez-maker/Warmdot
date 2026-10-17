@@ -35,7 +35,7 @@
 
 ## Current Evidence Snapshot
 
-Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1 remains draft and unmerged. Latest source and tests are at `4d041011fcb7219c0040534b94a623a681e87561`. Windows run [38948522741](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38948522741) passed formatting, workspace type-checking, all workspace tests, release-player build, validation and export of both editor-authored projects, third-party license generation, package-content checks, and artifact uploads. Artifacts: `forge2d-action-arena-windows` (5,664,463 bytes) and `forge2d-colony-windows` (5,494,087 bytes). The P0 gate remains open for native editor/player acceptance, the tutorial walkthrough, and the full acceptance audit.
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1 remains draft and unmerged. Current code head `9bede9812da60b2759266aaa97abf9cbb4dda729` passed Windows run [38985697339](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38985697339): formatting, workspace type-checking and tests, release builds for player/editor/benchmark, both project validations/exports, license/package checks, and post-upload validation. Artifacts: `forge2d-action-arena-windows` (5,664,787 bytes), `forge2d-colony-windows` (5,494,253 bytes), and `forge2d-desktop-verification-windows` (10,862,437 bytes). The new editor-preview input regression test failed on the old generic egui focus gate and passes after switching suppression to text-edit focus. A fresh desktop benchmark is recorded in [docs/benchmarks/forge2d-renderer-run550-2026-10-17.json](../benchmarks/forge2d-renderer-run550-2026-10-17.json): 10,000 sprites, 120 warm-up frames, 600 samples at 1280x720 on an NVIDIA GeForce RTX 4050 Laptop GPU (DiscreteGpu, Vulkan, driver 610.78); CPU p50/p95/p99 were 6.807/7.558/9.118 ms, with GPU completion time explicitly unmeasured. P0 remains open for full current-editor/player acceptance, an editor walkthrough of the tutorial, audible acceptance, and the full acceptance audit.
 
 ### Present in the branch
 
@@ -58,7 +58,7 @@ Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1
 - The Action Arena's authored project files persist, while runtime score and lives are session data that reset when the Main scene is loaded again.
 - The colony Rust sample still provides the larger 64-worker stress run with runtime obstacle editing, time controls, and profiling; the separate saved colony project is the editor/export vertical slice.
 - Tilemaps are chunked in storage, but rendering/collision still expand per tile; incremental large-map rendering/collision and generalized navigation remain open.
-- The renderer benchmark has not been run on a desktop GPU, so no performance results are claimed.
+- A desktop GPU benchmark is now recorded in `docs/benchmarks/forge2d-renderer-run550-2026-10-17.json`; it reports CPU submission timing and explicitly does not claim GPU completion timing.
 
 
 ---
@@ -129,9 +129,10 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 - [x] Complete one editor-authored Action Arena with enemy behavior, animations, collisions, camera, tile room, HUD, audio, transitions, saveable project data, projectiles, scoring, lives, and restart. The project, scenes, tilemap, scripts, UI, and assets are authored files; Windows runtime tests cover movement, projectile scoring, enemy contact/life updates, and the HUD. Run `38948522741` validates and exports the complete project.
 - [x] Complete the colony simulation behaviors: walkable/unwalkable tile editing, resource jobs, queues/navigation, time controls, and system profiling. The native 64-worker sample retains runtime obstacle editing and profiling. The editor-authored project adds deterministic worker routing, resource deliveries, animations, an authored HUD, and a standalone export. Run `38948522741` passed the runtime integration test and both project exports.
 - [ ] Verify a newcomer can build and change the complete action game through the editor without Rust edits; complete the tutorial walkthrough.
-- [ ] Run the P0 acceptance audit against every P0 bullet and both sample exits; publish no performance claim without measurements.
+- [x] Run the renderer benchmark on a desktop GPU and record hardware/workload. Run `38985697339` produced the 10,000-sprite, 120-warm-up, 600-sample report at 1280x720 on an NVIDIA GeForce RTX 4050 Laptop GPU (Vulkan, driver 610.78); CPU p50/p95/p99: 6.807/7.558/9.118 ms. GPU completion was not measured. Raw samples and metadata are in `docs/benchmarks/forge2d-renderer-run550-2026-10-17.json`.
+- [ ] Run the P0 acceptance audit against every P0 bullet and both sample exits; keep unmeasured performance claims out.
 
-**P0 completion gate:** Every P0 item above must have current evidence, Windows CI must be green, both vertical slices must run through editor and standalone export, and remaining gaps must be explicitly zero. This gate is not met: native editor/player sessions, the tutorial walkthrough, and the full audit remain open.
+**P0 completion gate:** Every P0 item above must have current evidence, Windows CI must be green, both vertical slices must run through editor and standalone export, and remaining gaps must be explicitly zero. This gate is not met: the complete native editor/player walkthrough, tutorial completion/export pass, audible acceptance, and full acceptance audit remain open.
 
 ## P1 — Differentiated Public Beta (start only after P0 gate)
 
@@ -166,6 +167,8 @@ Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024b
 - 2026-10-16: Wired the standalone project player's WASD/F/right-click input map into the runtime using the existing bounded `InputMap` and fixed action IDs 1/2/3. Added an offline first-game tutorial and corrected the scripting/input docs; commit `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` is under Windows CI run `38922572623`.
 
 ## Execution ledger
+
+- 2026-10-17: Current code head `9bede9812da60b2759266aaa97abf9cbb4dda729` passed Windows run `38985697339` including formatting, type-checking, all workspace tests, release builds, sample validation/export, license/package checks, and post-upload validation. Added a regression test for gameplay keyboard input while the runtime preview canvas owns egui focus; it reproduced zero movement with the old generic focus check and passes with `text_edit_focused()`. Ran the default renderer benchmark on the desktop's NVIDIA GeForce RTX 4050 Laptop GPU (Vulkan, driver 610.78): 10,000 sprites, 120 warm-up frames, 600 samples at 1280x720; CPU p50/p95/p99 6.807/7.558/9.118 ms. Raw samples and run metadata are in `docs/benchmarks/forge2d-renderer-run550-2026-10-17.json`; GPU completion was not measured. Current-editor desktop runtime/audio acceptance, full tutorial walkthrough/export, and the P0 audit remain open; P1 has not started.
 
 - 2026-10-15: Created from the user-provided product proposal after the user authorized independent planning and milestone work. Verified the live branch head and PR #1 through GitHub; current checked head is `2a9ae3e`.
 - 2026-10-15: Read the proposal and compared its full P0/P1/P2 scope against the GitHub README and repository tree. P0 remains incomplete; the README's shorter remaining-work list is not the completion authority.
