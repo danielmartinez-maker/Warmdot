@@ -204,4 +204,20 @@ mod tests {
         assert!(AudioError::InvalidVolume(-61.0).to_string().contains("-60"));
         assert!(AudioError::InvalidVolume(7.0).to_string().contains("6"));
     }
+
+
+    #[test]
+    fn decodes_pcm_wav_assets_used_by_action_arena() {
+        let audio_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/action_arena/Assets/Audio");
+        let click = audio_dir.join("click.wav");
+        StaticSoundData::from_file(&click).unwrap_or_else(|error| {
+            panic!("Action Arena PCM click WAV failed to decode: {error}")
+        });
+
+        let music = audio_dir.join("arena-music.wav");
+        StreamingSoundData::from_file(&music).unwrap_or_else(|error| {
+            panic!("Action Arena PCM music WAV failed to decode: {error}")
+        });
+    }
 }
