@@ -305,10 +305,8 @@ mod raw_ffi_boundary {
 
             let thread = lua.create_thread(callback).expect("create callback thread");
             let context = BreakpointContext::default();
-            let args = MultiValue::from_vec(vec![
-                mlua::Value::Table(state),
-                mlua::Value::Number(1.0),
-            ]);
+            let args =
+                MultiValue::from_vec(vec![mlua::Value::Table(state), mlua::Value::Number(1.0)]);
             let result = resume(&lua, &thread, args, &context).expect("resume callback");
 
             assert!(
