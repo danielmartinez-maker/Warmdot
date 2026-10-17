@@ -137,9 +137,7 @@ mod raw_ffi_boundary {
                 }
                 let mut result_count = 0;
                 let top_before_resume = ffi::lua_gettop(coroutine);
-                eprintln!(
-                    "probe: before lua_resumex top={top_before_resume} nargs={arg_count}"
-                );
+                eprintln!("probe: before lua_resumex top={top_before_resume} nargs={arg_count}");
                 status = unsafe {
                     ffi::lua_resumex(coroutine, main_state, arg_count, &mut result_count)
                 };
