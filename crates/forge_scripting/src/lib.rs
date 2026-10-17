@@ -1076,6 +1076,17 @@ fn install_forge_api(
         })?,
     )?;
 
+    let just_pressed_context = context.clone();
+    input.set(
+        "is_just_pressed",
+        lua.create_function(move |_, action: u32| {
+            Ok(active_context(&just_pressed_context)?
+                .actions
+                .get(&ActionId(action))
+                .is_some_and(|state| state.just_pressed))
+        })?,
+    )?;
+
     let events = lua.create_table()?;
     let event_context = context.clone();
     let queued_events = pending_events;
@@ -1666,6 +1677,7 @@ mod tests {
             ActionState {
                 value: 2.0,
                 pressed: true,
+                just_pressed: false,
             },
         )]);
 

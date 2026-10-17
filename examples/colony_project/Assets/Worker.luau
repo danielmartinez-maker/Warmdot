@@ -144,12 +144,9 @@ return {
     end,
 
     on_fixed_update = function(self, dt)
-        local firing = Forge.Input.is_pressed(3)
-        local was_firing = self:get("was_firing") == true
-        if firing and not was_firing then
+        if Forge.Input.is_just_pressed(3) then
             Forge.Events.emit("colony.worker_request", 1)
         end
-        self:set("was_firing", firing)
 
         local phase = math.floor(self:get("phase") or 0)
         if phase == 0 then

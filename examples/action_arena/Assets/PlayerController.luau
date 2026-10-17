@@ -81,13 +81,10 @@ return {
             math.max(min_y, math.min(max_y, y))
         )
 
-        local firing = Forge.Input.is_pressed(3)
-        local was_firing = self:get("was_firing") == true
-        if firing and not was_firing then
+        if Forge.Input.is_just_pressed(3) then
             Forge.Events.emit("arena.fire.x", x)
             Forge.Events.emit("arena.fire.y", y)
         end
-        self:set("was_firing", firing)
     end,
 
     on_event = function(self, event_name, value, sender_guid, tick)
