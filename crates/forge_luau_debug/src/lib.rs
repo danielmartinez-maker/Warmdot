@@ -136,11 +136,15 @@ mod raw_ffi_boundary {
                     }
                 }
                 let mut result_count = 0;
-                eprintln!("probe: before lua_resumex");
+                let top_before_resume = ffi::lua_gettop(coroutine);
+                eprintln!(
+                    "probe: before lua_resumex top={top_before_resume} nargs={arg_count}"
+                );
                 status = unsafe {
                     ffi::lua_resumex(coroutine, main_state, arg_count, &mut result_count)
                 };
-                eprintln!("probe: lua_resumex returned {status}");
+                let top_after_resume = ffi::lua_gettop(coroutine);
+                eprintln!("probe: lua_resumex returned {status} top={top_after_resume}");
                 if status == ffi::LUA_OK {
                     unsafe {
                         ffi::lua_settop(coroutine, 0);
