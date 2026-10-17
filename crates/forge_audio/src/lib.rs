@@ -205,7 +205,6 @@ mod tests {
         assert!(AudioError::InvalidVolume(7.0).to_string().contains("6"));
     }
 
-
     #[test]
     fn decodes_pcm_wav_assets_used_by_action_arena() {
         let audio_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
