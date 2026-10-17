@@ -279,7 +279,7 @@ mod raw_ffi_boundary {
                 Ok(mlua::VmState::Continue)
             });
             install(&lua).expect("install Luau debugger");
-            let calls = Rc::new(Cell::new(0));
+            let calls = Rc::new(std::cell::RefCell::new(Some(0_u32)));
             lua.sandbox(true).expect("sandbox Luau environment");
             let entrypoint: Function = lua
                 .load("return {\n    callback = function(self, dt)\n        self:translate(dt, 0)\n    end,\n}\n")
@@ -290,7 +290,11 @@ mod raw_ffi_boundary {
             let translate = lua
                 .create_function(move |_, (_self, x, y): (mlua::Table, f64, f64)| {
                     assert_eq!((x, y), (1.0, 0.0));
-                    callback_calls.set(callback_calls.get() + 1);
+                    let mut active_context = callback_calls.borrow_mut();
+                    let calls = active_context.as_mut().ok_or_else(|| {
+                        mlua::Error::RuntimeError("callback context is inactive".into())
+                    })?;
+                    *calls += 1;
                     Ok(())
                 })
                 .expect("create native Forge-style callback");
@@ -311,15 +315,20 @@ mod raw_ffi_boundary {
 
             assert!(
                 matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
-                "result={result:?}; native calls={}",
-                calls.get()
+                "result={result:?}; native calls={:?}",
+                calls.borrow()
             );
-            assert_eq!(calls.get(), 0, "native callback ran before breakpoint");
+            assert_eq!(
+                calls.borrow_mut().take(),
+                Some(0),
+                "native callback ran before breakpoint"
+            );
 
+            *calls.borrow_mut() = Some(0);
             let continued = resume(&lua, &thread, MultiValue::default(), &context)
                 .expect("continue paused callback");
             assert_eq!(continued, ResumeResult::Complete);
-            assert_eq!(calls.get(), 1, "resumed native callback must run once");
+            assert_eq!(calls.borrow().as_ref(), Some(&1), "resumed native callback must run once");
         }
     }
 }
