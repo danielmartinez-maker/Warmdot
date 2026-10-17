@@ -78,7 +78,6 @@ impl InputTimeline {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
