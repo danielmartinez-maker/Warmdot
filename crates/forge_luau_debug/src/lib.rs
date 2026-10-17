@@ -281,14 +281,14 @@ mod raw_ffi_boundary {
             install(&lua).expect("install Luau debugger");
             let entrypoint: Function = lua
                 .load("return { callback = function()\n    local value = 1\nend }")
-                .eval()
+                .into_function()
                 .expect("compile script entrypoint");
-            let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
-            let callback: Function = state.get("callback").expect("load nested callback");
             assert_eq!(
                 set_breakpoint(&lua, &entrypoint, 2, true).expect("set source breakpoint"),
                 Some(2)
             );
+            let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
+            let callback: Function = state.get("callback").expect("load nested callback");
 
             let thread = lua.create_thread(callback).expect("create callback thread");
             let context = BreakpointContext::default();
