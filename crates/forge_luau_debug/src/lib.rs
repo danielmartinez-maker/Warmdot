@@ -110,7 +110,7 @@ mod raw_ffi_boundary {
         let arg_count = i32::try_from(args.len())
             .map_err(|_| Error::RuntimeError("too many Luau callback arguments".into()))?;
         let coroutine = thread.state();
-        let key = coroutine as usize;
+        let key = unsafe { ffi::lua_mainthread(coroutine) } as usize;
         {
             let mut outcome = context.outcome.borrow_mut();
             outcome.hit = None;
@@ -180,11 +180,12 @@ mod raw_ffi_boundary {
             if state.is_null() || debug.is_null() || unsafe { ffi::lua_atbreakpoint(state) } == 0 {
                 return;
             }
+            let context_key = unsafe { ffi::lua_mainthread(state) } as usize;
             let context = ACTIVE_CONTEXTS.with(|contexts| {
                 contexts
                     .try_borrow()
                     .ok()
-                    .and_then(|contexts| contexts.get(&(state as usize)).and_then(Weak::upgrade))
+                    .and_then(|contexts| contexts.get(&context_key).and_then(Weak::upgrade))
             });
             let Some(context) = context else {
                 return;
