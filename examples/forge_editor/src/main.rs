@@ -4312,7 +4312,7 @@ mod tests {
         assert!(app.runtime.is_some(), "editor preview starts");
 
         let context = egui::Context::default();
-        let canvas_id = egui::Id::unique();
+        let canvas_id = egui::Id::unique("runtime_preview_canvas");
         context.memory_mut(|memory| memory.request_focus(canvas_id));
         let _ = context.run_ui(
             egui::RawInput {
