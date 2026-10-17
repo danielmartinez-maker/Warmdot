@@ -279,8 +279,15 @@ mod raw_ffi_boundary {
         fn entrypoint_breakpoint_pauses_nested_callback() {
             let lua = Lua::new();
             install(&lua).expect("install Luau debugger");
+            let counter = lua.create_table().expect("create callback counter");
+            counter
+                .set("value", 0)
+                .expect("initialize callback counter");
+            lua.globals()
+                .set("counter", counter.clone())
+                .expect("expose callback counter");
             let entrypoint: Function = lua
-                .load("return {\n    callback = function()\n        local value = 1\n    end,\n}\n")
+                .load("return {\n    callback = function()\n        counter.value = counter.value + 1\n    end,\n}\n")
                 .into_function()
                 .expect("compile script entrypoint");
             let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
@@ -295,11 +302,13 @@ mod raw_ffi_boundary {
             let result =
                 resume(&lua, &thread, MultiValue::default(), &context).expect("resume callback");
             let probe = DEBUGBREAK_PROBE.with(|probe| probe.borrow().clone());
+            let counter_value: u32 = counter.get("value").expect("read callback counter");
 
             assert!(
                 matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
-                "result={result:?}; probe={probe:?}"
+                "result={result:?}; counter={counter_value}; probe={probe:?}"
             );
+            assert_eq!(counter_value, 0, "callback side effect happened before pause");
         }
     }
 }
