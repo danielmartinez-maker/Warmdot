@@ -234,6 +234,7 @@ impl ScriptInstance {
         let on_fixed_update: Option<Function> = state.get("on_fixed_update")?;
         let on_event: Option<Function> = state.get("on_event")?;
 
+        let breakpoint_context = BreakpointContext::with_source(definition.source_path.clone());
         Ok(Self {
             _lua: lua,
             state,
@@ -248,7 +249,7 @@ impl ScriptInstance {
             start_pending: true,
             disabled: false,
             breakpoint_lines: BTreeMap::new(),
-            breakpoint_context: BreakpointContext::default(),
+            breakpoint_context,
             suspended: None,
         })
     }

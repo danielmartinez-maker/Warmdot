@@ -6,7 +6,6 @@ mod raw_ffi_boundary {
         cell::RefCell,
         collections::HashMap,
         convert::TryFrom,
-        ffi::CStr,
         panic::{AssertUnwindSafe, catch_unwind},
         rc::{Rc, Weak},
         slice,
@@ -25,6 +24,7 @@ mod raw_ffi_boundary {
         hit: Option<BreakpointHit>,
         failure: Option<String>,
         resume_skip: Option<BreakpointHit>,
+        source: Option<String>,
     }
 
     type SharedOutcome = Rc<RefCell<BreakpointOutcome>>;
@@ -32,6 +32,14 @@ mod raw_ffi_boundary {
     #[derive(Clone, Default)]
     pub struct BreakpointContext {
         outcome: SharedOutcome,
+    }
+
+    impl BreakpointContext {
+        pub fn with_source(source: impl Into<String>) -> Self {
+            let context = Self::default();
+            context.outcome.borrow_mut().source = Some(source.into());
+            context
+        }
     }
 
     #[derive(Clone, Debug, Eq, PartialEq)]
@@ -209,18 +217,7 @@ mod raw_ffi_boundary {
             }
 
             let debug = unsafe { &*debug };
-            eprintln!(
-                "probe: debug frame source={:p} line={}",
-                debug.source, debug.currentline
-            );
-            let source = if debug.source.is_null() {
-                String::new()
-            } else {
-                unsafe { CStr::from_ptr(debug.source) }
-                    .to_string_lossy()
-                    .into_owned()
-            };
-            eprintln!("probe: debug source copied bytes={}", source.len());
+            let source = context.borrow().source.clone().unwrap_or_default();
             if debug.currentline <= 0 {
                 context.borrow_mut().failure =
                     Some("Luau breakpoint has no executable source line".to_owned());
@@ -318,13 +315,13 @@ mod raw_ffi_boundary {
             );
 
             let thread = lua.create_thread(callback).expect("create callback thread");
-            let context = BreakpointContext::default();
+            let context = BreakpointContext::with_source("Assets/Breakpoint.luau");
             let args =
                 MultiValue::from_vec(vec![mlua::Value::Table(state), mlua::Value::Number(1.0)]);
             let result = resume(&lua, &thread, args, &context).expect("resume callback");
 
             assert!(
-                matches!(&result, ResumeResult::Paused(hit) if hit.line == 3),
+                matches!(&result, ResumeResult::Paused(hit) if hit.line == 3 && hit.source == "Assets/Breakpoint.luau"),
                 "result={result:?}; native calls={:?}",
                 calls.borrow()
             );
