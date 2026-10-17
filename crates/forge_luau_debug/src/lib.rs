@@ -280,6 +280,12 @@ mod raw_ffi_boundary {
             });
             install(&lua).expect("install Luau debugger");
             let calls = Rc::new(Cell::new(0));
+            lua.sandbox(true).expect("sandbox Luau environment");
+            let entrypoint: Function = lua
+                .load("return {\n    callback = function(self, dt)\n        self:translate(dt, 0)\n    end,\n}\n")
+                .into_function()
+                .expect("compile script entrypoint");
+            let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
             let callback_calls = Rc::clone(&calls);
             let translate = lua
                 .create_function(move |_, (_self, x, y): (mlua::Table, f64, f64)| {
@@ -288,16 +294,9 @@ mod raw_ffi_boundary {
                     Ok(())
                 })
                 .expect("create native Forge-style callback");
-            let object = lua.create_table().expect("create script object");
-            object
+            state
                 .set("translate", translate)
                 .expect("install native object method");
-            lua.sandbox(true).expect("sandbox Luau environment");
-            let entrypoint: Function = lua
-                .load("return {\n    callback = function(self, dt)\n        self:translate(dt, 0)\n    end,\n}\n")
-                .into_function()
-                .expect("compile script entrypoint");
-            let state: mlua::Table = entrypoint.call(()).expect("run script entrypoint");
             let callback: Function = state.get("callback").expect("load nested callback");
             assert_eq!(
                 set_breakpoint(&lua, &entrypoint, 3, true).expect("set source breakpoint"),
@@ -306,8 +305,10 @@ mod raw_ffi_boundary {
 
             let thread = lua.create_thread(callback).expect("create callback thread");
             let context = BreakpointContext::default();
-            let args =
-                MultiValue::from_vec(vec![mlua::Value::Table(object), mlua::Value::Number(1.0)]);
+            let args = MultiValue::from_vec(vec![
+                mlua::Value::Table(state),
+                mlua::Value::Number(1.0),
+            ]);
             let result = resume(&lua, &thread, args, &context).expect("resume callback");
 
             assert!(
