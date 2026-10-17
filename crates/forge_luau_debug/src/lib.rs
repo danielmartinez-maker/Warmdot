@@ -200,13 +200,19 @@ mod raw_ffi_boundary {
             let Some(context) = context else {
                 return;
             };
-            if unsafe { ffi::lua_isyieldable(state) } == 0 {
+            let yieldable = unsafe { ffi::lua_isyieldable(state) };
+            eprintln!("probe: breakpoint yieldable={yieldable}");
+            if yieldable == 0 {
                 context.borrow_mut().failure =
                     Some("Luau breakpoint was reached outside a resumable callback".to_owned());
                 return;
             }
 
             let debug = unsafe { &*debug };
+            eprintln!(
+                "probe: debug frame source={:p} line={}",
+                debug.source, debug.currentline
+            );
             let source = if debug.source.is_null() {
                 String::new()
             } else {
@@ -214,6 +220,7 @@ mod raw_ffi_boundary {
                     .to_string_lossy()
                     .into_owned()
             };
+            eprintln!("probe: debug source copied bytes={}", source.len());
             if debug.currentline <= 0 {
                 context.borrow_mut().failure =
                     Some("Luau breakpoint has no executable source line".to_owned());
