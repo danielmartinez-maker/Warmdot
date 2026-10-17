@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "resource_guid": "00000000-0000-4000-8000-000000000050",
+  "tileset_guid": "00000000-0000-4000-8000-000000000051",
+  "tile_size": [1.0, 1.0],
+  "texture_tile_size": [16, 16],
+  "chunks": [
+    {
+      "coordinate": {"x": -1, "y": 2},
+      "entries": [
+        {
+          "local_index": 1023,
+          "cell": {
+            "tile_index": 7,
+            "flip_x": true,
+            "flip_y": false,
+            "rotation_quarters": 1,
+            "solid": true
+          }
+        }
+      ]
+    }
+  ]
+}

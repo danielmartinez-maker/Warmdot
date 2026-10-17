@@ -1,0 +1,739 @@
+{
+  "schema_version": 1,
+  "resource_guid": "c0110a71-e05e-414c-a813-000000000101",
+  "name": "Colony Settlement",
+  "ui_document": "c0110a71-e05e-414c-a813-000000000022",
+  "dependencies": [
+    "c0110a71-e05e-414c-a813-000000000016",
+    "c0110a71-e05e-414c-a813-000000000017",
+    "c0110a71-e05e-414c-a813-000000000018",
+    "c0110a71-e05e-414c-a813-000000000019",
+    "c0110a71-e05e-414c-a813-000000000020",
+    "c0110a71-e05e-414c-a813-000000000021",
+    "c0110a71-e05e-414c-a813-000000000022"
+  ],
+  "objects": [
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000240",
+      "name": "Colony Hearth",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          2.8,
+          2.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.18,
+          0.72,
+          0.95,
+          1
+        ],
+        "layer": 2,
+        "order": 0,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": null
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000241",
+      "name": "Food Cache 1",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -22,
+          -11
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          2,
+          2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.96,
+          0.5,
+          0.18,
+          1
+        ],
+        "layer": 2,
+        "order": 0,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": null
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000242",
+      "name": "Food Cache 2",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          22,
+          -11
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          2,
+          2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.96,
+          0.5,
+          0.18,
+          1
+        ],
+        "layer": 2,
+        "order": 1,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": null
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000243",
+      "name": "Food Cache 3",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -22,
+          11
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          2,
+          2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.96,
+          0.5,
+          0.18,
+          1
+        ],
+        "layer": 2,
+        "order": 2,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": null
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000244",
+      "name": "Food Cache 4",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          22,
+          11
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": null,
+        "animation_clip": null,
+        "size": [
+          2,
+          2
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          0.96,
+          0.5,
+          0.18,
+          1
+        ],
+        "layer": 2,
+        "order": 3,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": null
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000001",
+      "name": "Worker 1",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0.25,
+          0.15
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 0,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000002",
+      "name": "Worker 2",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -0.25,
+          0.15
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 1,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000003",
+      "name": "Worker 3",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0.25,
+          -0.15
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 2,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000004",
+      "name": "Worker 4",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -0.25,
+          -0.15
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 3,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000005",
+      "name": "Worker 5",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0.55,
+          0
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 4,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000006",
+      "name": "Worker 6",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          -0.55
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 5,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000007",
+      "name": "Worker 7",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          -0.55,
+          0
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 6,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000008",
+      "name": "Worker 8",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          0.55
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": {
+        "asset": "c0110a71-e05e-414c-a813-000000000017",
+        "animation_clip": "c0110a71-e05e-414c-a813-000000000019",
+        "size": [
+          0.8,
+          0.8
+        ],
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "layer": 3,
+        "order": 7,
+        "uv_rect": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000020",
+        "properties": {
+          "phase": 0,
+          "was_firing": false,
+          "speed": 3.2
+        }
+      }
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000245",
+      "name": "Camera",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": null,
+      "camera": {
+        "zoom": [
+          1,
+          1
+        ],
+        "pixels_per_world_unit": 20,
+        "priority": 1,
+        "active": true
+      },
+      "rigid_body": null,
+      "collider": null,
+      "script": null
+    },
+    {
+      "object_guid": "d055c011-0a71-4e5e-bc01-000000000246",
+      "name": "Colony HUD Controller",
+      "parent_guid": null,
+      "prefab_instance": null,
+      "transform": {
+        "translation": [
+          0,
+          0
+        ],
+        "rotation_radians": 0,
+        "scale": [
+          1,
+          1
+        ]
+      },
+      "sprite": null,
+      "camera": null,
+      "rigid_body": null,
+      "collider": null,
+      "script": {
+        "asset": "c0110a71-e05e-414c-a813-000000000021",
+        "properties": {}
+      }
+    }
+  ]
+}

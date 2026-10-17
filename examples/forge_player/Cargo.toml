@@ -1,0 +1,26 @@
+[package]
+name = "forge-player"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Native player for Forge 2D projects"
+
+[dependencies]
+forge_audio = { path = "../../crates/forge_audio" }
+forge_assets = { path = "../../crates/forge_assets" }
+forge_core = { path = "../../crates/forge_core" }
+forge_input = { path = "../../crates/forge_input" }
+forge_scene = { path = "../../crates/forge_scene" }
+forge_tilemap = { path = "../../crates/forge_tilemap" }
+forge_ui = { path = "../../crates/forge_ui" }
+forge_project = { path = "../../crates/forge_project" }
+forge_renderer = { path = "../../crates/forge_renderer" }
+forge_runtime = { path = "../../crates/forge_runtime" }
+forge_scripting = { path = "../../crates/forge_scripting" }
+serde.workspace = true
+serde_json.workspace = true
+winit = "=0.30.13"
+
+[lints]
+workspace = true

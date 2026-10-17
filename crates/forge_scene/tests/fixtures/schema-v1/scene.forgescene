@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "resource_guid": "00000000-0000-4000-8000-000000000020",
+  "name": "Fixture Scene",
+  "dependencies": [
+    "00000000-0000-4000-8000-000000000021"
+  ],
+  "objects": [
+    {
+      "object_guid": "00000000-0000-4000-8000-000000000022",
+      "name": "Player",
+      "script": {
+        "asset": "00000000-0000-4000-8000-000000000021",
+        "properties": {
+          "speed": 4,
+          "label": "runner"
+        }
+      }
+    }
+  ]
+}

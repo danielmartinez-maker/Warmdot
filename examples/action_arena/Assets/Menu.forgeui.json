@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "resource_guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030006",
+  "name": "Action Arena Menu",
+  "dependencies": [],
+  "root_layout": {
+    "direction": "free"
+  },
+  "elements": [
+    {
+      "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030020",
+      "widget": {
+        "type": "panel"
+      },
+      "layout": {
+        "anchor_min": [
+          0.25,
+          0.2
+        ],
+        "anchor_max": [
+          0.75,
+          0.8
+        ],
+        "preferred_size": [
+          0,
+          0
+        ],
+        "direction": "vertical",
+        "spacing": 16,
+        "padding": 28
+      },
+      "style": {
+        "background_color": [
+          0.035,
+          0.055,
+          0.09,
+          0.94
+        ]
+      },
+      "children": [
+        {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030021",
+          "widget": {
+            "type": "text",
+            "text": "FORGE 2D"
+          },
+          "layout": {
+            "preferred_size": [
+              260,
+              56
+            ],
+            "min_size": [
+              180,
+              48
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.95,
+              0.78,
+              0.34,
+              1
+            ],
+            "font_scale": 4
+          },
+          "children": []
+        },
+        {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030022",
+          "widget": {
+            "type": "text",
+            "text": "ACTION ARENA"
+          },
+          "layout": {
+            "preferred_size": [
+              260,
+              36
+            ],
+            "min_size": [
+              180,
+              32
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        },
+        {
+          "id": "a1d999a0-d8d1-4a1e-a700-4c49ed030023",
+          "widget": {
+            "type": "button",
+            "label": "PLAY",
+            "event": "arena.play"
+          },
+          "layout": {
+            "preferred_size": [
+              180,
+              48
+            ],
+            "min_size": [
+              180,
+              48
+            ]
+          },
+          "style": {
+            "text_color": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "hover_color": [
+              0.25,
+              0.4,
+              0.68,
+              1
+            ],
+            "focus_color": [
+              0.18,
+              0.32,
+              0.55,
+              1
+            ],
+            "font_scale": 3
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}

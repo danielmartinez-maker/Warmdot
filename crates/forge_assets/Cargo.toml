@@ -1,0 +1,18 @@
+[package]
+name = "forge_assets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Project asset catalog, PNG decoding, and 2D animation data"
+
+[dependencies]
+forge_core = { path = "../forge_core" }
+forge_scene = { path = "../forge_scene" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde.workspace = true
+serde_json.workspace = true
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "resource_guid": "00000000-0000-4000-8000-000000000040",
+  "name": "Legacy Scene",
+  "objects": [
+    {
+      "object_guid": "00000000-0000-4000-8000-000000000041",
+      "name": "Legacy Object"
+    }
+  ]
+}

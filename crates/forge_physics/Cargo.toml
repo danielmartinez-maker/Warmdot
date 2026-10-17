@@ -1,0 +1,15 @@
+[package]
+name = "forge_physics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Forge-owned 2D rigid-body and collision-event adapter"
+
+[dependencies]
+forge_core = { path = "../forge_core" }
+forge_world = { path = "../forge_world" }
+rapier2d.workspace = true
+
+[lints]
+workspace = true

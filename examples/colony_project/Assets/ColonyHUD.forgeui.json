@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "resource_guid": "c0110a71-e05e-414c-a813-000000000022",
+  "name": "Colony HUD",
+  "dependencies": [],
+  "root_layout": {
+    "direction": "free",
+    "padding": 0,
+    "spacing": 0
+  },
+  "elements": [
+    {
+      "id": "e055c011-0a71-4e5e-bc01-000000000000",
+      "widget": {
+        "type": "panel"
+      },
+      "layout": {
+        "anchor_min": [
+          0,
+          0
+        ],
+        "anchor_max": [
+          1,
+          0
+        ],
+        "offset_min": [
+          16,
+          16
+        ],
+        "offset_max": [
+          -16,
+          0
+        ],
+        "min_size": [
+          0,
+          72
+        ],
+        "preferred_size": [
+          0,
+          72
+        ],
+        "direction": "horizontal",
+        "spacing": 16,
+        "padding": 12,
+        "grow": 0
+      },
+      "style": {
+        "background_color": [
+          0.04,
+          0.06,
+          0.1,
+          0.88
+        ]
+      },
+      "children": [
+        {
+          "id": "e055c011-0a71-4e5e-bc01-000000000001",
+          "widget": {
+            "type": "text",
+            "text": "F / RMB QUEUES WORK | EDITOR: PAUSE / STEP"
+          },
+          "layout": {
+            "preferred_size": [
+              360,
+              32
+            ],
+            "min_size": [
+              220,
+              28
+            ],
+            "grow": 1
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 1.4
+          },
+          "children": []
+        },
+        {
+          "id": "e055c011-0a71-4e5e-bc01-000000000002",
+          "widget": {
+            "type": "text",
+            "text": "FOOD 0"
+          },
+          "layout": {
+            "preferred_size": [
+              120,
+              32
+            ],
+            "min_size": [
+              140,
+              28
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        },
+        {
+          "id": "e055c011-0a71-4e5e-bc01-000000000003",
+          "widget": {
+            "type": "text",
+            "text": "JOBS 0"
+          },
+          "layout": {
+            "preferred_size": [
+              120,
+              32
+            ],
+            "min_size": [
+              120,
+              28
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        },
+        {
+          "id": "e055c011-0a71-4e5e-bc01-000000000004",
+          "widget": {
+            "type": "text",
+            "text": "ACTIVE 8"
+          },
+          "layout": {
+            "preferred_size": [
+              120,
+              32
+            ],
+            "min_size": [
+              100,
+              28
+            ]
+          },
+          "style": {
+            "text_color": [
+              0.92,
+              0.96,
+              1,
+              1
+            ],
+            "font_scale": 2
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}

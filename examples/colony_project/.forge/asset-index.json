@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000018",
+      "relative_path": "Assets/ColonyCharacters.forgeatlas.json",
+      "kind": "sprite_sheet",
+      "source_bytes": 852,
+      "fingerprint": 10479917760405272089
+    },
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000017",
+      "relative_path": "Assets/ColonyCharacters.png",
+      "kind": "png",
+      "source_bytes": 8292,
+      "fingerprint": 5652162299514246425
+    },
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000021",
+      "relative_path": "Assets/ColonyController.luau",
+      "kind": "script",
+      "source_bytes": 1755,
+      "fingerprint": 3199493280847292559
+    },
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000022",
+      "relative_path": "Assets/ColonyHUD.forgeui.json",
+      "kind": "ui",
+      "source_bytes": 3327,
+      "fingerprint": 13970048494631527675
+    },
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000016",
+      "relative_path": "Assets/ColonyTiles.png",
+      "kind": "png",
+      "source_bytes": 4180,
+      "fingerprint": 7963806878950422882
+    },
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000020",
+      "relative_path": "Assets/Worker.luau",
+      "kind": "script",
+      "source_bytes": 5643,
+      "fingerprint": 17179472536188267017
+    },
+    {
+      "guid": "c0110a71-e05e-414c-a813-000000000019",
+      "relative_path": "Assets/WorkerWalk.forgeanim.json",
+      "kind": "animation_clip",
+      "source_bytes": 433,
+      "fingerprint": 15453807760052047952
+    }
+  ]
+}

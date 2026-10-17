@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "resource_guid": "529bb9ad-47b8-4992-874e-055c7fbf0001",
+  "name": "Action Arena",
+  "default_scene": "Scenes/Main.forgescene",
+  "default_scene_guid": "529bb9ad-47b8-4992-874e-055c7fbf0002"
+}

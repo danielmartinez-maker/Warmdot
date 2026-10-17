@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sprite_sheet": "f2d2a001-240f-4bad-a341-d8cae3f0b117",
+  "looping": true,
+  "frames": [
+    {
+      "sprite_frame": "player-1",
+      "duration_seconds": 0.12
+    },
+    {
+      "sprite_frame": "player-2",
+      "duration_seconds": 0.12
+    },
+    {
+      "sprite_frame": "player-3",
+      "duration_seconds": 0.12
+    },
+    {
+      "sprite_frame": "player-4",
+      "duration_seconds": 0.12
+    }
+  ]
+}

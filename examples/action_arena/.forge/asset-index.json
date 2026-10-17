@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030007",
+      "relative_path": "Assets/ArenaTiles.png",
+      "kind": "png",
+      "source_bytes": 2132,
+      "fingerprint": 15598352331024555946
+    },
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030004",
+      "relative_path": "Assets/Audio/arena-music.wav",
+      "kind": "audio",
+      "source_bytes": 176444,
+      "fingerprint": 10727882355876052417
+    },
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030003",
+      "relative_path": "Assets/Audio/click.wav",
+      "kind": "audio",
+      "source_bytes": 7982,
+      "fingerprint": 13351653011714270562
+    },
+    {
+      "guid": "f2d2a001-240f-4bad-a341-d8cae3f0b117",
+      "relative_path": "Assets/CharacterSprites.forgeatlas.json",
+      "kind": "sprite_sheet",
+      "source_bytes": 1607,
+      "fingerprint": 6891911639630179647
+    },
+    {
+      "guid": "f2d2a001-240f-4bad-a341-d8cae3f0b116",
+      "relative_path": "Assets/CharacterSprites.png",
+      "kind": "png",
+      "source_bytes": 8292,
+      "fingerprint": 5652162299514246425
+    },
+    {
+      "guid": "f2d2a001-240f-4bad-a341-d8cae3f0b119",
+      "relative_path": "Assets/EnemyWalk.forgeanim.json",
+      "kind": "animation_clip",
+      "source_bytes": 429,
+      "fingerprint": 5114261640439070674
+    },
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030005",
+      "relative_path": "Assets/MainHUD.forgeui.json",
+      "kind": "ui",
+      "source_bytes": 3582,
+      "fingerprint": 15185048418450257463
+    },
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030006",
+      "relative_path": "Assets/Menu.forgeui.json",
+      "kind": "ui",
+      "source_bytes": 2757,
+      "fingerprint": 4902098051218908390
+    },
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030001",
+      "relative_path": "Assets/PlayerController.luau",
+      "kind": "script",
+      "source_bytes": 5297,
+      "fingerprint": 380150269427426377
+    },
+    {
+      "guid": "f2d2a001-240f-4bad-a341-d8cae3f0b118",
+      "relative_path": "Assets/PlayerWalk.forgeanim.json",
+      "kind": "animation_clip",
+      "source_bytes": 433,
+      "fingerprint": 5645794311614455926
+    },
+    {
+      "guid": "a1d999a0-d8d1-4a1e-a700-4c49ed030002",
+      "relative_path": "Assets/UIController.luau",
+      "kind": "script",
+      "source_bytes": 2067,
+      "fingerprint": 1349002644584740889
+    }
+  ]
+}

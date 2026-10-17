@@ -1,0 +1,16 @@
+[package]
+name = "forge_scene"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Versioned text scenes and validated runtime compilation"
+
+[dependencies]
+forge_core = { path = "../forge_core" }
+forge_world = { path = "../forge_world" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
