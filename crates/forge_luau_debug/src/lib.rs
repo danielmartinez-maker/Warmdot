@@ -297,7 +297,7 @@ mod raw_ffi_boundary {
             let probe = DEBUGBREAK_PROBE.with(|probe| probe.borrow().clone());
 
             assert!(
-                matches!(result, ResumeResult::Paused(hit) if hit.line == 2),
+                matches!(&result, ResumeResult::Paused(hit) if hit.line == 2),
                 "result={result:?}; probe={probe:?}"
             );
         }
