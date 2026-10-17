@@ -896,6 +896,4 @@ mod tests {
                 .is_some_and(|state| !state.pressed),
             "the tap must finish in the released state"
         );
-    }
-
-}
+    }}
