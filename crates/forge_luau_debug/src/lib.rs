@@ -151,6 +151,7 @@ mod raw_ffi_boundary {
             })?;
         }
 
+        eprintln!("resume: after lua_resumex raw status={status}");
         let mut outcome = context.outcome.borrow_mut();
         if let Some(message) = outcome.failure.take() {
             return Ok(ResumeResult::Failed(message));
@@ -215,9 +216,11 @@ mod raw_ffi_boundary {
                 source,
                 line: debug.currentline as u32,
             });
+            eprintln!("debugbreak: before ffi::lua_break");
             unsafe {
                 ffi::lua_break(state);
             }
+            eprintln!("debugbreak: after ffi::lua_break");
         }));
     }
 
@@ -260,6 +263,7 @@ mod raw_ffi_boundary {
             let context = BreakpointContext::default();
             let result =
                 resume(&lua, &thread, MultiValue::default(), &context).expect("resume callback");
+            eprintln!("test: resume returned {result:?}");
             let counter_value: u32 = counter.get("value").expect("read callback counter");
 
             assert!(
