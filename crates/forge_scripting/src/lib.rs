@@ -1896,7 +1896,10 @@ mod tests {
             None => panic!(
                 "nested fixed update should pause at line 3; diagnostics: {:?}; x: {}",
                 host.take_diagnostics(),
-                world.transform(entity).expect("object transform").translation[0]
+                world
+                    .transform(entity)
+                    .expect("object transform")
+                    .translation[0]
             ),
         };
         assert_eq!(hit.object_guid, object_guid);
