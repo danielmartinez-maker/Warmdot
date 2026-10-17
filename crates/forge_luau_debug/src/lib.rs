@@ -24,6 +24,7 @@ mod raw_ffi_boundary {
     struct BreakpointOutcome {
         hit: Option<BreakpointHit>,
         failure: Option<String>,
+        resume_skip: Option<BreakpointHit>,
     }
 
     type SharedOutcome = Rc<RefCell<BreakpointOutcome>>;
@@ -151,7 +152,6 @@ mod raw_ffi_boundary {
             })?;
         }
 
-        eprintln!("resume: after lua_resumex raw status={status}");
         let mut outcome = context.outcome.borrow_mut();
         if let Some(message) = outcome.failure.take() {
             return Ok(ResumeResult::Failed(message));
@@ -212,15 +212,28 @@ mod raw_ffi_boundary {
                     Some("Luau breakpoint has no executable source line".to_owned());
                 return;
             }
-            context.borrow_mut().hit = Some(BreakpointHit {
+            let hit = BreakpointHit {
                 source,
                 line: debug.currentline as u32,
-            });
-            eprintln!("debugbreak: before ffi::lua_break");
+            };
+            let skip_resumed_breakpoint = {
+                let mut outcome = context.borrow_mut();
+                if outcome.resume_skip.as_ref() == Some(&hit) {
+                    outcome.resume_skip = None;
+                    true
+                } else {
+                    outcome.hit = Some(hit.clone());
+                    false
+                }
+            };
+            if skip_resumed_breakpoint {
+                return;
+            }
+
             unsafe {
                 ffi::lua_break(state);
             }
-            eprintln!("debugbreak: after ffi::lua_break");
+            context.borrow_mut().resume_skip = Some(hit);
         }));
     }
 
@@ -263,7 +276,6 @@ mod raw_ffi_boundary {
             let context = BreakpointContext::default();
             let result =
                 resume(&lua, &thread, MultiValue::default(), &context).expect("resume callback");
-            eprintln!("test: resume returned {result:?}");
             let counter_value: u32 = counter.get("value").expect("read callback counter");
 
             assert!(
@@ -273,6 +285,16 @@ mod raw_ffi_boundary {
             assert_eq!(
                 counter_value, 0,
                 "callback side effect happened before pause"
+            );
+
+            assert_eq!(
+                resume(&lua, &thread, MultiValue::default(), &context)
+                    .expect("continue paused callback"),
+                ResumeResult::Complete
+            );
+            assert_eq!(
+                counter.get::<u32>("value").expect("read continued callback counter"),
+                1
             );
         }
     }
