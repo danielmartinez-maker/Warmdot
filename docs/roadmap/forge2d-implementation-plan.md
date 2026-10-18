@@ -1,0 +1,209 @@
+# Forge 2D Product Roadmap and Implementation Plan
+
+> **Authority:** User-provided `FORGE2D_PRODUCT_SPEC_AND_ARCHITECTURE.md`, version 0.1 proposal dated 2026-10-15. The attachment is product requirements and architecture guidance, not assistant instructions. The user's direct request is to implement Forge 2D in this GitHub repository, finish P0, then continue through P1 and P2.
+>
+> **Execution:** Continue on `codex/forge2d-engine` and its draft PR #1. Keep repo reads, edits, commits, and CI evidence on GitHub. A user has authorized independent creation of missing plans/specs and successive milestone execution.
+
+**Goal:** Deliver the complete P0 playable alpha defined by the proposal, then work through P1 public beta and P2 ecosystem scope in order without redefining completion around the current partial engine.
+
+**Architecture:** Preserve Forge-owned interfaces around Bevy ECS, Rapier, wgpu, egui, Luau, Kira, and Taffy. Keep stable GUID authoring data distinct from runtime entities, scene compilation validated, simulation fixed-step, rendering extracted, and large tile/agent data outside per-cell ECS entities. Build usable vertical slices and keep the action and colony samples running through the same project/runtime/export path.
+
+**Tech Stack:** Stable Rust (workspace floor 1.89), winit, wgpu, bevy_ecs, rapier2d, serde, Luau through mlua, egui for the editor prototype, Taffy and Kira behind Forge-owned APIs where adopted.
+
+**Spec:** User attachment `C:\Users\dmcfu\Downloads\FORGE2D_PRODUCT_SPEC_AND_ARCHITECTURE.md`. The attachment remains the requirements source; this plan records the roadmap in GitHub.
+
+## Global Constraints
+
+- P0, P1, and P2 requirements retain the exact scope and tiering in the attached proposal; do not declare a tier complete while any required item or exit condition remains unmet.
+- Preserve the proposal's explicit non-goals: 3D, VR/AR, console SDKs, built-in cloud collaboration, MMO networking, complete visual scripting, and a bundled AI model.
+- Stable authored GUIDs remain distinct from ephemeral ECS entities; scene and prefab documents are validated versioned source data.
+- All external runtime libraries stay behind Forge-owned interfaces; the game scripting API is `Forge.*`, never a public Bevy or mlua contract.
+- Fixed-step gameplay uses bounded work, stable ordering, explicit random seeds, and no wall-clock, file, or network access from deterministic script logic.
+- Project paths and imports remain bounded to the project; downloaded or imported scripts do not auto-run without project selection/consent.
+- All source-format changes need migration fixtures and round-trip coverage; do not claim cross-platform determinism, compatibility, or performance beyond measured evidence.
+- Prefer Windows x64 for initial release while keeping platform adapters portable; keep the main branch untouched and work through the existing GitHub PR branch.
+
+## Review Focus
+
+- Missing or cyclic assets, prefabs, and scene references produce actionable diagnostics and leave the last-good runtime state intact.
+- Script syntax/runtime errors, runaway instruction use, memory exhaustion, hot reload, and scene replacement must not crash the editor or corrupt simulation state.
+- Large or negative-coordinate tilemaps and agents must not create one ECS entity per tile or require whole-world rebuilds.
+- Input focus loss, pause/step, scene transition, and hot reload must have explicit state-reset semantics.
+- Standalone exports must include only required runtime resources and launch from a clean Windows environment without the editor installed.
+
+---
+
+## Current Evidence Snapshot
+
+Repository: `danielmartinez-maker/Warmdot`; branch `codex/forge2d-engine`; PR #1 remains draft and unmerged. Implementation commit `1dc5cbf43ab48f0ea8bc0f268305b9ded015d5c4` passed both Windows jobs in [run #612](https://github.com/danielmartinez-maker/Warmdot/actions/runs/39076711438). The following roadmap evidence commit `605b57331d92d5fa60830a08159d275254031687` also passed both Windows jobs in [run #613](https://github.com/danielmartinez-maker/Warmdot/actions/runs/39078601635). The check job passed formatting, workspace type-check, focused Luau and Forge scripting breakpoint probes, and the full workspace test suite. The package job built the release player, editor, and renderer benchmark; validated and exported Action Arena and Colony; checked license/package contents; uploaded all artifacts; and downloaded and revalidated both player packages.
+Run #614 at PR head `4a2efc0f1b650d7d7aefc4f09ca3f2c9c63c330a` also completed both Windows jobs successfully: formatting, workspace type-check, focused Luau and Forge breakpoint probes, all workspace tests, release builds, both sample validations/exports, license and package checks, artifact uploads, and post-upload validation.
+
+The Luau breakpoint crash was fixed by passing the authored script path to breakpoint context rather than treating `lua_Debug.source` as a NUL-terminated pointer. Run #612 also closes a separate input edge regression found by focused test: a press and release drained in the same fixed tick could otherwise erase a quick action tap. `ActionState.just_pressed` now preserves that edge for the tick and `Forge.Input.is_just_pressed(action)` exposes it to Luau. The samples use the new action-edge API. The Arena and Colony package validations also caught stale asset-index records; their source byte counts and fingerprints were corrected before run #612.
+
+Fresh run #612 Windows artifacts on the implementation commit: Action Arena player (5,685,316 bytes; artifact 12117960925; GitHub SHA-256 `fd4249829172178d80d70ed542775163a1105c61fab7644c1ac4900656bb46ba`), Colony player (5,514,778 bytes; artifact 12116949616; SHA-256 `7eb7a8786a1e3e37a95237ce95d2d3f5f2302dd8cd31bdd975382a8c41d4d40c`), and desktop verification tools (10,884,046 bytes; artifact 12117337618; SHA-256 `50108f5b0a52e61ebd0bc24ad57eaa7737b4d702fa3332886a17ac6a5fe5a86d`). CI validates both uploaded player packages after download. Run #613 uploaded fresh artifacts for its tested PR head: Action Arena (5,685,316 bytes; artifact 12118537541; SHA-256 `98eeb6c8e0b5054b0e7ef6ee947712f87082ff332dcb5029918bf9db963b8258`), Colony (5,514,778 bytes; artifact 12118830794; SHA-256 `8bdbc2b6ec9d4aec071dd28f22450d0b213c1ddf8a8aef9bc6618d866c9c0d95`), and desktop verification tools (10,884,049 bytes; artifact 12118721363; SHA-256 `223e25c975381a1e45c422d433fc135fbd3b16e3d63fcae40dec667a4948cd83`). Both player packages passed post-upload validation. Run #614 uploaded current-head Action Arena (5,685,316 bytes; artifact 12118494760; SHA-256 `823b23dd872ee3029c511356fea60ad4f7e97e93dafdba65ce6ce3d0bea4be09`), Colony (5,514,778 bytes; artifact 12119445021; SHA-256 `614214bdeb3f0b6a0eb2e21dcad54644531c007cfe940b65d0b9a98f875f5500`), and desktop verification tools (10,884,048 bytes; artifact 12118514696; SHA-256 `2f8ff646213021310567f9b73186a1e3d64d911031f2c2ad276633b13e76c37f`). Their downloaded ZIP hashes matched the GitHub artifact digests. The renderer benchmark remains in [docs/benchmarks/forge2d-renderer-run550-2026-10-17.json](../benchmarks/forge2d-renderer-run550-2026-10-17.json): 10,000 sprites, 120 warm-up frames, 600 samples at 1280x720 on an NVIDIA GeForce RTX 4050 Laptop GPU (DiscreteGpu, Vulkan, driver 610.78); CPU p50/p95/p99 were 6.807/7.558/9.118 ms; GPU completion time is unmeasured.
+
+Native acceptance remains partial and is labeled by artifact age. On the user-approved run #600 packages, standalone Action Arena rendered its board/HUD; MENU → PLAY returned to gameplay and right-click produced a visible projectile. The editor preview rendered the Action Arena scene, responded to Play/Pause/Step/Stop, hit a breakpoint at `Assets/PlayerController.luau:62`, and showed 448 occupied tile cells. The Colony editor preview rendered workers, FOOD rose from 0 to 8, pause/step/stop worked, and its tilemap showed 480 occupied cells. A temporary invalid-syntax edit to the run #600 PlayerController was reported in the editor console while the live arena remained rendered; the original 5,297-character script was restored and saved. These are run #600 observations, not current-head acceptance. On run #614, Computer Use attempted to launch the current-head editor, Action Arena player, and Colony player after user approval, but none exposed a targetable window; no current-head native behavior was verified.
+
+P0 remains open: held-key movement; current-head editor focus separation and compatible live property/source/PNG updates; a current-head last-good recovery pass; completing the first-game tutorial through the editor and exported player; launching the Colony standalone player; audible acceptance of sound effects/music; and the complete P0 audit. The Computer Use input surface sends key taps/chords but cannot sustain a held WASD key, so movement remains unverified rather than treated as a game defect. Screenshot/input control does not certify audible output. P1/P2 have not started and remain gated on P0.
+
+### Present in the branch
+
+- Rust workspace, GUIDs, fixed-step clock, input actions, validated project/scene data, Bevy ECS abstraction, Rapier physics, and the wgpu sprite renderer.
+- PNG, sprite-sheet, animation-clip, prefab, and bounded Luau asset loading; stable asset GUIDs and deterministic resource validation.
+- Native editor project settings, bounded external file import, stable-GUID asset browser, hierarchy, parent transforms, reusable components, versioned prefab instances with granular overrides, viewport selection, transform/anchor gizmos, snapping, render-layer visibility, and history-backed edits.
+- Sparse 32x32 tilemaps with negative-coordinate mapping, paint/erase, connected fill capped at 65,536 cells, bounded undo/redo, and a collision-only brush.
+- Player play/pause/step APIs, standalone project export and launchers, plus editor runtime preview with GUID-based rendering and selection.
+- Luau VM isolation with source and per-VM memory caps, fixed-tick Forge APIs, bounded typed events, compatible scalar state migration, resumable line breakpoints, error isolation, and last-good hot reload.
+- Kira-backed audio commands, scene-transition requests, a retained game UI runtime, UI rendering/input, and the Action Arena HUD/menu/audio/scene sample. Editor preview handles UI pointer/keyboard input, scripted transitions, and audio playback.
+- The player `--validate` command checks project scenes/assets without modifying the project or executing Luau top-level code; the updated editor-authored Action Arena passed validation and export in run `38934893620`. The player maps WASD/F/right-click to actions 1/2/3, and run `38935389248` passed its input-to-movement and fire-to-SFX integration test. The Windows package workflow asserts that the exported project includes the tilemap, tileset, both UI documents, both scripts, and both audio files.
+- The editor-authored Action Arena now contains the full playable loop in one project: a camera and tile room, animated player and enemies, movement, projectile collisions, score/lives HUD, menu, audio, scene transitions, and restart flow. Windows runtime tests cover movement, fire audio, projectile scoring, enemy contact, and HUD updates.
+- The editor-authored colony project includes a chunked negative-coordinate tilemap, eight animated workers, four resource nodes, bounded queues, deterministic BFS routes, and an authored HUD. Its Windows runtime test verifies worker delivery, script health, animation loading, and obstacle avoidance.
+- Run [38948522741](https://github.com/danielmartinez-maker/Warmdot/actions/runs/38948522741) validates and exports both projects, checks required files and license notices, and uploads separate Windows artifacts. Generic standalone projects receive WASD actions 1/2 and F/right-click action 3.
+
+### Confirmed gaps or partial coverage
+
+- Native Computer Use has covered the run #600 editor/player partially, but the current-head walkthrough remains open for focus separation, live changes, last-good behavior, held-key movement, audio, and scene transitions. The tutorial walkthrough/export and standalone Colony player also remain open.
+- The tutorial exists and is offline, but it has not been completed through the editor and exported player.
+- The Action Arena's authored project files persist, while runtime score and lives are session data that reset when the Main scene is loaded again.
+- The colony Rust sample still provides the larger 64-worker stress run with runtime obstacle editing, time controls, and profiling; the separate saved colony project is the editor/export vertical slice.
+- Tilemaps are chunked in storage, but rendering/collision still expand per tile; incremental large-map rendering/collision and generalized navigation remain open.
+- A desktop GPU benchmark is now recorded in `docs/benchmarks/forge2d-renderer-run550-2026-10-17.json`; it reports CPU submission timing and explicitly does not claim GPU completion timing.
+
+
+---
+
+## P0 — Minimal Playable Editor (active)
+
+Work each group as a reviewable vertical slice; update this plan with exact commit and CI evidence after each group.
+
+### P0.1 — Authoring model and editor workflow
+
+- [x] Finish project settings and the asset import workflow. The editor edits the project name/default scene, imports external files through bounded drag/drop, lists stable-GUID assets, and validates imported resources.
+- [x] Add object hierarchy/parent transforms, reusable components, versioned prefab assets/instances, and stable component/property override identifiers. Parent cycles and missing references produce diagnostics; prefab refresh preserves granular local overrides.
+- [x] Complete viewport selection, transform/anchor gizmos, snapping, and selectable/rendered layers. Move, rotate, scale, and anchor edits commit through scene history; editor-only layer visibility is selectable.
+- [x] Add bounded connected-region tile fill and an explicit collision-only brush. Each edit is recorded as an undoable stroke.
+- [x] Keep editor changes on the validated command/history model with bounded undo/redo, saved-state markers, and actionable save/open errors.
+
+Windows formatting, workspace type-check, and workspace tests passed on commit `aa6173577d4116defac860a406ea1e2ab8a04ea4` (run `38873215811`). This verifies the authoring implementation; a manual desktop-editor session is still required for visual acceptance.
+
+**Exit:** The authoring workflow and data model are implemented and pass the Windows workspace checks. A user can create/open/save a project, import a sprite, compose/reuse a prefab, author a scene and tilemap, undo edits, and reopen saved data.
+
+### P0.2 — Luau game scripting
+
+- [x] Register bounded .luau assets and attach scripts to authored objects through scene dependencies.
+- [x] Add a sandboxed Luau host with on_start/on_fixed_update, authored boolean/number/string properties, numeric input actions, and position/translation APIs.
+- [x] Bound source size (1 MiB), VM memory (4 MiB), scene instances (64), and callback interrupt checkpoints (20,000); isolate errors with source path, object GUID, and tick.
+- [x] Support transactional source compilation reloads and retain the last working VM when replacement compilation fails.
+- [x] Add an editor runtime script diagnostics console and fixed-tick pause/step controls.
+- [x] Add script-line breakpoints with resumable callback execution and a breakpoint hit result. `ScriptHost` retains the loaded source chunk so breakpoints apply to nested callbacks; the runtime resumes the paused call at the same fixed tick and reports object, asset, source, line, and tick.
+- [x] Broadcast bounded scalar events on the next fixed tick with deterministic delivery ordering.
+- [x] Migrate same-name boolean, integer, number, and string state fields on successful reload; preserve on_start completion and diagnose fields that reset.
+
+The existing suite covers asset GUID stability/reload, old-scene compatibility and script round-tripping, property/input updates, runaway isolation, last-good source reload, live property updates without VM recompilation, state migration, typed-event ordering/bounds, and the integrated breakpoint/editor API. Windows formatting, workspace type-checking, and workspace tests passed on `faeaa9679bfd2d497f6acddbf943fd37b73cd895` (run `38879901911`).
+
+**Exit:** The action sample's player behavior is authored in Luau, edits are reflected safely in play mode when compatible, and invalid/runaway scripts report diagnostics without terminating the editor or last-good game state.
+
+### P0.3 — Play-in-editor and live updates
+
+- [x] Embed a runtime preview in the editor with play, pause, one-step, and stop/reset controls.
+- [x] Keep editor selection available while playing and resolve rendered runtime sprites by stable authored GUID.
+- [x] Apply compatible script-property, PNG texture, and Luau source updates transactionally; incompatible property/source changes retain their prior working value/VM and report diagnostics.
+- [x] Define pause accumulator reset, stop/discard behavior, and prevent scene switching during a preview.
+- [x] Add source-line breakpoint Set/Remove controls, accepted-line feedback, hit metadata, and Continue in the editor preview.
+**Exit:** A project can run inside the editor; compatible property/asset/script changes visibly update the live game, while rejected updates retain the last-good state. Code and CI are verified; player-facing desktop acceptance remains open.
+
+### P0.4 — Audio, transitions, and game UI
+
+- [x] Add a Forge-owned playback API and Kira adapter for sound effects, music/streaming, and sound buses.
+- [x] Add authored scene-transition requests and player/editor scene lifecycle integration.
+- [x] Add a separate retained-mode game UI tree with basic layout, image/text/button, focus, and input; keep egui editor UI separate.
+- [x] Add runtime UI rendering and sample HUD/menu interaction.
+
+Implementation and Windows format/type-check/test evidence: commit `99d3bf7f024bb425ee17c48c072f2112fbd92836`, runs `38917440379` and `38917444348`. The P0.4 exit remains open until the standalone action sample is exercised in a native desktop session; P0.3 editor-preview desktop acceptance also remains open.
+
+**Exit:** Pending player-facing desktop acceptance of responsive HUD/menu input, sound effects/music, and transitions between authored scenes in the standalone player.
+
+### P0.5 — Runtime diagnostics and dependable shipping
+
+- [x] Add structured runtime/editor logging, a visible error console, and a profiler overlay for frame percentiles, system/script cost, draw calls, and entity/chunk counts. Windows run `38931980946` passed the workspace tests on the diagnostics implementation.
+- [x] Make the Windows player/export path reproducible from clean CI and document its runtime/license contents. Run `38931980946` built, validated, exported, checked, generated third-party license notices, and uploaded the Action Arena package. Run `38935389248` also built, validated, and exported the updated editor project, passed the expanded package-content checks, and uploaded the artifact. Run `38938549080` passed all source checks and the full Windows release/export/package workflow at the latest source head.
+- [x] Add import/scene validation commands or editor equivalents with deterministic diagnostic output. `forge-player --validate` passed against Action Arena in runs `38931980946` and `38934893620`.
+- [x] Add schema migration fixtures and serialization round trips for projects, scenes, prefabs, scripts, and tilemaps. Workspace tests passed in run `38931980946`.
+- [x] Add an offline first-game tutorial in `docs/tutorials/first-playable-game.md`; its project assets and instructions are local and it does not require online services.
+
+**Exit:** Still open. Structured logs, profiler data, migration fixtures, and license notices are implemented and have Windows CI evidence. Run `38948522741` passed both project validations/exports, required package-content checks, license generation, and both artifact uploads at the latest source head. Native desktop acceptance and a player-facing tutorial completion pass remain pending.
+
+### P0.6 — Two real sample vertical slices and release gate
+
+- [x] Complete one editor-authored Action Arena with enemy behavior, animations, collisions, camera, tile room, HUD, audio, transitions, saveable project data, projectiles, scoring, lives, and restart. The project, scenes, tilemap, scripts, UI, and assets are authored files; Windows runtime tests cover movement, projectile scoring, enemy contact/life updates, and the HUD. Run `38948522741` validates and exports the complete project.
+- [x] Complete the colony simulation behaviors: walkable/unwalkable tile editing, resource jobs, queues/navigation, time controls, and system profiling. The native 64-worker sample retains runtime obstacle editing and profiling. The editor-authored project adds deterministic worker routing, resource deliveries, animations, an authored HUD, and a standalone export. Run `38948522741` passed the runtime integration test and both project exports.
+- [ ] Verify a newcomer can build and change the complete action game through the editor without Rust edits; complete the tutorial walkthrough.
+- [x] Run the renderer benchmark on a desktop GPU and record hardware/workload. Run `38985697339` produced the 10,000-sprite, 120-warm-up, 600-sample report at 1280x720 on an NVIDIA GeForce RTX 4050 Laptop GPU (Vulkan, driver 610.78); CPU p50/p95/p99: 6.807/7.558/9.118 ms. GPU completion was not measured. Raw samples and metadata are in `docs/benchmarks/forge2d-renderer-run550-2026-10-17.json`.
+- [ ] Run the P0 acceptance audit against every P0 bullet and both sample exits; keep unmeasured performance claims out.
+
+**P0 completion gate:** Every P0 item above must have current evidence, Windows CI must be green, both vertical slices must run through editor and standalone export, and remaining gaps must be explicitly zero. This gate is not met: the complete native editor/player walkthrough, tutorial completion/export pass, audible acceptance, and full acceptance audit remain open.
+
+## P1 — Differentiated Public Beta (start only after P0 gate)
+
+- [ ] Multi-layer chunked maps, tile rules/autotiling, streamable large worlds, and incremental render/collision/navigation updates.
+- [ ] Navigation grids, async pathfinding, deterministic result commit ordering, job system/scheduler, and agent utilities.
+- [ ] Event/timeline animation, hitboxes, particles, and 2D lights/shadows.
+- [ ] Responsive game UI constraints, data binding, inventory and list widgets.
+- [ ] Asset dependency graph/invalidation, prefab overrides, hot-reload compatibility rules, and migration tooling.
+- [ ] Deterministic simulation playback with seeded inputs, snapshots, replay, state inspection, and temporal diagnostics under the proposal's same-build contract.
+- [ ] Windows, macOS, and Linux export; document a Web build proof-of-concept only if the dependency graph supports it.
+- [ ] Versioned plugin API baseline, command-line import/export/test, full developer documentation, and example projects.
+
+**P1 completion gate:** All public-beta features work in both sample projects, CI/export matrix is reproducible, migration/replay contracts are verified, and benchmark reports include hardware and workload.
+
+---
+
+## P2 — Later Ecosystem (start only after P1 gate)
+
+- [ ] Visual scripting and visual logic graph.
+- [ ] Localized text/workflow and higher-end particles/shaders.
+- [ ] Navigation across floors/portals and specialized automation/economy authoring tools.
+- [ ] Full debugger and opt-in AI-assisted editor actions with explicit project-scoped capabilities.
+- [ ] Mobile export, optional multiplayer primitives, and a community asset repository.
+
+**P2 completion gate:** Each item has a documented compatibility, capability, migration, and packaging contract; opt-in AI and community assets remain offline/safe by default.
+
+---
+
+- 2026-10-16: Completed P0.4 implementation on `99d3bf7f024bb425ee17c48c072f2112fbd92836`: Kira audio, authored scene transitions, retained game UI, Action Arena HUD/menu/audio resources, and editor-preview UI/audio/transition handling. Windows runs `38917440379` and `38917444348` passed format, type-check, and workspace tests. Native desktop interaction acceptance remains open.
+- 2026-10-16: Added `forge-player --validate` with read-only asset-index consistency checking, scene/resource validation, JSON diagnostics, and syntax-only Luau compilation. Updated SceneCatalog to reject malformed scene files instead of silently omitting them. Formatting correction passed on head `e2ae31bf430e7d923c2a1ed1f973ad82caa62736`; type-check and tests were still running when the Windows export workflow was added.
+- 2026-10-16: Added the Windows release build/validation/export/artifact workflow, copied Forge's MIT license into exports, and documented package contents. Run `38920804391` on `18da157e53720d0610c765d7f7918bab23294be0` passed all check and package steps; artifact `forge2d-action-arena-windows` uploaded. The first validation attempt exposed Windows CRLF conversion in fingerprinted text assets; `.gitattributes` now pins text to LF and CI passes.
+- 2026-10-16: Wired the standalone project player's WASD/F/right-click input map into the runtime using the existing bounded `InputMap` and fixed action IDs 1/2/3. Added an offline first-game tutorial and corrected the scripting/input docs; commit `0a0a3d85b90cdd40dbfa309c2f56103e49d4a44` is under Windows CI run `38922572623`.
+
+## Execution ledger
+
+- 2026-10-17: Current code head `9bede9812da60b2759266aaa97abf9cbb4dda729` passed Windows run `38985697339` including formatting, type-checking, all workspace tests, release builds, sample validation/export, license/package checks, and post-upload validation. Added a regression test for gameplay keyboard input while the runtime preview canvas owns egui focus; it reproduced zero movement with the old generic focus check and passes with `text_edit_focused()`. Ran the default renderer benchmark on the desktop's NVIDIA GeForce RTX 4050 Laptop GPU (Vulkan, driver 610.78): 10,000 sprites, 120 warm-up frames, 600 samples at 1280x720; CPU p50/p95/p99 6.807/7.558/9.118 ms. Raw samples and run metadata are in `docs/benchmarks/forge2d-renderer-run550-2026-10-17.json`; GPU completion was not measured. Current-editor desktop runtime/audio acceptance, full tutorial walkthrough/export, and the P0 audit remain open; P1 has not started.
+
+- 2026-10-15: Created from the user-provided product proposal after the user authorized independent planning and milestone work. Verified the live branch head and PR #1 through GitHub; current checked head is `2a9ae3e`.
+- 2026-10-15: Read the proposal and compared its full P0/P1/P2 scope against the GitHub README and repository tree. P0 remains incomplete; the README's shorter remaining-work list is not the completion authority.
+- 2026-10-16: Added the native editor runtime preview, play/pause/step/stop controls, GUID-based runtime rendering and selection, a 256-entry Luau diagnostics console, live script-property edits that preserve the running VM, and hot reload for changed Luau/PNG assets. Added tests for compatible and rejected live property updates. Fixed the Action Arena player GUID lookup and nested collider shape JSON after Windows CI caught them. Formatting, type-checking, and workspace tests passed on commit f87a949 (run 38861032595).
+- 2026-10-16: Added a stable-GUID asset browser/resource validator, project name/default-scene settings, and explicit undoable collision-only tile painting; bounded connected fill and viewport pan/zoom are also complete. Windows formatting, workspace type-checking, and workspace tests passed on `6865d674` (run `38864521933`). The asset browser commit `89bd190` passed the same Windows checks on run `38863863484`.
+- 2026-10-16: Completed the P0.1 authoring-model slice on `aa6173577d4116defac860a406ea1e2ab8a04ea4`: bounded drag/drop asset import; parent hierarchy and world transforms; prefab instances with granular sprite property overrides; move/rotate/scale/anchor gizmos with snapping; selectable render layers; and validated history/save handling. Windows run `38873215811` passed formatting, workspace type-check, and workspace tests.
+- 2026-10-16: Added compatible scalar state migration and typed next-tick events to P0.2, then fixed event docs/types and bounded editor preview input while paused with window-focus/text-input gating. Windows formatting, type-check, and workspace tests passed on `d34a4835157ba07beb0f54377b5036e8058a6485` (run `38875425714`). Line breakpoints remain the P0.2 code gap; P0.3 still needs player-facing verification.
+- 2026-10-16: Added resumable Luau line breakpoints, deterministic callback queue suspension, fixed-tick Continue semantics, and editor Set/Remove/Continue controls with accepted-line and hit feedback. Windows formatting, workspace type-check, and workspace tests passed on `faeaa9679bfd2d497f6acddbf943fd37b73cd895` (run `38879901911`). P0.3 still needs a player-facing desktop acceptance session.
+- 2026-10-16: Completed P0.5 structured logs/profiling, migration/round-trip fixtures, and third-party license packaging. Windows run `38931980946` passed format/type-check/tests, Action Arena validation/export, license generation, package checks, and artifact upload. Run `38934893620` passed the updated editor-project validation, full asset-content checks, license generation, and artifact upload; the duplicate package job for `38935389248` is still running.
+- 2026-10-16: Expanded the colony simulation with blocked-tile editing, queued food jobs, deterministic BFS rerouting, pause/time-scale controls, worker cap, and profiling. Windows run `38931980946` passed. It remains a Rust example and is not yet available as an editor-authored/exported project.
+- 2026-10-16: Expanded the Action Arena into a saved top-down project with tilemap borders, zero-gravity controllable player, moving collider enemies, UI menu/HUD, audio, and scene transitions. The Rust integration sample has projectiles/scoring. Fixed an unexposed fire-state property, removed player launch velocity, and added input-to-movement/fire-to-SFX coverage; run `38935389248` passed formatting, type-check, and workspace tests.
+- Next: complete the native editor/player acceptance sessions, walk through the offline first-game tutorial, and run the full P0 acceptance audit. Do not start P1 until the documented gate is satisfied.
+
+- 2026-10-16: Integrated the action gameplay loop into the editor-authored Action Arena project and added a separate editor-authored colony project with animated workers, bounded jobs, deterministic routes, resource deliveries, and an authored HUD. Added a colony runtime integration test and Windows validation/export/package checks for both samples. Run `38947562709` first exposed a life-HUD assertion that checked before collision event delivery; the test now advances through the next fixed tick. Run `38948522741` passed formatting, type-check, all workspace tests, release-player build, both project validations/exports, license and package-content checks, and both artifact uploads at commit `4d041011fcb7219c0040534b94a623a681e87561`. Action Arena artifact: 5,664,463 bytes; colony artifact: 5,494,087 bytes. P0 remains open because native desktop acceptance, tutorial walkthrough, and full P0 audit are outstanding; P1 has not started.
+
+- 2026-10-16: Current-head run `38974381930` at `61700790fcd1eec6c6d72d7172875309e90497fd` passed formatting, workspace type-check, all workspace tests (including the Colony editor-preview tilemap regression), release player/editor/benchmark builds, both project validations/exports, license and package-content checks, and post-upload validation. SHA-256 hashes of all three downloaded ZIPs matched GitHub's artifact digests. Since `3ce085ec8b1a` to this head only `examples/forge_editor/src/main.rs` changed, the approved run-535 player is current for standalone runtime checks: the tutorial project validated and D/A/W/S visibly moved the sprite; the Action Arena menu-to-game roundtrip was also visually verified. Windows Application Control blocked launching the newly built #539 editor/player binaries, and no Desktop Commander device is connected. The latest editor preview map fix still lacks native visual acceptance; acoustic audio acceptance, a fresh benchmark, the tutorial's editor walkthrough, and the full P0 audit remain open. P1 has not started.
+
+- 2026-10-16: Additional standalone Colony acceptance on the approved run-535 player artifact (same `forge_player` source as current head): the authored board/obstacles/workers and FOOD HUD rendered, and the counter reached `FOOD 8` after 45 seconds of simulation. This closes the Colony standalone visual/runtime check; Colony editor preview on the current editor fix remains unverified because Windows Application Control blocks the new editor executable.
+
+- 2026-10-17: Diagnosed the Luau breakpoint AV as an unsafe `lua_Debug.source` C-string read. The breakpoint context now carries the authored script path; focused raw-FFI and ScriptHost nested-callback pause/resume tests passed in Windows run #599 and the full follow-up run #600 passed both Windows jobs, including focused breakpoint probes, workspace tests, project validation/export, license/package checks, and post-upload validation. Run #600 artifacts were fresh and their SHA-256 digests matched GitHub. The approved Computer Use walkthrough reached Explorer and the shortcut wizard, then stopped after the helper reported `user input was detected in this window; call get_window_state before continuing` during minimized-window recovery. The project was not opened in the native player/editor; native walkthrough, tutorial export/completion, audible acceptance, and full P0 audit remain open. PR #1 stays draft; P1/P2 have not started.
+
+- 2026-10-17: Follow-up native acceptance pass on the user-approved run #600 Windows artifacts supersedes the earlier pending-walkthrough note above. The standalone Action Arena rendered its arena/HUD; MENU → PLAY returned to gameplay and right-click produced a visible projectile. Repeated D taps did not produce visible player movement and an F tap did not produce a projectile, so movement/fire keyboard acceptance remains open. In the editor, Action Arena rendered its tilemap/actors/HUD, Play/Pause/Step/Stop worked, a breakpoint paused at `Assets/PlayerController.luau:62`, and its tilemap reported 448 occupied cells. The Colony editor preview rendered the tilemap/workers, workers moved, FOOD rose from 0 to 8, pause/step/stop worked, and its tilemap reported 480 occupied cells. These checks do not complete the editor live-update/focus/last-good pass or the first-game tutorial walkthrough/export. The Colony standalone was not launched; sound effects/music could not be audibly verified through the available screenshot/input surface. Latest implementation head `41d73c69d8955fc16d5e297486a3c2492b505414` passed run `39068866469` with fresh validated artifacts; docs-only runs `39071369550` and `39071757123` are still in progress as of this entry. The P0 gate and full audit remain open; P1/P2 have not started.
+
+
+- 2026-10-17: Fixed the quick-action edge regression on `codex/forge2d-engine`: a press/release pair arriving in one fixed tick now remains visible to Luau through `Forge.Input.is_just_pressed(action)`. Focused tests and the full Windows check/package workflow passed at current head `1dc5cbf43ab48f0ea8bc0f268305b9ded015d5c4` in run `39076711438`. Run #612 produced fresh Action Arena, Colony, and desktop-tool artifacts; both uploaded player packages passed post-upload validation. Packaging exposed and prompted correction of stale sample asset-index byte counts/fingerprints. On the older approved #600 editor, an intentionally invalid PlayerController source update produced an editor diagnostic while the live arena stayed rendered; the original script was restored and saved. Native current-head movement, live compatible property/source/PNG updates, tutorial completion/export, standalone Colony, audible acceptance, and the full P0 audit remain open. Keep PR #1 draft and unmerged; P1/P2 remain gated.
+
+- 2026-10-17: The full Windows source-check and package workflow passed on roadmap evidence commit `605b57331d92d5fa60830a08159d275254031687` in run `39078601635` (#613). It re-ran formatting, type-checking, focused breakpoint probes, all workspace tests, release builds, both project validation/exports, license/package checks, artifact uploads, and post-upload package validation. P0 native acceptance remains open; the PR stays draft and unmerged, and P1/P2 remain gated.
+
+- 2026-10-17: Run #614 (`39080101827`) passed both Windows jobs on PR head `4a2efc0f1b650d7d7aefc4f09ca3f2c9c63c330a`, including both focused breakpoint probes and full workspace tests, release player/editor/benchmark builds, Action Arena and Colony validation/export, license/package checks, artifact uploads, and post-upload validation. Downloaded run #614 artifact ZIPs matched GitHub SHA-256 digests. With user approval, Computer Use attempted to open the current-head editor and both players, but each launch returned no targetable window and none appeared in `list_apps` or `list_windows`; the native pass could not proceed. No current-head player/editor behavior is claimed. P0 remains open for native editor/live-update/last-good/focus acceptance, tutorial completion/export, Colony player launch, audible acceptance, and the full P0 audit. Keep PR #1 draft and unmerged; P1/P2 remain gated.

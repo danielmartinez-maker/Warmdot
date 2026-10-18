@@ -1,0 +1,7 @@
+# Assets and 2D animation
+
+The project asset catalog scans the project Assets directory for PNG images, sprite-sheet metadata, and animation-clip metadata. It skips symlinks, rejects paths outside the project root, caps source file sizes, and assigns stable GUIDs stored in .forge/asset-index.json. Calling refresh compares a deterministic FNV-1a fingerprint and returns added, modified, and removed records for development hot updates.
+
+PNG decoding is limited to 16,384 pixels per side and 32 million total pixels before RGBA allocation. Sprite-sheet frame rectangles must fit inside the referenced texture and frame names must be unique. Animation clips must reference existing sprite frames and specify finite positive durations.
+
+AnimationPlayer advances from simulation time, handles large delta values without stepping once per frame interval, loops clips, and stops non-looping clips on their last frame. Decoded RGBA images can be registered with `GpuRenderer`; normalized frame regions can be resolved with `SpriteSheetDocument::uv_rect_for_frame` or `AnimationPlayer::current_frame_uv_rect`, then applied to a runtime sprite with `RuntimeWorld::set_sprite_uv_rect`. A sprite can name an animation-clip GUID in the scene dependencies. `GameRuntime::from_scene_with_assets` loads and validates each referenced clip, binds the sheet texture, applies the first frame, and advances UVs on fixed ticks. The native project player uses this path. Scene replacement with assets rebuilds attached players; replacement without assets clears them.

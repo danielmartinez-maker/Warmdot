@@ -1,0 +1,176 @@
+name: Windows workspace check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Type-check workspace
+        run: cargo check --workspace
+      - name: Run focused Luau breakpoint probe
+        run: cargo test -p forge_luau_debug entrypoint_breakpoint_pauses_nested_callback -- --nocapture
+      - name: Run focused Forge scripting breakpoint probe
+        run: cargo test -p forge_scripting breakpoint_pauses_inside_nested_fixed_update_and_resumes_that_tick -- --nocapture
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+  package:
+    runs-on: windows-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build release player
+        run: cargo build --release -p forge-player
+      - name: Build editor and renderer benchmark
+        run: cargo build --release -p forge-editor -p renderer-benchmark
+      - name: Validate Action Arena project
+        run: cargo run --release -p forge-player -- --validate examples/action_arena/project.forgeproj
+      - name: Export standalone Action Arena package
+        run: cargo run --release -p forge-player -- --export examples/action_arena/project.forgeproj artifacts/action-arena-windows
+      - name: Validate colony project
+        run: cargo run --release -p forge-player -- --validate examples/colony_project/project.forgeproj
+      - name: Export standalone colony package
+        run: cargo run --release -p forge-player -- --export examples/colony_project/project.forgeproj artifacts/colony-windows
+      - name: Install cargo-about
+        run: cargo install cargo-about --version 0.9.1 --locked --features cli
+      - name: Stage desktop verification tools
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path 'artifacts/desktop-verification-windows' | Out-Null
+          Copy-Item -LiteralPath 'target/release/forge-editor.exe' -Destination 'artifacts/desktop-verification-windows/forge-editor.exe'
+          Copy-Item -LiteralPath 'target/release/renderer-benchmark.exe' -Destination 'artifacts/desktop-verification-windows/renderer-benchmark.exe'
+          Copy-Item -LiteralPath 'LICENSE' -Destination 'artifacts/desktop-verification-windows/LICENSE'
+      - name: Generate third-party license notices
+        run: cargo about generate --manifest-path examples/forge_player/Cargo.toml --target x86_64-pc-windows-msvc --locked --fail --output-file artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html about.hbs
+      - name: Generate desktop tool license notices
+        run: cargo about generate --manifest-path examples/forge_editor/Cargo.toml --target x86_64-pc-windows-msvc --locked --fail --output-file artifacts/desktop-verification-windows/THIRD_PARTY_LICENSES.html about.hbs
+      - name: Add third-party license notice to colony package
+        shell: pwsh
+        run: Copy-Item -LiteralPath 'artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html' -Destination 'artifacts/colony-windows/THIRD_PARTY_LICENSES.html'
+      - name: Check exported package contents
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/action-arena-windows/Forge2DPlayer.exe',
+            'artifacts/action-arena-windows/run-game.bat',
+            'artifacts/action-arena-windows/LICENSE',
+            'artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html',
+            'artifacts/action-arena-windows/Game/project.forgeproj',
+            'artifacts/action-arena-windows/Game/Scenes/Main.forgescene',
+            'artifacts/action-arena-windows/Game/Scenes/Menu.forgescene',
+            'artifacts/action-arena-windows/Game/Assets/MainHUD.forgeui.json',
+            'artifacts/action-arena-windows/Game/Assets/ArenaTiles.png',
+            'artifacts/action-arena-windows/Game/Assets/CharacterSprites.forgeatlas.json',
+            'artifacts/action-arena-windows/Game/Assets/CharacterSprites.png',
+            'artifacts/action-arena-windows/Game/Assets/EnemyWalk.forgeanim.json',
+            'artifacts/action-arena-windows/Game/Assets/PlayerWalk.forgeanim.json',
+            'artifacts/action-arena-windows/Game/Assets/Default.forgetilemap.json',
+            'artifacts/action-arena-windows/Game/Assets/Menu.forgeui.json',
+            'artifacts/action-arena-windows/Game/Assets/PlayerController.luau',
+            'artifacts/action-arena-windows/Game/Assets/UIController.luau',
+            'artifacts/action-arena-windows/Game/Assets/Audio/arena-music.wav',
+            'artifacts/action-arena-windows/Game/Assets/Audio/click.wav',
+            'artifacts/action-arena-windows/Game/.forge/asset-index.json'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing expected export file: $path"
+            }
+          }
+          $licenseHtml = Get-Content -LiteralPath 'artifacts/action-arena-windows/THIRD_PARTY_LICENSES.html' -Raw
+          if ($licenseHtml.Length -lt 100 -or $licenseHtml -notmatch 'Third Party Licenses') {
+            throw 'Third-party license report is empty or missing its title.'
+          }
+      - name: Check exported colony package contents
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/colony-windows/Forge2DPlayer.exe',
+            'artifacts/colony-windows/run-game.bat',
+            'artifacts/colony-windows/LICENSE',
+            'artifacts/colony-windows/THIRD_PARTY_LICENSES.html',
+            'artifacts/colony-windows/Game/project.forgeproj',
+            'artifacts/colony-windows/Game/Scenes/Main.forgescene',
+            'artifacts/colony-windows/Game/Assets/ColonyCharacters.forgeatlas.json',
+            'artifacts/colony-windows/Game/Assets/ColonyCharacters.png',
+            'artifacts/colony-windows/Game/Assets/ColonyController.luau',
+            'artifacts/colony-windows/Game/Assets/ColonyHUD.forgeui.json',
+            'artifacts/colony-windows/Game/Assets/ColonyTiles.png',
+            'artifacts/colony-windows/Game/Assets/Default.forgetilemap.json',
+            'artifacts/colony-windows/Game/Assets/Worker.luau',
+            'artifacts/colony-windows/Game/Assets/WorkerWalk.forgeanim.json',
+            'artifacts/colony-windows/Game/.forge/asset-index.json'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing expected colony export file: $path"
+            }
+          }
+      - name: Check desktop verification tool contents
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/desktop-verification-windows/forge-editor.exe',
+            'artifacts/desktop-verification-windows/renderer-benchmark.exe',
+            'artifacts/desktop-verification-windows/LICENSE',
+            'artifacts/desktop-verification-windows/THIRD_PARTY_LICENSES.html'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing expected desktop verification file: $path"
+            }
+          }
+          $licenseHtml = Get-Content -LiteralPath 'artifacts/desktop-verification-windows/THIRD_PARTY_LICENSES.html' -Raw
+          if ($licenseHtml.Length -lt 100 -or $licenseHtml -notmatch 'Third Party Licenses') {
+            throw 'Desktop tool license report is empty or missing its title.'
+          }
+      - name: Upload Windows player package
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge2d-action-arena-windows
+          path: artifacts/action-arena-windows
+          if-no-files-found: error
+          include-hidden-files: true
+      - name: Upload standalone colony player package
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge2d-colony-windows
+          path: artifacts/colony-windows
+          if-no-files-found: error
+          include-hidden-files: true
+      - name: Upload desktop verification tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge2d-desktop-verification-windows
+          path: artifacts/desktop-verification-windows
+          if-no-files-found: error
+      - name: Download uploaded Action Arena player package
+        uses: actions/download-artifact@v4
+        with:
+          name: forge2d-action-arena-windows
+          path: artifacts/downloaded/action-arena
+      - name: Validate downloaded Action Arena player package
+        shell: pwsh
+        run: |
+          & 'artifacts/downloaded/action-arena/Forge2DPlayer.exe' --validate 'artifacts/downloaded/action-arena/Game/project.forgeproj'
+      - name: Download uploaded colony player package
+        uses: actions/download-artifact@v4
+        with:
+          name: forge2d-colony-windows
+          path: artifacts/downloaded/colony
+      - name: Validate downloaded colony player package
+        shell: pwsh
+        run: |
+          & 'artifacts/downloaded/colony/Forge2DPlayer.exe' --validate 'artifacts/downloaded/colony/Game/project.forgeproj'

@@ -1,0 +1,14 @@
+[package]
+name = "forge_world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Forge-owned runtime components and ECS boundary"
+
+[dependencies]
+bevy_ecs.workspace = true
+forge_core = { path = "../forge_core" }
+
+[lints]
+workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "colony-simulation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Windowed worker-colony simulation sample for Forge 2D"
+
+[dependencies]
+forge_assets = { path = "../../crates/forge_assets" }
+forge_project = { path = "../../crates/forge_project" }
+forge_core = { path = "../../crates/forge_core" }
+forge_input = { path = "../../crates/forge_input" }
+forge_renderer = { path = "../../crates/forge_renderer" }
+forge_runtime = { path = "../../crates/forge_runtime" }
+forge_scene = { path = "../../crates/forge_scene" }
+forge_world = { path = "../../crates/forge_world" }
+uuid.workspace = true
+winit = "=0.30.13"
+
+[lints]
+workspace = true

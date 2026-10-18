@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "resource_guid": "c0110a71-e05e-414c-a813-000000000100",
+  "name": "Forge Colony",
+  "default_scene": "Scenes/Main.forgescene",
+  "default_scene_guid": "c0110a71-e05e-414c-a813-000000000101"
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "texture": "c0110a71-e05e-414c-a813-000000000017",
+  "frames": [
+    {
+      "name": "worker-1",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "worker-2",
+      "rect": {
+        "x": 16,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "worker-3",
+      "rect": {
+        "x": 32,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "worker-4",
+      "rect": {
+        "x": 48,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      "pivot": [
+        0.5,
+        0.5
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+[package]
+name = "forge_luau_debug"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Narrow Luau line-breakpoint bridge for Forge scripting"
+
+[dependencies]
+mlua = { version = "=0.12.2", features = ["luau"] }
+
+[lints]
+workspace = true

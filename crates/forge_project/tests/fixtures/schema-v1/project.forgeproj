@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "resource_guid": "00000000-0000-4000-8000-000000000010",
+  "name": "Round Trip Fixture",
+  "default_scene": "Scenes/Main.forgescene",
+  "default_scene_guid": "00000000-0000-4000-8000-000000000011"
+}
